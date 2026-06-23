@@ -8,40 +8,23 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-
       - run: npm run dist
-
-      # 删除旧的 Windows Release 资产，只保留最新
-      - name: Delete old Windows release assets
-        run: |
-          gh release list --limit 10 --json tagName --jq '.[].tagName' | while read tag; do
-            if [ "$tag" != "${{ github.ref_name }}" ]; then
-              gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.exe
-          body: "## 📦 Windows 安装包\n\n自动构建于 ${{ github.ref_name }}"
+          body: '## 📦 Windows 安装包'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -49,21 +32,19 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-
       - run: npm run dist
 
-      # 删除旧的 Mac Release 资产，只保留最新
-      - name: Delete old Mac release assets
+      # 删除旧 Release，只保留最新（避免 500MB 配额超限）
+      - name: Delete old releases
+        shell: bash
         run: |
-          gh release list --limit 10 --json tagName --jq '.[].tagName' | while read tag; do
+          for tag in $(gh release list --limit 20 --json tagName --jq '.[].tagName'); do
             if [ "$tag" != "${{ github.ref_name }}" ]; then
               gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
             fi
@@ -75,6 +56,6 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*-Mac-x64.dmg,dist/*-Mac-arm64.dmg
-          body: "## 🍎 Mac 安装包\n\n自动构建于 ${{ github.ref_name }}"
+          body: '## 🍎 Mac 安装包 (Intel + Apple Silicon)'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
