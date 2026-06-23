@@ -199,10 +199,11 @@ git add -A && git commit -m "描述" && npm version patch && git push && git pus
 
 ## Git 仓库
 
-- 地址: `git@ssh.github.com:401151407-hue/supply-chain-tester.git`
-- SSH key: `~/.ssh/github_supplychain`
+- 地址: `git@ssh.github.com:401151407-hue/supply-chain-tester.git`（SSH over HTTPS 端口 443）
+- SSH key: `~/.ssh/id_ed25519`（已配置 `StrictHostKeyChecking=no`）
 - 分支: `master`
 - 版本号格式: `v0.1.x` (npm version patch)
+- ⚠️ 2026-06-24 重建仓库：清除了含敏感脚本的旧历史，仅保留开源代码
 
 ## ⚠️ test-suites 目录说明
 

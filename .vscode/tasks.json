@@ -533,6 +533,117 @@
 			"label": "Git Push",
 			"type": "shell",
 			"command": "git push origin master"
+		},
+		{
+			"label": "generate-ssh-and-push",
+			"type": "shell",
+			"command": "cd /d d:\\Ikun\\supply-chain-tester && if not exist %USERPROFILE%\\.ssh\\id_ed25519 (ssh-keygen -t ed25519 -f %USERPROFILE%\\.ssh\\id_ed25519 -N \"\" -C \"401151407-hue@users.noreply.github.com\" -q) && echo ===Public Key=== && type %USERPROFILE%\\.ssh\\id_ed25519.pub && echo ============== && git remote set-url origin git@ssh.github.com:401151407-hue/supply-chain-tester.git && git push -u origin master --force",
+			"isBackground": false
+		},
+		{
+			"label": "push-new-repo",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\push-new.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "create-repo-and-push",
+			"type": "shell",
+			"command": "cmd /c \"cd /d d:\\Ikun\\supply-chain-tester && echo Checking gh CLI... && where gh 2>nul && echo gh found || echo gh not found\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "push-to-new-repo",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\create-and-push.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "push-new-repo",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\create-and-push.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "push-v2",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\create-and-push.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "check-gh-actions",
+			"type": "shell",
+			"command": "cmd /c \"where gh 2>nul && gh auth status && gh api /repos/401151407-hue/supply-chain-tester/actions/workflows || echo gh CLI not found, checking via SSH... && ssh -o StrictHostKeyChecking=no -p 443 git@ssh.github.com 2>&1 | findstr /i quota\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "check-gh-actions-v2",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\check-actions.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "check-actions-v3",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\check-actions2.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "check-billing",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\check-billing.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "check-repo-visibility",
+			"type": "shell",
+			"command": "cmd /c \"powershell -Command \\\"$r = Invoke-RestMethod -Uri 'https://api.github.com/repos/401151407-hue/supply-chain-tester' -TimeoutSec 10; Write-Host 'Name:' $r.name; Write-Host 'Private:' $r.private; Write-Host 'Visibility:' $r.visibility\\\"\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "check-repo-ps",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File \"d:\\Ikun\\supply-chain-tester\\scripts\\check-repo.ps1\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "commit-and-push-ci-fix",
+			"type": "shell",
+			"command": "cmd /c \"cd /d d:\\Ikun\\supply-chain-tester && git add .github/workflows/build.yml && git commit -m \"ci: 自动清理旧 Release，防止制品堆积超 500MB 配额\" && set GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -p 443 && git remote set-url origin git@ssh.github.com:401151407-hue/supply-chain-tester.git && git push\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "push-ci-fix",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\ci-push.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git-status",
+			"type": "shell",
+			"command": "cmd /c \"cd /d d:\\Ikun\\supply-chain-tester && git status --short\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "build-and-release",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\release.bat",
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
