@@ -9,3 +9,4 @@ resources/python-portable/
 __pycache__/
 *.pyc
 test-suites/
+test-suites.zip 
