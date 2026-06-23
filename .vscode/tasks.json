@@ -1,0 +1,538 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "安装依赖",
+			"type": "shell",
+			"command": "npm install",
+			"isBackground": false
+		},
+		{
+			"label": "清理并重装依赖",
+			"type": "shell",
+			"command": "Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue; npm install",
+			"isBackground": false
+		},
+		{
+			"label": "镜像安装依赖",
+			"type": "shell",
+			"command": "$env:ELECTRON_MIRROR=\"https://npmmirror.com/mirrors/electron/\"; $env:ELECTRON_BUILDER_BINARIES_MIRROR=\"https://npmmirror.com/mirrors/electron-builder-binaries/\"; npm install",
+			"isBackground": false
+		},
+		{
+			"label": "安装依赖(镜像)",
+			"type": "shell",
+			"command": "npm install",
+			"isBackground": false
+		},
+		{
+			"label": "检查工具链",
+			"type": "shell",
+			"command": "npx electron-vite build",
+			"isBackground": false
+		},
+		{
+			"label": "打包安装程序",
+			"type": "shell",
+			"command": "npx electron-builder --config electron-builder.config.cjs --publish never",
+			"isBackground": false
+		},
+		{
+			"label": "打包安装程序",
+			"type": "shell",
+			"command": "npm run build; npx electron-builder --config electron-builder.config.cjs --publish never",
+			"isBackground": false
+		},
+		{
+			"label": "Patch blockmap",
+			"type": "shell",
+			"command": "@'\n\"use strict\";\nObject.defineProperty(exports, \"__esModule\", { value: true });\nexports.buildBlockMap = buildBlockMap;\nasync function buildBlockMap(appOutDir, packager, isTwoByte) { return null; }\n'@ | Out-File -FilePath node_modules/app-builder-lib/out/targets/blockmap/blockmap.js -Encoding utf8",
+			"isBackground": false
+		},
+		{
+			"label": "打包安装程序",
+			"type": "shell",
+			"command": "npm run build; npx electron-builder --config electron-builder.config.cjs --publish never",
+			"isBackground": false
+		},
+		{
+			"label": "Patch blockmap v2",
+			"type": "shell",
+			"command": "[System.IO.File]::WriteAllText((Join-Path $PWD 'node_modules\\app-builder-lib\\out\\targets\\blockmap\\blockmap.js'), '\"use strict\";' + [Environment]::NewLine + 'Object.defineProperty(exports, \"__esModule\", { value: true });' + [Environment]::NewLine + 'exports.buildBlockMap = buildBlockMap;' + [Environment]::NewLine + 'async function buildBlockMap() { return null; }')",
+			"isBackground": false
+		},
+		{
+			"label": "Patch blockmap v3",
+			"type": "shell",
+			"command": "node -e \"require('fs').writeFileSync('node_modules/app-builder-lib/out/targets/blockmap/blockmap.js', '\\\"use strict\\\";\\nObject.defineProperty(exports, \\\"__esModule\\\", { value: true });\\nexports.buildBlockMap = buildBlockMap;\\nasync function buildBlockMap() { return null; }\\n')\"",
+			"isBackground": false
+		},
+		{
+			"label": "打补丁",
+			"type": "shell",
+			"command": "node scripts/patch-blockmap.js",
+			"isBackground": false
+		},
+		{
+			"label": "打补丁",
+			"type": "shell",
+			"command": "node scripts/patch-blockmap.mjs",
+			"isBackground": false
+		},
+		{
+			"label": "Patch blockmap fix",
+			"type": "shell",
+			"command": "node scripts/patch-blockmap.mjs",
+			"isBackground": false
+		},
+		{
+			"label": "Patch blockmap fix2",
+			"type": "shell",
+			"command": "node scripts/patch-blockmap.mjs",
+			"isBackground": false
+		},
+		{
+			"label": "完整打包",
+			"type": "shell",
+			"command": "npm run dist",
+			"isBackground": false
+		},
+		{
+			"label": "安装 electron-updater",
+			"type": "shell",
+			"command": "npm install electron-updater",
+			"isBackground": false
+		},
+		{
+			"label": "修复 Electron",
+			"type": "shell",
+			"command": "node scripts/patch-blockmap.mjs; npx electron --version",
+			"isBackground": false
+		},
+		{
+			"label": "重装 Electron",
+			"type": "shell",
+			"command": "npm install electron@34.0.0",
+			"isBackground": false
+		},
+		{
+			"label": "Kill Electron Processes",
+			"type": "shell",
+			"command": "Get-Process -Name electron,SupplyChainTester -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 2; Remove-Item -Recurse -Force node_modules/electron -ErrorAction SilentlyContinue; npm install electron@34.0.0",
+			"isBackground": false
+		},
+		{
+			"label": "完全重装",
+			"type": "shell",
+			"command": "Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue; Remove-Item package-lock.json -ErrorAction SilentlyContinue; npm install 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "强制重装",
+			"type": "shell",
+			"command": "cmd /c \"rmdir /s /q node_modules 2>nul & del package-lock.json 2>nul & npm install\"",
+			"isBackground": false
+		},
+		{
+			"label": "强制重装2",
+			"type": "shell",
+			"command": "cmd /c 'rmdir /s /q node_modules && del package-lock.json && npm install'",
+			"isBackground": false
+		},
+		{
+			"label": "Check Electron",
+			"type": "shell",
+			"command": "node -e \"console.log(require('electron/package.json').version)\"",
+			"isBackground": false
+		},
+		{
+			"label": "启动开发服务器",
+			"type": "shell",
+			"command": "npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "强制删除+重装",
+			"type": "shell",
+			"command": "cmd /c \"rmdir /s /q node_modules && npm install\"",
+			"isBackground": false
+		},
+		{
+			"label": "Replace navigate with navigateTo",
+			"type": "shell",
+			"command": "(Get-Content src/renderer/src/components/Sidebar.tsx) -replace '\\bnavigate\\(', 'navigateTo(' | Set-Content src/renderer/src/components/Sidebar.tsx",
+			"isBackground": false
+		},
+		{
+			"label": "检查编译错误",
+			"type": "shell",
+			"command": "npx electron-vite build 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Setup Python Portable",
+			"type": "shell",
+			"command": "npm run setup-python",
+			"isBackground": false
+		},
+		{
+			"label": "Setup Python (Huawei mirror)",
+			"type": "shell",
+			"command": "npm run setup-python",
+			"isBackground": false
+		},
+		{
+			"label": "Setup Python (npmmirror)",
+			"type": "shell",
+			"command": "npm run setup-python",
+			"isBackground": false
+		},
+		{
+			"label": "Install Python deps",
+			"type": "shell",
+			"command": "Write-Host \"Python found at:\"; & \"D:\\Python\\python.exe\" --version; Write-Host \"Installing packages...\"; & \"D:\\Python\\python.exe\" -m pip install requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet; Write-Host \"Done\"",
+			"isBackground": false
+		},
+		{
+			"label": "Download Python portable",
+			"type": "shell",
+			"command": "Write-Host \"Trying npmmirror...\"; Invoke-WebRequest -Uri \"https://registry.npmmirror.com/-/binary/python/3.11.9/python-3.11.9-embed-amd64.zip\" -OutFile \"$env:TEMP\\python-embed.zip\" -UseBasicParsing -TimeoutSec 120; if ($?) { Write-Host \"Download OK\"; Expand-Archive -Path \"$env:TEMP\\python-embed.zip\" -DestinationPath resources\\python-portable -Force; Remove-Item \"$env:TEMP\\python-embed.zip\" -Force; Write-Host \"Extracted\"; Get-ChildItem resources\\python-portable\\python.exe | Select-Object Name,Length } else { Write-Host \"FAILED\" }",
+			"isBackground": false
+		},
+		{
+			"label": "Configure pip + deps",
+			"type": "shell",
+			"command": "$pth = \"resources\\python-portable\\python311._pth\"; (Get-Content $pth) -replace '#import site', 'import site' | Set-Content $pth; Write-Host \"site-packages enabled\"; $getpip = \"$env:TEMP\\get-pip.py\"; Write-Host \"Downloading get-pip.py...\"; Invoke-WebRequest -Uri \"https://bootstrap.pypa.io/get-pip.py\" -OutFile $getpip -UseBasicParsing; Write-Host \"Installing pip...\"; & resources\\python-portable\\python.exe $getpip --no-warn-script-location; Remove-Item $getpip -Force; Write-Host \"Installing requests, openpyxl...\"; & resources\\python-portable\\python.exe -m pip install requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet; Write-Host \"All done!\"",
+			"isBackground": false
+		},
+		{
+			"label": "Install pip",
+			"type": "shell",
+			"command": "$g = Join-Path $env:TEMP 'get-pip.py'; Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile $g -UseBasicParsing; & (Join-Path $PWD 'resources\\python-portable\\python.exe') $g --no-warn-script-location; Remove-Item $g -Force; Write-Host 'pip installed'",
+			"isBackground": false
+		},
+		{
+			"label": "Install Python packages",
+			"type": "shell",
+			"command": "$py = Join-Path $PWD 'resources\\python-portable\\python.exe'; & $py -m pip install requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet; Write-Host 'Packages installed successfully'",
+			"isBackground": false
+		},
+		{
+			"label": "Git status",
+			"type": "shell",
+			"command": "& \"C:\\Program Files\\Git\\cmd\\git.exe\" status -s",
+			"isBackground": false
+		},
+		{
+			"label": "Git status",
+			"type": "shell",
+			"command": "cmd /c \"\"C:\\Program Files\\Git\\cmd\\git.exe\" status -s\"",
+			"isBackground": false
+		},
+		{
+			"label": "Git add-commit-push",
+			"type": "shell",
+			"command": "git status -s",
+			"isBackground": false
+		},
+		{
+			"label": "Git commit all",
+			"type": "shell",
+			"command": "git add -A && git commit -m \"feat: 全面升级 - 动态脚本扫描、自动更新、页面动画、Python便携版\n\n- 新增 scripts/ 目录动态扫描，产品线自动发现子产品和脚本\n- 侧边栏动态子菜单 + 刷新按钮（重置折叠+重新扫描）\n- 变量解析支持多脚本合并（非仅第一个 .py 文件）\n- ProductPage 动态数据优先，回退硬编码\n- 新增 selectedSubProduct store 字段支持动态子产品路由\n- 新增 navKey + navigateTo 实现页面切换动画\n- 脚本执行页新增返回按钮（回到对应子产品页）\n- 修复页面切换空白问题（移除残留 navigate prop）\n- 响应区 Postman 风格重构（Body/Headers/Cookies/Request 标签）\n- 主进程新增 auto-updater 模块 + IPC 通道\n- 侧边栏集成 UpdateChecker 组件\n- 修复脚本路径 cwd 回退层级错误（../../.. → ../..）\n- scanScripts 使用 Buffer 编码避免中文路径问题\n- 构建补丁 patch-blockmap.mjs + postinstall 自动执行\n- npmrc 镜像加速 + setup-python 华为云镜像\"",
+			"isBackground": false
+		},
+		{
+			"label": "Git commit",
+			"type": "shell",
+			"command": "git add -A; git commit -m \"feat: dynamic scripts, auto-updater, page animations, python portable, API debugger upgrade\"",
+			"isBackground": false
+		},
+		{
+			"label": "Git commit",
+			"type": "shell",
+			"command": "git add -A; git commit -m 'feat: dynamic scripts scan, auto-updater, page animations, python portable, API debugger upgrade'",
+			"isBackground": false
+		},
+		{
+			"label": "Git commit",
+			"type": "shell",
+			"command": "git add -A; git commit -m 'feat: dynamic scripts scan auto-updater page animations python portable API debugger upgrade'",
+			"isBackground": false
+		},
+		{
+			"label": "Git commit",
+			"type": "shell",
+			"command": "cmd /c scripts\\git-commit.bat",
+			"isBackground": false
+		},
+		{
+			"label": "Git commit via bat",
+			"type": "shell",
+			"command": ".\\scripts\\git-commit.bat",
+			"isBackground": false
+		},
+		{
+			"label": "Kill zombie Electron",
+			"type": "shell",
+			"command": "Get-Process -Name electron -ErrorAction SilentlyContinue | Stop-Process -Force; Write-Host 'Zombies cleaned'",
+			"isBackground": false
+		},
+		{
+			"label": "Kill all + restart",
+			"type": "shell",
+			"command": "Get-Process -Name electron,node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 1; netstat -ano | findstr :5173; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Kill + restart",
+			"type": "shell",
+			"command": "Get-Process -Name electron,node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 1; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Clean restart",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; taskkill /F /IM node.exe 2>$null; Start-Sleep 2; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Kill + restart",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; Start-Sleep 1; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Install pandas",
+			"type": "shell",
+			"command": "$py = Join-Path $PWD 'resources\\python-portable\\python.exe'; if (Test-Path $py) { & $py -m pip install pandas openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet } else { & 'D:\\Python\\python.exe' -m pip install pandas openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet }; Write-Host 'Done'",
+			"isBackground": false
+		},
+		{
+			"label": "Install pandas system",
+			"type": "shell",
+			"command": "& 'D:\\Python\\python.exe' -m pip install pandas -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet; Write-Host 'pandas installed'",
+			"isBackground": false
+		},
+		{
+			"label": "Install pandas portable",
+			"type": "shell",
+			"command": "$py = Join-Path $PWD 'resources\\python-portable\\python.exe'; $scripts = Join-Path $PWD 'resources\\python-portable\\Scripts'; Write-Host (Test-Path $py), (Test-Path $scripts); & $py -m pip --version 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "Fix pip + install pandas",
+			"type": "shell",
+			"command": "$pth = 'resources\\python-portable\\python311._pth'; Get-Content $pth; Write-Host '---'; (Get-Content $pth) -replace '#import site', 'import site' | Set-Content $pth; $py = (Join-Path $PWD 'resources\\python-portable\\python.exe'); & $py (Join-Path $PWD 'resources\\python-portable\\Scripts\\pip.exe') install pandas -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet; Write-Host 'Done'",
+			"isBackground": false
+		},
+		{
+			"label": "Test script",
+			"type": "shell",
+			"command": "$py = (Join-Path $PWD 'resources\\python-portable\\python.exe'); $script = 'scripts\\货e融\\测试专用\\测试专用2.py'; & $py -u -c \"import sys; sys.path.insert(0, r'$($PWD)\\scripts'); exec(open(r'$($PWD)\\$script', encoding='utf-8').read())\"",
+			"isBackground": false
+		},
+		{
+			"label": "Test script run",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File scripts\\test-run.ps1",
+			"isBackground": false
+		},
+		{
+			"label": "Test run v2",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File scripts\\test-run.ps1",
+			"isBackground": false
+		},
+		{
+			"label": "Test direct",
+			"type": "shell",
+			"command": "$py = [System.IO.Path]::GetFullPath((Join-Path $PWD 'resources\\python-portable\\python.exe')); $scriptsDir = [System.IO.Path]::GetFullPath((Join-Path $PWD 'scripts')); $file = Get-ChildItem $scriptsDir -Recurse -Filter '测试专用2.py' | Where-Object { $_.Directory.Name -eq '测试专用' -and -not $_.Name.Contains('副本') } | Select-Object -First 1 -ExpandProperty FullName; if ($file) { Write-Host \"File: $file\"; & $py -u $file } else { Write-Host 'Not found' }",
+			"isBackground": false
+		},
+		{
+			"label": "Test app-style run",
+			"type": "shell",
+			"command": "$py = [IO.Path]::GetFullPath((Join-Path $PWD 'resources\\python-portable\\python.exe')); $scriptsDir = [IO.Path]::GetFullPath((Join-Path $PWD 'scripts')); $file = [IO.Path]::GetFullPath((Join-Path $PWD 'scripts\\货e融\\测试专用\\测试专用2.py')); $code = \"import sys; sys.path.insert(0, r'$scriptsDir'); exec(open(r'$file', encoding='utf-8').read())\"; & $py -u -c $code",
+			"isBackground": false
+		},
+		{
+			"label": "Final test",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File scripts\\test-run.ps1",
+			"isBackground": false
+		},
+		{
+			"label": "Test with ASCII path",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; $scriptsDir = (Resolve-Path 'scripts').Path; $file = Get-ChildItem $scriptsDir -Recurse -Filter '*.py' | Where-Object { $_.Name -eq 'timer_output.py' } | Select-Object -First 1 -ExpandProperty FullName; Write-Host \"File: $file\"; $code = 'import sys; sys.path.insert(0, r''' + $scriptsDir + '''); exec(open(r''' + $file + ''', encoding=''utf-8'').read())'; & $py -u -c $code",
+			"isBackground": false
+		},
+		{
+			"label": "Test with real script",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; $scriptsDir = (Resolve-Path 'scripts').Path; $file = Get-ChildItem $scriptsDir -Recurse -Filter '测试专用2.py' | Where-Object { -not $_.FullName.Contains('副本') } | Select-Object -First 1 -ExpandProperty FullName; Write-Host \"File: $file\"; $code = 'import sys; sys.path.insert(0, r''' + $scriptsDir + '''); exec(open(r''' + $file + ''', encoding=''utf-8'').read())'; & $py -u -c $code",
+			"isBackground": false
+		},
+		{
+			"label": "Final test",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; $scriptsDir = (Resolve-Path 'scripts').Path; $file = Get-ChildItem $scriptsDir -Recurse -Filter '测试专用2.py' | Where-Object { -not $_.FullName.Contains('副本') } | Select-Object -First 1 -ExpandProperty FullName; $code = 'import sys; sys.path.insert(0, r''' + $scriptsDir + '''); exec(open(r''' + $file + ''', encoding=''utf-8'').read())'; & $py -u -c $code",
+			"isBackground": false
+		},
+		{
+			"label": "Test with fixed init",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; $scriptsDir = (Resolve-Path 'scripts').Path; $file = Get-ChildItem $scriptsDir -Recurse -Filter '*.py' | Where-Object { $_.Name -eq '测试专用2.py' -and -not $_.FullName.Contains('副本') } | Select-Object -First 1 -ExpandProperty FullName; Write-Host \"File: $file\"; $code = 'import sys; sys.path.insert(0, r''' + $scriptsDir + '''); exec(open(r''' + $file + ''', encoding=''utf-8'').read())'; & $py -u -c $code",
+			"isBackground": false
+		},
+		{
+			"label": "Kill + restart",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; Start-Sleep 1; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Check server",
+			"type": "shell",
+			"command": "netstat -ano | findstr :5173",
+			"isBackground": false
+		},
+		{
+			"label": "Test env SIT",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; $scriptsDir = (Resolve-Path 'scripts').Path; $file = Get-ChildItem $scriptsDir -Recurse -Filter '测试专用2.py' | Where-Object { -not $_.FullName.Contains('副本') } | Select-Object -First 1 -ExpandProperty FullName; $vars = 'current_env = \"SIT\"'; $preamble = \"import sys`nsys.path.insert(0, r'$scriptsDir')`n$vars`nexec(open(r'$file', encoding='utf-8').read())\"; & $py -u -c $preamble",
+			"isBackground": false
+		},
+		{
+			"label": "Test DEV",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File scripts\\test-run.ps1 -Env DEV",
+			"isBackground": false
+		},
+		{
+			"label": "Force rebuild + restart",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; taskkill /F /IM node.exe 2>$null; Start-Sleep 2; npx electron-vite build 2>&1; Start-Sleep 1; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Quick test UAT",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; $sd = (Resolve-Path 'scripts').Path; $f = (Get-ChildItem $sd -Recurse -Filter '测试专用2.py' | ?{$_.FullName -notmatch '副本'})[0].FullName; $v = 'current_env = \"UAT\"'; & $py -u -c \"import sys;sys.path.insert(0,r'$sd');$v;exec(open(r'$f',encoding='utf-8').read())\"",
+			"isBackground": false
+		},
+		{
+			"label": "Rebuild + restart",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; npx electron-vite build; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Rebuild + restart",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; npx electron-vite build; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Check server",
+			"type": "shell",
+			"command": "netstat -ano | findstr :5173",
+			"isBackground": false
+		},
+		{
+			"label": "Force rebuild",
+			"type": "shell",
+			"command": "Remove-Item out -Recurse -Force -ErrorAction SilentlyContinue; npx electron-vite build; Write-Host '=== Checking output ==='; Select-String -Path out\\main\\index.js -Pattern 'splice|argvLine' | Select-Object -First 5",
+			"isBackground": false
+		},
+		{
+			"label": "Restart app",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Remove BOM",
+			"type": "shell",
+			"command": "$f = 'scripts\\货e融\\测试专用\\timer_output.py'; $c = [IO.File]::ReadAllText((Resolve-Path $f), [Text.Encoding]::UTF8); $utf8nobom = New-Object Text.UTF8Encoding $false; [IO.File]::WriteAllText((Resolve-Path $f), $c, $utf8nobom); Write-Host 'BOM removed'",
+			"isBackground": false
+		},
+		{
+			"label": "Rebuild + restart",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; npx electron-vite build; npm run dev",
+			"isBackground": false
+		},
+		{
+			"label": "Install playwright",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; & $py -m pip install playwright -i https://pypi.tuna.tsinghua.edu.cn/simple --quiet; Write-Host 'playwright installed'",
+			"isBackground": false
+		},
+		{
+			"label": "Install playwright browsers",
+			"type": "shell",
+			"command": "$py = (Resolve-Path 'resources\\python-portable\\python.exe').Path; & $py -m playwright install chromium --with-deps 2>&1 | Select-Object -Last 5",
+			"isBackground": false
+		},
+		{
+			"label": "Git push all",
+			"type": "shell",
+			"command": "cmd /c scripts\\git-commit.bat",
+			"isBackground": false
+		},
+		{
+			"label": "Git push retry",
+			"type": "shell",
+			"command": "git push",
+			"isBackground": false
+		},
+		{
+			"label": "Build installer",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; npm run dist",
+			"isBackground": false
+		},
+		{
+			"label": "Check dist resources",
+			"type": "shell",
+			"command": "Get-ChildItem dist\\win-unpacked -Recurse -Depth 2 | Select-Object FullName | Format-Table -AutoSize",
+			"isBackground": false
+		},
+		{
+			"label": "Rebuild installer",
+			"type": "shell",
+			"command": "taskkill /F /IM electron.exe 2>$null; npm run dist",
+			"isBackground": false
+		},
+		{
+			"label": "Check repo visibility",
+			"type": "shell",
+			"command": "git remote -v",
+			"isBackground": false
+		},
+		{
+			"label": "Git push",
+			"type": "shell",
+			"command": "git add -A; git commit -m \"chore: add GitHub Actions CI, fix installer config, update deps\"; git push",
+			"isBackground": false
+		},
+		{
+			"label": "Git push via bat",
+			"type": "shell",
+			"command": ".\\scripts\\git-commit.bat",
+			"isBackground": false
+		},
+		{
+			"label": "Git push",
+			"type": "shell",
+			"command": ".\\scripts\\git-commit.bat",
+			"isBackground": false
+		},
+		{
+			"label": "Git Push",
+			"type": "shell",
+			"command": "git push origin master"
+		}
+	]
+}

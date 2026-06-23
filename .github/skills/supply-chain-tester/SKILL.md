@@ -1,0 +1,226 @@
+---
+name: supply-chain-tester
+description: '供应链测试工具 (Supply Chain Tester) — Electron桌面应用。用于在此项目中进行开发、调试、打包、发布。涉及Python脚本解析、变量配置面板、AI助手、自动更新、产品线管理等。'
+argument-hint: '[开发|打包|发布|变量|脚本|产品线]'
+---
+
+# 供应链测试工具 (Supply Chain Tester)
+
+## 项目概述
+
+基于 Electron 的供应链业务自动化测试桌面应用，支持5条产品线，可执行 Python 测试脚本，提供 AI 助手、变量配置面板、自动更新等功能。
+
+## 技术栈
+
+| 层 | 技术 |
+|---|---|
+| 框架 | Electron + electron-vite v3.1.0 + Vite 6 |
+| 前端 | React 19, TypeScript 5.7, Tailwind CSS v3.4 |
+| 状态管理 | zustand v5 |
+| 打包 | electron-builder v26.15.3 |
+| 浏览器自动化 | Playwright (Chromium) |
+| AI | 多轮对话 + SSE 流式 |
+| 脚本执行 | Python 3.11 (macOS 系统 / Windows portable) |
+| 更新 | GitHub Release + LAN P2P |
+| CI/CD | GitHub Actions (`.github/workflows/build.yml`) |
+
+## 环境配置
+
+```bash
+# Node.js 路径
+export PATH="$HOME/local/node-v20.19.0-darwin-x64/bin:$PATH"
+
+# 项目根目录
+cd /Users/liaochenglu/Desktop/supply-chain-tester
+
+# 开发
+npm run dev
+
+# 仅提交代码（不构建不发布）
+git add -A && git commit -m "描述" && git push
+
+# 完整发布（仅用户明确要求时才执行，会消耗 GitHub Actions 时长）
+git add -A && git commit -m "描述" && npm version patch && git push && git push --tags && npm run release
+```
+
+> ⚠️ **重要规则**：`npm run release` 会触发CI构建，消耗 GitHub Actions 免费时长。**AI 只能在用户明确说"构建并发布"时才能执行发布命令**，其他情况只提交代码（`git push`）。
+```
+
+## 项目结构
+
+```
+test-suites/         # Python 测试脚本（⚠️ .gitignore，含公司接口，不入库）
+  信e融/             # → 侧边栏 key: xinerong
+  订e融/             # → 侧边栏 key: dingerong
+  货e融/             # → 侧边栏 key: huoerong
+  账e融/             # → 侧边栏 key: zhangerong
+  票e融/             # → 侧边栏 key: piaoerong
+  common/            # 通用脚本 (UtilsPage)
+  utils/             # 工具库 (UtilsPage)
+  config/            # 配置模板 (UtilsPage)
+scripts/             # 项目工具链（正常入库，不含业务接口）
+  git-commit.bat     # git 提交脚本
+  patch-blockmap.mjs # electron-builder 打包补丁
+  setup-python.ps1   # Python 便携版安装
+  test-run.ps1       # 测试运行
+src/main/            # Electron 主进程
+  index.ts           # IPC 处理器、脚本扫描、变量解析
+  auto-updater.ts    # 三层更新检查 (GitHub → API → LAN P2P)
+  browser-manager.ts # Playwright 浏览器封装 (动态 import)
+  ai-service.ts      # AI 对话服务
+  test-runner.ts     # Python 脚本执行器
+src/preload/         # contextBridge 桥接层
+src/renderer/        # React 渲染进程
+  src/pages/         # 页面组件
+    ProductPage.tsx  # 产品线页面（流程管线布局+变量面板）
+    ScriptRunner.tsx # 脚本执行器
+    UtilsPage.tsx    # 通用工具页（Common/Config/Utils + Playwright安装）
+    ApiDebugger.tsx  # API 调试
+    Reports.tsx      # 测试报告
+    TestEditor.tsx   # 测试用例编辑器
+  src/components/    # 通用组件
+    Sidebar.tsx      # 侧边栏导航
+    AIAssistant.tsx  # AI 助手面板
+electron-builder.config.cjs  # 打包配置
+```
+
+## 关键设计规则
+
+### 1. 变量配置面板 (ProductPage.tsx)
+
+- 解析 Python 脚本中 `# ===== 可配置项...可配置项结束 =====` 标记块内的变量
+- **标签名**: 注释中第一个逗号(中英文)前的内容；无逗号则用整个注释；无注释则用变量 key
+- **输入框提示**: 逗号后的内容；无逗号则用 `请输入{注释}`；无注释则用 `请输入{key}的值`
+- **清空按钮**: 所有变量清为空字符串，swipeOut 动画效果 (0.2s)
+- **执行优先级**: 手动输入值 > 脚本默认值（脚本默认值仅用于预填输入框）
+
+### 2. 导航与路由 (store/index.ts)
+
+- `navigateTo(tab, sub?)` **必须始终设置 `selectedSubProduct: sub ?? null`**
+- 不加 `?? null` 会导致切换到不同产品线时残留旧的 subProduct，过滤出空结果
+- 产品主 tab: `xinerong | dingerong | huoerong | zhangerong | piaoerong`
+- 子产品 tab: `zhangerong_nengliang | zhangerong_guolian`
+
+### 3. 打包与发布 (electron-builder.config.cjs)
+
+- **extraResources 只打包 `test-suites` 和 `python-portable`**，不含 Chromium
+- `test-suites` 目录打包到 `resources/test-suites/`，供应用运行时读取
+- 用户通过 UtilsPage 一键安装 Playwright Chromium
+
+**安装包命名规则**（`artifactName` 配置）：
+
+| 平台 | 架构 | 文件名示例 |
+|---|---|---|
+| Mac Intel | x64 | `SupplyChainTester-0.1.18-Mac-x64.dmg` |
+| Mac Apple Silicon (M系列) | arm64 | `SupplyChainTester-0.1.18-Mac-arm64.dmg` |
+| Windows | — | `SupplyChainTester-0.1.18-Windows.exe` |
+| Mac ZIP (Intel) | x64 | `SupplyChainTester-0.1.18-Mac-x64.zip` |
+| Mac ZIP (M系列) | arm64 | `SupplyChainTester-0.1.18-Mac-arm64.zip` |
+
+**构建与发布命令**：
+
+| 命令 | 作用 |
+|---|---|
+| `npm run build` | 仅编译 TypeScript → `out/` |
+| `npm run dist` | 编译 + 打包安装包到 `dist/`（不上传） |
+| `npm run release` | 编译 + 打包 + 上传到 GitHub Release |
+| `npx electron-builder --config electron-builder.config.cjs --publish always` | 仅上传 `dist/` 已有文件（不重新编译） |
+| `npx electron-builder --mac --x64 --publish always` | 仅构建 Mac Intel 并发布 |
+| `npx electron-builder --mac --arm64 --publish always` | 仅构建 Mac M系列 并发布 |
+
+**完整发布流程**：
+```bash
+# 本地 Mac 构建+发布 Mac 包 + CI 自动构建 Windows 包
+git add -A && git commit -m "描述" && npm version patch && git push && git push --tags && npm run release
+```
+- `npm version patch` 创建新 tag（如 v0.1.18）
+- CI 由 tag 触发，自动构建 Windows .exe 并上传到同一 Release
+- Release 页面：https://github.com/401151407-hue/supply-chain-tester/releases
+
+### 4. 脚本扫描 (src/main/index.ts)
+
+- `scanScriptsDirectory()` 扫描 `test-suites/` 下的产品目录（dev 模式）
+- 打包后扫描 `resources/test-suites/`（通过 `extraResources` 配置）
+- 产品 key 通过目录名推断：包含 `信|xin` → `xinerong`，以此类推
+- 子目录作为 subProduct，`.py` 文件作为脚本列表
+- 同时扫描 `common/`, `config/`, `utils/` 目录
+- ⚠️ `test-suites/` 已加入 `.gitignore`，**不会提交到 Git**，每台机器需自行维护
+
+### 5. AI 助手
+
+- 支持多轮对话，线程持久化到 localStorage
+- 自动命名线程
+- 工具：文件读写、目录列表、浏览器打开/点击/输入/截图
+- 危险操作（文件写入、浏览器交互）需用户确认
+
+### 6. Playwright + Chromium 一键安装 (UtilsPage)
+
+- **不打包 Chromium** 到安装包中（节省 ~150MB）
+- 用户在 UtilsPage 点击「一键安装」自动完成：
+  1. `pip install playwright` — 安装 Python 包
+  2. `playwright install chromium` — 下载 Chromium 浏览器
+- **全程无需用户任何额外操作**，等待进度条完成即可
+
+**检测逻辑**（`app:check-playwright` IPC → `src/main/index.ts`）：
+- 真正检测 Chromium 浏览器可执行文件是否存在，而非仅检查 `import playwright`
+- 三种状态：
+  - ✅ 绿色：Playwright + Chromium 均就绪
+  - ⚠️ 黄色 + 按钮可点击：Playwright 已装但 Chromium 缺失
+  - ⚠️ 黄色 + 按钮可点击：均未安装
+- 之前误报「已安装」是因为只检查了 `import playwright`，现在改为检查 `p.chromium.executable_path` 文件是否存在
+
+**常见问题**：
+- 报 `Executable doesn't exist at ...\ms-playwright\chromium-xxx\chrome.exe` → 点「一键安装」重新下载浏览器
+- 版本不匹配（如 Playwright 期待 chromium-1223 但本地是 chromium-1208）→ 同样点「一键安装」即可自动匹配
+
+## 常见问题
+
+| 问题 | 原因 | 解决 |
+|---|---|---|
+| 产品页空白 | `selectedSubProduct` 残留 | `navigateTo` 加 `?? null` |
+| DMG 过大 (~250MB) | Chromium 被打包 | 移除 extraResources 中的 Chromium |
+| 变量面板显示 key 而非注释 | 注释无逗号时未用完整注释 | 无逗号时 `label = commentText` |
+| 脚本找不到 | 文件名与硬编码不匹配 | 用动态扫描，文件名支持前缀如 `1_xxx.py` |
+| CI 构建失败 `Resource not accessible` | 缺少 `contents: write` 权限 | workflow 加 `permissions: contents: write` |
+| Windows exe 未出现在 Release | CI 用 `npm run dist` 未发布 | 改用 `action-gh-release` action 上传 |
+| Chromium 浏览器报 Executable doesn't exist | Playwright 版本与 Chromium 版本不匹配 | 点 UtilsPage「一键安装」重新下载 |
+
+## 用户安装 Python 便携版（Windows 必需）
+
+安装包不内置 Python，用户需手动放置便携版：
+
+1. 从 https://www.python.org/downloads/windows/ 下载 **Windows embeddable package (64-bit)**
+   - 文件名如 `python-3.11.9-embed-amd64.zip`
+2. 解压到安装目录下：`<安装目录>/resources/resources/python-portable/`
+   - 路径是双层 `resources/resources/`，最终 `python.exe` 在 `python-portable/` 下
+3. 重启应用即可
+
+> 注意：Mac 用户一般系统自带 Python 3，无需此操作。
+
+## Git 仓库
+
+- 地址: `git@ssh.github.com:401151407-hue/supply-chain-tester.git`
+- SSH key: `~/.ssh/github_supplychain`
+- 分支: `master`
+- 版本号格式: `v0.1.x` (npm version patch)
+
+## ⚠️ test-suites 目录说明
+
+`test-suites/` 包含公司各产品线的 Python 自动化脚本，内容涉及内部接口地址、数据库连接等敏感信息，**已通过 `.gitignore` 永久排除，不会提交到 GitHub**。
+
+### 产品线对照
+
+| 目录 | 产品线 | 子产品 |
+|------|--------|--------|
+| `test-suites/信e融/` | 信e融 | 药师帮个人信e融2 |
+| `test-suites/订e融/` | 订e融 | 汇誉鑫订e融 |
+| `test-suites/货e融/` | 货e融 | 测试专用 |
+| `test-suites/账e融/` | 账e融 | 国联账e融、能良账e融 |
+| `test-suites/票e融/` | 票e融 | 韶欢票e融 |
+| `test-suites/common/` | 通用查询 | 项目信息/客户信息/测试查询/授信类 |
+| `test-suites/utils/` | 工具库 | 数据库/环境配置/导出/计数器/随机生成 |
+| `test-suites/config/` | 配置模板 | Excel 导入模板 |
+
+### 新机器设置
+
+> 🔒 如果你在新机器上 clone 了项目，需要手动复制 `test-suites/` 目录到项目根目录，应用才能正常执行脚本。没有这个目录应用也能启动，但所有脚本列表为空，执行会报 File not found。
