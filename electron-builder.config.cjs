@@ -39,7 +39,7 @@ module.exports = {
     // 未签名 App 跳过 Gatekeeper 评估
     gatekeeperAssess: false,
     hardenedRuntime: false,
-    // 签名相关（无 Apple Developer 账号时设为 null）
+    // 签名（没有 Apple Developer 账号时用 adhoc 签名）
     identity: null,
     // 输出文件名格式：SupplyChainTester-0.1.0-Mac-arm64.dmg
     artifactName: '${productName}-${version}-Mac-${arch}.${ext}',

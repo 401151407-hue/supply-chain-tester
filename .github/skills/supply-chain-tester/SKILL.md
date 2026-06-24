@@ -225,3 +225,27 @@ git add -A && git commit -m "描述" && npm version patch && git push && git pus
 ### 新机器设置
 
 > 🔒 如果你在新机器上 clone 了项目，需要手动复制 `test-suites/` 目录到项目根目录，应用才能正常执行脚本。没有这个目录应用也能启动，但所有脚本列表为空，执行会报 File not found。
+
+## Mac 打包签名与常见问题
+
+### 未签名 Mac 应用提示"文件已损坏"
+
+未购买 Apple Developer 账号时，打包的 `.app` 无签名，用户下载后可能提示"文件已损坏，无法打开"。
+
+**原因**：macOS 给从网络下载的文件添加了 `com.apple.quarantine` 扩展属性，阻止未签名的应用运行。
+
+**解决办法**（让用户执行）：
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/SupplyChainTester.app
+```
+
+**或**：系统设置 → 隐私与安全性 → 仍要打开。
+
+> 有的用户会遇到有的不会，取决于 macOS 版本和下载方式（浏览器下载会触发，AirDrop/USB 不会）。
+
+### 签名方案
+
+| 方案 | 费用 | 效果 |
+|------|------|------|
+| 不签名（当前） | $0 | 有时弹"已损坏"，需用户手动处理 |
+| 买 Apple Developer 账号 | $99/年 | 签名后永不弹，需 CI 配置证书 |
