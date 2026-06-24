@@ -141,7 +141,7 @@ export function ApiDebugger() {
     status?: number; statusText?: string; headers?: Record<string,string>
     body?: string; duration?: number; error?: string
   } | null>(null)
-  const [responseFormatted, setResponseFormatted] = useState(false)
+  const [responseFormatted, setResponseFormatted] = useState(true)
   const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'cookies' | 'request'>('body')
   const [sentRequest, setSentRequest] = useState<{
     method: string; url: string; headers: Record<string, string>; body?: string
