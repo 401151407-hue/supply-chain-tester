@@ -16,10 +16,10 @@ import { browserOpen, browserRead, browserClick, browserType, browserScreenshot,
 
 const isDev = !app.isPackaged
 
-/** 获取脚本根目录（dev: 项目根/test-suites, packaged: resources/test-suites） */
+/** 获取脚本根目录（都在 app 根目录下的 test-suites） */
 function getScriptsDir(): string {
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'test-suites')
+    return join(process.resourcesPath, '..', 'test-suites')
   }
   return join(__dirname, '../..', 'test-suites')
 }
