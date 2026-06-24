@@ -87,8 +87,10 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
     }
   }, [product])
 
-  // 合并：动态扫描优先，回退硬编码
-  const allScripts = (scannedScripts?.[product] ?? PRODUCT_SCRIPTS[product] ?? [])
+  // 合并：扫描完成后只信扫描结果，未完成时才回退硬编码
+  const allScripts = scannedScripts
+    ? (scannedScripts[product] ?? [])
+    : (PRODUCT_SCRIPTS[product] ?? [])
   const scripts = subProduct
     ? allScripts.filter(s => s.subProduct === subProduct)
     : allScripts

@@ -108,9 +108,11 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             onClick={() => setXinerongExpanded(!xinerongExpanded)}
             suffix={xinerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           />
-          {xinerongExpanded && (
+          {xinerongExpanded && getSubProducts('xinerong').length > 0 && (
             <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
-              <NavItem label="药师帮个人信e融2" active={activeTab === 'xinerong'} onClick={() => navigateTo('xinerong', '药师帮个人信e融2')} compact />
+              {getSubProducts('xinerong').map(sub => (
+                <NavItem key={sub} label={sub} active={activeTab === 'xinerong'} onClick={() => navigateTo('xinerong', sub)} compact />
+              ))}
             </div>
           )}
 
@@ -120,9 +122,11 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             onClick={() => setDingerongExpanded(!dingerongExpanded)}
             suffix={dingerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           />
-          {dingerongExpanded && (
+          {dingerongExpanded && getSubProducts('dingerong').length > 0 && (
             <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
-              <NavItem label="汇誉鑫订e融" active={activeTab === 'dingerong'} onClick={() => navigateTo('dingerong', '汇誉鑫订e融')} compact />
+              {getSubProducts('dingerong').map(sub => (
+                <NavItem key={sub} label={sub} active={activeTab === 'dingerong'} onClick={() => navigateTo('dingerong', sub)} compact />
+              ))}
             </div>
           )}
 
