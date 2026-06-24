@@ -15,7 +15,7 @@ module.exports = {
   extraResources: [
     {
       from: 'test-suites',
-      to: 'test-suites',
+      to: '../test-suites',
       filter: ['**/*'],
     },
     ...[]
