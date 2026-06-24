@@ -8,51 +8,6 @@ interface ScriptVar {
   comment: string
 }
 
-// 产品脚本映射表
-const PRODUCT_SCRIPTS: Record<string, {
-  subProduct: string
-  scripts: { name: string; path: string }[]
-}[]> = {
-  xinerong: [
-    {
-      subProduct: '药师帮个人信e融2',
-      scripts: [
-        { name: '授信', path: 'test-suites/信e融/药师帮个人信e融2/授信.py' },
-      ],
-    },
-  ],
-  dingerong: [
-    {
-      subProduct: '汇誉鑫订e融',
-      scripts: [
-        { name: '用信', path: 'test-suites/订e融/汇誉鑫订e融/用信.py' },
-      ],
-    },
-  ],
-  huoerong: [],
-  zhangerong: [
-    {
-      subProduct: '能良账e融',
-      scripts: [
-        { name: '推送订单', path: 'test-suites/账e融/能良账e融/推送订单.py' },
-        { name: '从H5支付', path: 'test-suites/账e融/能良账e融/从H5支付.py' },
-        { name: '用信审批', path: 'test-suites/账e融/能良账e融/用信审批.py' },
-        { name: '签署回执', path: 'test-suites/账e融/能良账e融/签署债权转让通知书回执.py' },
-      ],
-    },
-    {
-      subProduct: '国联账e融',
-      scripts: [
-        { name: '推送订单', path: 'test-suites/账e融/国联账e融/推送订单.py' },
-        { name: '从H5支付', path: 'test-suites/账e融/国联账e融/从H5支付.py' },
-        { name: '用信审批', path: 'test-suites/账e融/国联账e融/用信审批.py' },
-        { name: '签署承诺函', path: 'test-suites/账e融/国联账e融/签署买方付息承诺函.py' },
-      ],
-    },
-  ],
-  piaoerong: [],
-}
-
 const PRODUCT_NAMES: Record<string, string> = {
   xinerong: '信e融',
   dingerong: '订e融',
@@ -77,8 +32,8 @@ interface ProductPageProps {
 export function ProductPage({ product, subProduct }: ProductPageProps) {
   const { openScript, env } = useAppStore()
 
-  // 动态扫描数据（补全硬编码中缺失的产品线）
-  const [scannedScripts, setScannedScripts] = useState<typeof PRODUCT_SCRIPTS | null>(null)
+  // 动态扫描数据
+  const [scannedScripts, setScannedScripts] = useState<Record<string, { subProduct: string; scripts: { name: string; path: string }[] }[]> | null>(null)
 
   useEffect(() => {
     const api = (window as any).supplyChainTester
@@ -87,10 +42,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
     }
   }, [product])
 
-  // 合并：扫描完成后只信扫描结果，未完成时才回退硬编码
-  const allScripts = scannedScripts
-    ? (scannedScripts[product] ?? [])
-    : (PRODUCT_SCRIPTS[product] ?? [])
+  const allScripts = scannedScripts?.[product] ?? []
   const scripts = subProduct
     ? allScripts.filter(s => s.subProduct === subProduct)
     : allScripts

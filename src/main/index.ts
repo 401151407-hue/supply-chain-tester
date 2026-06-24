@@ -532,14 +532,22 @@ print(f"PLAYWRIGHT_OK={has_pw}")
 print(f"CHROMIUM_OK={has_chromium}")
 `
       const { execSync } = require('child_process')
-      const result = execSync(`"${pythonPath}" -c "${checkScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`, {
-        encoding: 'utf-8',
-        timeout: 15000,
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-      })
-      return {
-        playwright: result.includes('PLAYWRIGHT_OK=True'),
-        chromium: result.includes('CHROMIUM_OK=True'),
+      const { writeFileSync, unlinkSync } = require('fs')
+      const { tmpdir } = require('os')
+      const tmpFile = join(tmpdir(), `sc-playwright-check-${Date.now()}.py`)
+      writeFileSync(tmpFile, checkScript, 'utf-8')
+      try {
+        const result = execSync(`"${pythonPath}" "${tmpFile}"`, {
+          encoding: 'utf-8',
+          timeout: 15000,
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        })
+        return {
+          playwright: result.includes('PLAYWRIGHT_OK=True'),
+          chromium: result.includes('CHROMIUM_OK=True'),
+        }
+      } finally {
+        try { unlinkSync(tmpFile) } catch {}
       }
     } catch {
       return { playwright: false, chromium: false }
