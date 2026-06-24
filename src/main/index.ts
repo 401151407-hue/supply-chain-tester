@@ -24,10 +24,10 @@ function getScriptsDir(): string {
   return join(__dirname, '../..', 'test-suites')
 }
 
-/** 获取项目根目录（dev: 项目根, packaged: resources/） */
+/** 获取项目根目录（dev: 项目根, packaged: app 根目录） */
 function getAppRoot(): string {
   if (app.isPackaged) {
-    return process.resourcesPath
+    return join(process.resourcesPath, '..')
   }
   return join(__dirname, '../..')
 }
