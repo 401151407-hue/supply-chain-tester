@@ -31,29 +31,27 @@ export function getUpdateState() {
 
 /** 初始化自动更新器 */
 export function initAutoUpdater(mainWindow: BrowserWindow) {
-  // 私有仓库需要 GH_TOKEN：打包时通过 define 嵌入，运行时注入环境变量
+  // 公开仓库不需要 GH_TOKEN，但保留兼容私有仓库的 token 注入
   // @ts-ignore __EMBEDDED_GH_TOKEN__ 由构建时 electron.vite.config.ts 的 define 注入
   const embeddedToken: string = typeof __EMBEDDED_GH_TOKEN__ !== 'undefined' ? __EMBEDDED_GH_TOKEN__ : ''
   if (!process.env.GH_TOKEN && embeddedToken && embeddedToken !== '') {
     process.env.GH_TOKEN = embeddedToken
-    console.log('[AutoUpdater] Injected embedded GH_TOKEN for private repo')
   }
 
   // 启动局域网更新服务器（让同网络其他人能发现本机版本）
   startLanServer()
 
   // 设置更新源（由 electron-builder 的 latest.yml 提供）
-  // 开发环境默认不检查 GitHub 更新，但局域网更新始终可用
+  // 开发环境不检查更新，局域网更新始终可用
   if (process.env.NODE_ENV === 'development' || !autoUpdater.isUpdaterActive()) {
-    console.log('[AutoUpdater] GitHub updater disabled (dev mode), LAN updater active')
+    console.log('[AutoUpdater] Updater inactive (dev mode or config), LAN still active')
     return
   }
 
-  // 检查更新出错
+  // 检查更新出错（不通知 UI，因为还有回退逻辑）
   autoUpdater.on('error', (err) => {
     console.error('[AutoUpdater] Error:', err.message)
-    updateStatus = 'error'
-    notifyRenderer(mainWindow)
+    // 只在最终失败时才设 error，这里不通知
   })
 
   // 正在检查更新
