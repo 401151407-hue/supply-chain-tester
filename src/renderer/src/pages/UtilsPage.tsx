@@ -288,12 +288,12 @@ export function UtilsPage() {
           </div>
           <div className="flex items-center gap-2 bg-surface border border-border/5 rounded-xl px-3 py-2">
             <label className="text-[11px] font-semibold text-accent-light whitespace-nowrap">多功能</label>
-            <div className="relative flex-1">
+            <div className="relative">
               <input
                 value={multiFunc}
                 onChange={e => setMultiFunc(e.target.value)}
                 placeholder="多功能参数"
-                className="w-full rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+                className="w-32 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
