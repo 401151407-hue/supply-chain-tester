@@ -288,18 +288,20 @@ export function UtilsPage() {
           </div>
           <div className="flex items-center gap-2 bg-surface border border-border/5 rounded-xl px-3 py-2">
             <label className="text-[11px] font-semibold text-accent-light whitespace-nowrap">多功能</label>
-            <span className="relative group">
-              <HelpCircle size={13} className="text-muted cursor-help" />
-              <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
-                查询结果会自动填入此处，<br />下游脚本可直接引用 multi_func
+            <div className="relative flex-1">
+              <input
+                value={multiFunc}
+                onChange={e => setMultiFunc(e.target.value)}
+                placeholder="多功能参数"
+                className="w-full rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
+                <HelpCircle size={13} className="text-muted cursor-help" />
+                <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+                  此处填入的值会注入为变量<br />multi_func 供下游脚本使用
+                </span>
               </span>
-            </span>
-            <input
-              value={multiFunc}
-              onChange={e => setMultiFunc(e.target.value)}
-              placeholder="多功能参数"
-              className="w-32 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
-            />
+            </div>
           </div>
         </div>
         <div className="flex items-center justify-center gap-3 px-4 pb-3">
