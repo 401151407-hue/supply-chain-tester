@@ -16,10 +16,10 @@ import { browserOpen, browserRead, browserClick, browserType, browserScreenshot,
 
 const isDev = !app.isPackaged
 
-/** 获取脚本根目录（都在 app 根目录下的 test-suites） */
+/** 获取脚本根目录（dev: 项目根, packaged: 用户数据目录，升级不丢失） */
 function getScriptsDir(): string {
   if (app.isPackaged) {
-    return join(process.resourcesPath, '..', 'test-suites')
+    return join(app.getPath('userData'), 'test-suites')
   }
   return join(__dirname, '../..', 'test-suites')
 }
@@ -395,10 +395,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.RUN_SCRIPT, async (event, scriptPath: string, vars?: Record<string, string>) => {
     if (runningProc) { runningProc.kill(); runningProc = null }
     return new Promise<{ ok: boolean; output: string }>((resolve) => {
+      const { dirname } = require('path')
       const pythonPath = getPythonPath()
       const scriptsDir = getScriptsDir()
-      const appRoot = getAppRoot()
-      const fullScriptPath = join(appRoot, scriptPath)
+      const fullScriptPath = join(dirname(scriptsDir), scriptPath)
       // 注入变量到 Python 全局作用域，并将 env 作为命令行参数传递
       const envArg = vars?.env || vars?.current_env || ''
       const varLines = vars ? Object.entries(vars)
@@ -862,7 +862,8 @@ function scanScriptsDirectory(): Record<string, { subProduct: string; scripts: {
   const scriptsDir = getScriptsDir()
 
   if (!existsSync(scriptsDir)) {
-    console.warn('[scanScripts] scripts directory not found:', scriptsDir)
+    console.warn('[scanScripts] scripts directory not found, creating:', scriptsDir)
+    try { require('fs').mkdirSync(scriptsDir, { recursive: true }) } catch {}
     return result
   }
 
@@ -947,7 +948,8 @@ function scanScriptsDirectory(): Record<string, { subProduct: string; scripts: {
 /** 解析 Python 脚本中可配置项区域的变量 */
 function parseScriptVars(scriptPath: string): { key: string; value: string; comment: string }[] {
   try {
-    const fullPath = join(getAppRoot(), scriptPath)
+    const { dirname } = require('path')
+    const fullPath = join(dirname(getScriptsDir()), scriptPath)
     if (!existsSync(fullPath)) {
       console.warn('[parseScriptVars] File not found:', fullPath)
       return []
