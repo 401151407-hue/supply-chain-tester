@@ -297,8 +297,18 @@ export function UtilsPage() {
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
-                <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
-                  此处填入的值会注入为变量<br />multi_func 供下游脚本使用
+                <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '220px' }}>
+                  此处填入的值会注入为变量<br />
+                  multi_func 供下游脚本使用<br />
+                  <br />
+                  例如输入：platform_01<br />
+                  脚本中即可直接使用：<br />
+                  print(multi_func)<br />
+                  输出：platform_01<br />
+                  <br />
+                  支持任意自定义参数<br />
+                  查询结果不会自动覆盖此处<br />
+                  手动填写的内容优先
                 </span>
               </span>
             </div>
