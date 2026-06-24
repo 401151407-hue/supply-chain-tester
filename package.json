@@ -1,7 +1,7 @@
 {
   "name": "supply-chain-tester",
   "productName": "SupplyChainTester",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "供应链测试工具 - API测试、业务流程测试、AI自动执行与报告生成",
   "main": "./out/main/index.js",
   "type": "module",
