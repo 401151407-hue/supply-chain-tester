@@ -71,7 +71,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
 
   const isXinerongActive = activeTab === 'xinerong' || (activeTab === 'script' && useAppStore.getState().scriptParams?.product === 'xinerong')
   const isDingerongActive = activeTab === 'dingerong' || (activeTab === 'script' && useAppStore.getState().scriptParams?.product === 'dingerong')
-  const isZhangerongActive = activeTab === 'zhangerong' || activeTab === 'zhangerong_nengliang' || activeTab === 'zhangerong_guolian'
+  const isZhangerongActive = activeTab === 'zhangerong'
   const isHuoerongActive = activeTab === 'huoerong' || (activeTab === 'script' && useAppStore.getState().scriptParams?.product === 'huoerong')
   const isPiaoerongActive = activeTab === 'piaoerong' || (activeTab === 'script' && useAppStore.getState().scriptParams?.product === 'piaoerong')
 
@@ -102,32 +102,40 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
           产品线
         </span>
         <nav className="space-y-0.5">
-          {/* 信e融 */}
-          <NavItem icon={<Shield size={18} />} label="信e融"
-            active={isXinerongActive}
-            onClick={() => setXinerongExpanded(!xinerongExpanded)}
-            suffix={xinerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          />
-          {xinerongExpanded && getSubProducts('xinerong').length > 0 && (
-            <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
-              {getSubProducts('xinerong').map(sub => (
-                <NavItem key={sub} label={sub} active={activeTab === 'xinerong'} onClick={() => navigateTo('xinerong', sub)} compact />
-              ))}
-            </div>
+          {/* 信e融 — 动态子菜单 */}
+          {getSubProducts('xinerong').length > 0 ? (<>
+            <NavItem icon={<Shield size={18} />} label="信e融"
+              active={isXinerongActive}
+              onClick={() => setXinerongExpanded(!xinerongExpanded)}
+              suffix={xinerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            />
+            {xinerongExpanded && (
+              <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
+                {getSubProducts('xinerong').map(sub => (
+                  <NavItem key={sub} label={sub} active={activeTab === 'xinerong'} onClick={() => navigateTo('xinerong', sub)} compact />
+                ))}
+              </div>
+            )}
+          </>) : (
+            <NavItem icon={<Shield size={18} />} label="信e融" active={isXinerongActive} onClick={() => navigateTo('xinerong')} />
           )}
 
-          {/* 订e融 */}
-          <NavItem icon={<ClipboardList size={18} />} label="订e融"
-            active={isDingerongActive}
-            onClick={() => setDingerongExpanded(!dingerongExpanded)}
-            suffix={dingerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          />
-          {dingerongExpanded && getSubProducts('dingerong').length > 0 && (
-            <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
-              {getSubProducts('dingerong').map(sub => (
-                <NavItem key={sub} label={sub} active={activeTab === 'dingerong'} onClick={() => navigateTo('dingerong', sub)} compact />
-              ))}
-            </div>
+          {/* 订e融 — 动态子菜单 */}
+          {getSubProducts('dingerong').length > 0 ? (<>
+            <NavItem icon={<ClipboardList size={18} />} label="订e融"
+              active={isDingerongActive}
+              onClick={() => setDingerongExpanded(!dingerongExpanded)}
+              suffix={dingerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            />
+            {dingerongExpanded && (
+              <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
+                {getSubProducts('dingerong').map(sub => (
+                  <NavItem key={sub} label={sub} active={activeTab === 'dingerong'} onClick={() => navigateTo('dingerong', sub)} compact />
+                ))}
+              </div>
+            )}
+          </>) : (
+            <NavItem icon={<ClipboardList size={18} />} label="订e融" active={isDingerongActive} onClick={() => navigateTo('dingerong')} />
           )}
 
           {/* 货e融 — 动态子菜单 */}
@@ -148,17 +156,22 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             <NavItem icon={<Truck size={18} />} label="货e融" active={activeTab === 'huoerong'} onClick={() => navigateTo('huoerong')} />
           )}
 
-          {/* 账e融 */}
-          <NavItem icon={<Receipt size={18} />} label="账e融"
-            active={isZhangerongActive}
-            onClick={() => setZhangerongExpanded(!zhangerongExpanded)}
-            suffix={zhangerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          />
-          {zhangerongExpanded && (
-            <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
-              <NavItem label="能良账e融" active={activeTab === 'zhangerong_nengliang'} onClick={() => navigateTo('zhangerong_nengliang')} compact />
-              <NavItem label="国联账e融" active={activeTab === 'zhangerong_guolian'} onClick={() => navigateTo('zhangerong_guolian')} compact />
-            </div>
+          {/* 账e融 — 动态子菜单 */}
+          {getSubProducts('zhangerong').length > 0 ? (<>
+            <NavItem icon={<Receipt size={18} />} label="账e融"
+              active={isZhangerongActive}
+              onClick={() => setZhangerongExpanded(!zhangerongExpanded)}
+              suffix={zhangerongExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            />
+            {zhangerongExpanded && (
+              <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
+                {getSubProducts('zhangerong').map(sub => (
+                  <NavItem key={sub} label={sub} active={activeTab === 'zhangerong'} onClick={() => navigateTo('zhangerong', sub)} compact />
+                ))}
+              </div>
+            )}
+          </>) : (
+            <NavItem icon={<Receipt size={18} />} label="账e融" active={activeTab === 'zhangerong'} onClick={() => navigateTo('zhangerong')} />
           )}
 
           {/* 票e融 — 动态子菜单 */}

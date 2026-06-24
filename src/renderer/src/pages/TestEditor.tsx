@@ -21,8 +21,6 @@ const PRODUCT_NAMES: Record<string, string> = {
   dingerong: '订e融',
   huoerong: '货e融',
   zhangerong: '账e融',
-  zhangerong_nengliang: '能良账e融',
-  zhangerong_guolian: '国联账e融',
   piaoerong: '票e融',
 }
 
