@@ -40,19 +40,6 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm run dist
 
-      # 删除旧 Release，只保留最新（避免 500MB 配额超限）
-      - name: Delete old releases
-        shell: bash
-        run: |
-          for tag in $(gh release list --limit 20 --json tagName --jq '.[].tagName'); do
-            if [ "$tag" != "${{ github.ref_name }}" ]; then
-              gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*-Mac-x64.dmg,dist/*-Mac-arm64.dmg
