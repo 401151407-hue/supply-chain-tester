@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain, shell, Menu, type MenuItemConstructorOptio
 import { join, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, statSync, mkdirSync } from 'fs'
 import { TestRunner } from './test-runner'
 import { ReportStore } from './report-store'
 import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
@@ -863,7 +863,7 @@ function scanScriptsDirectory(): Record<string, { subProduct: string; scripts: {
 
   if (!existsSync(scriptsDir)) {
     console.warn('[scanScripts] scripts directory not found, creating:', scriptsDir)
-    try { require('fs').mkdirSync(scriptsDir, { recursive: true }) } catch {}
+    try { mkdirSync(scriptsDir, { recursive: true }) } catch (e: any) { console.error('[scanScripts] Failed to create:', e.message) }
     return result
   }
 
@@ -1036,6 +1036,11 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
 }
 
 app.whenReady().then(() => {
+  // 确保 test-suites 目录存在（用户数据目录，升级不丢失）
+  const scriptsDir = getScriptsDir()
+  if (!existsSync(scriptsDir)) {
+    try { mkdirSync(scriptsDir, { recursive: true }); console.log('[init] Created scripts dir:', scriptsDir) } catch {}
+  }
   buildMenu()
   loadAIConfig()
   testRunner.setAIService(aiService)
