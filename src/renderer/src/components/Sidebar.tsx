@@ -35,6 +35,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
     aiConfig,
     theme, toggleTheme,
     env, setEnv,
+    selectedSubProduct,
   } = useAppStore()
 
   const [xinerongExpanded, setXinerongExpanded] = useState(false)
@@ -112,7 +113,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             {xinerongExpanded && (
               <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
                 {getSubProducts('xinerong').map(sub => (
-                  <NavItem key={sub} label={sub} active={activeTab === 'xinerong'} onClick={() => navigateTo('xinerong', sub)} compact />
+                  <NavItem key={sub} label={sub} active={activeTab === 'xinerong' && selectedSubProduct === sub} onClick={() => navigateTo('xinerong', sub)} compact />
                 ))}
               </div>
             )}
@@ -130,7 +131,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             {dingerongExpanded && (
               <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
                 {getSubProducts('dingerong').map(sub => (
-                  <NavItem key={sub} label={sub} active={activeTab === 'dingerong'} onClick={() => navigateTo('dingerong', sub)} compact />
+                  <NavItem key={sub} label={sub} active={activeTab === 'dingerong' && selectedSubProduct === sub} onClick={() => navigateTo('dingerong', sub)} compact />
                 ))}
               </div>
             )}
@@ -148,7 +149,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             {huoerongExpanded && (
               <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
                 {getSubProducts('huoerong').map(sub => (
-                  <NavItem key={sub} label={sub} active={activeTab === 'huoerong'} onClick={() => navigateTo('huoerong', sub)} compact />
+                  <NavItem key={sub} label={sub} active={activeTab === 'huoerong' && selectedSubProduct === sub} onClick={() => navigateTo('huoerong', sub)} compact />
                 ))}
               </div>
             )}
@@ -166,7 +167,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             {zhangerongExpanded && (
               <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
                 {getSubProducts('zhangerong').map(sub => (
-                  <NavItem key={sub} label={sub} active={activeTab === 'zhangerong'} onClick={() => navigateTo('zhangerong', sub)} compact />
+                  <NavItem key={sub} label={sub} active={activeTab === 'zhangerong' && selectedSubProduct === sub} onClick={() => navigateTo('zhangerong', sub)} compact />
                 ))}
               </div>
             )}
@@ -184,7 +185,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             {piaoerongExpanded && (
               <div className="ml-4 border-l border-border/10 pl-2 space-y-0.5">
                 {getSubProducts('piaoerong').map(sub => (
-                  <NavItem key={sub} label={sub} active={activeTab === 'piaoerong'} onClick={() => navigateTo('piaoerong', sub)} compact />
+                  <NavItem key={sub} label={sub} active={activeTab === 'piaoerong' && selectedSubProduct === sub} onClick={() => navigateTo('piaoerong', sub)} compact />
                 ))}
               </div>
             )}
