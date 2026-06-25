@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Send, Loader2, Clock, Plus, Trash2, Copy, ChevronDown, Save, Bookmark, X, FolderPlus, Folder, ChevronRight, Variable, Search, Sparkles, CheckCircle2, Eye, Code2, FileCode, Upload, Gauge, Zap, AlertCircle } from 'lucide-react'
 import { useAppStore } from '../store'
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view'
@@ -946,7 +947,7 @@ export function ApiDebugger() {
         </div>
 
         {/* 变量弹窗 */}
-        {showVars && (
+        {showVars && createPortal(
           <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-200 ${varsClosing ? 'opacity-0' : 'opacity-100'}`}>
             <div className={`bg-surface-light border border-border/10 rounded-2xl w-[700px] h-[85vh] flex flex-col shadow-2xl transition-all duration-200 ${varsClosing ? 'opacity-0 scale-95' : 'opacity-100 scale-100 animate-fade-in'}`} onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-border/5 shrink-0">
@@ -1647,7 +1648,7 @@ export function ApiDebugger() {
       </div>
 
       {/* 分组选择弹窗 (Ctrl+保存/更新) */}
-      {showSavePicker && (
+      {showSavePicker && createPortal(
         <GroupPickerModal
           collections={collections}
           newGroupName={newGroupName}
