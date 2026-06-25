@@ -377,9 +377,8 @@ export function ApiDebugger() {
   // 分组管理
   const [collections, setCollections] = useState<Collection[]>(loadCollections)
   const [flashReqId, setFlashReqId] = useState<string | null>(null)
-  const [saveTargetId, setSaveTargetId] = useState<string>('')
-  const [saveName, setSaveName] = useState('')
-  const [showSaveInput, setShowSaveInput] = useState(false)
+  const [showSavePicker, setShowSavePicker] = useState(false)
+  const [saveTargetId, setSaveTargetId] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -454,16 +453,19 @@ export function ApiDebugger() {
   }
 
   // 保存当前请求到分组（新增或更新）
-  function handleSave() {
+  function handleSave(collId?: string) {
     if (!url.trim()) return
+    const targetCollId = collId || saveTargetId
     const cleanParams = params.filter(p => p.key.trim()).map(p => ({ key: p.key.trim(), value: p.value }))
     const cleanHeaders = headers.filter(h => h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value }))
+    const reqName = tab.name || '未命名接口'
     if (editingRequest) {
       // 更新已有接口
       const updated = collections.map(c => c.id === editingRequest.collId ? {
         ...c,
         items: c.items.map(i => i.id === editingRequest.reqId ? {
           ...i,
+          name: reqName,
           method, url: url.trim(),
           headers: cleanHeaders, params: cleanParams,
           body,
@@ -471,26 +473,25 @@ export function ApiDebugger() {
       } : c)
       setCollections(updated)
       persistCollections(updated)
-      // 闪一下被更新的接口
       setFlashReqId(editingRequest.reqId)
       setTimeout(() => setFlashReqId(null), 700)
-    } else if (saveName.trim() && saveTargetId) {
+    } else if (targetCollId) {
       // 新增接口
       const item: SavedRequest = {
-        id: Date.now().toString(), name: saveName.trim(),
+        id: Date.now().toString(), name: reqName,
         method, url: url.trim(),
         headers: cleanHeaders, params: cleanParams,
         body, createdAt: new Date().toISOString(),
       }
       const updated = collections.map(c =>
-        c.id === saveTargetId ? { ...c, items: [...c.items, item] } : c
+        c.id === targetCollId ? { ...c, items: [...c.items, item] } : c
       )
       setCollections(updated)
       persistCollections(updated)
-      setSaveName(''); setSaveTargetId('')
-      setEditingRequest(null)
+      setSaveTargetId('')
+      setEditingRequest({ collId: targetCollId, reqId: item.id })
     }
-    setShowSaveInput(false)
+    setShowSavePicker(false)
   }
 
   // 新建请求时清除编辑状态
@@ -810,41 +811,30 @@ export function ApiDebugger() {
           </button>
           {/* Save */}
           {editingRequest ? (
-            <button onClick={handleSave}
+            <button onClick={() => handleSave()}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
                          bg-success/20 hover:bg-success/30 text-success transition-all active:scale-90">
               <Save size={14} />
               更新
             </button>
-          ) : showSaveInput ? (
+          ) : showSavePicker ? (
             <div className="flex items-center gap-1">
               <select
                 value={saveTargetId}
-                onChange={e => setSaveTargetId(e.target.value)}
+                onChange={e => { const v = e.target.value; if (v) { setSaveTargetId(v); handleSave(v) } }}
                 className="h-9 rounded-lg px-2 text-xs outline-none bg-surface border border-border/5 focus:border-accent/50"
+                autoFocus
               >
                 <option value="">选择分组...</option>
                 {collections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <input
-                value={saveName}
-                onChange={e => setSaveName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveName(''); setSaveTargetId('') } }}
-                placeholder="接口名称"
-                className="w-28 h-9 rounded-lg px-2 text-xs outline-none bg-surface border border-border/5 focus:border-accent/50"
-                autoFocus
-              />
-              <button onClick={handleSave} disabled={!saveName.trim() || !saveTargetId}
-                className="p-2 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent-light disabled:opacity-30">
-                <Save size={14} />
-              </button>
-              <button onClick={() => { setShowSaveInput(false); setSaveName(''); setSaveTargetId('') }}
+              <button onClick={() => setShowSavePicker(false)}
                 className="p-2 rounded-lg hover:bg-hover/10 text-muted">
                 <X size={14} />
               </button>
             </div>
           ) : (
-            <button onClick={() => setShowSaveInput(true)}
+            <button onClick={() => setShowSavePicker(true)}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
                          bg-hover/5 hover:bg-hover/10 text-muted hover:text-foreground
                          transition-all">
