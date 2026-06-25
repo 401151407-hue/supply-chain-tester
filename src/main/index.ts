@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain, shell, Menu, type MenuItemConstructorOptio
 import { join, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, cpSync, renameSync, rmSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, cpSync } from 'fs'
 import { TestRunner } from './test-runner'
 import { ReportStore } from './report-store'
 import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
@@ -816,6 +816,25 @@ print(f"CHROMIUM_OK={has_chromium}")
     return getAppRoot().replace(/\//g, sep).replace(/\\/g, sep)
   })
 
+  // 打开脚本目录
+  ipcMain.handle('app:open-scripts-folder', async () => {
+    const scriptsDir = getScriptsDir()
+    try {
+      if (!existsSync(scriptsDir)) {
+        mkdirSync(scriptsDir, { recursive: true })
+      }
+      const errMsg = await shell.openPath(scriptsDir)
+      return { ok: !errMsg, path: scriptsDir, error: errMsg || undefined }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  })
+
+  // 获取脚本目录路径
+  ipcMain.handle('app:get-scripts-path', async () => {
+    return { path: getScriptsDir() }
+  })
+
   // 打开数据目录
   ipcMain.handle('app:open-data-folder', async () => {
     const dataDir = join(app.getPath('userData'), '..', 'supply-chain-tester-data')
@@ -1038,66 +1057,6 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
 app.whenReady().then(() => {
   const scriptsDir = getScriptsDir()
 
-  // ── 迁移逻辑：如果用户在 app 根目录手动创建了 test-suites，搬到用户数据目录 ──
-  if (app.isPackaged) {
-    const legacyDir = join(process.resourcesPath, '..', 'test-suites')  // <appRoot>/test-suites/
-    if (existsSync(legacyDir) && statSync(legacyDir).isDirectory()) {
-      try {
-        const legacyItems = readdirSync(legacyDir)
-        if (legacyItems.length > 0) {
-          // 确保用户数据目录存在
-          if (!existsSync(scriptsDir)) {
-            mkdirSync(scriptsDir, { recursive: true })
-          }
-          const userItems = existsSync(scriptsDir) ? readdirSync(scriptsDir) : []
-          if (userItems.length === 0) {
-            // 用户数据目录为空 → 迁移
-            console.log('[init] Moving legacy test-suites from app root to userData...')
-            renameSync(legacyDir, scriptsDir)
-            // renameSync 会失败如果目标已存在（跨设备），回退使用逐个移动
-            console.log('[init] Legacy scripts migrated to:', scriptsDir)
-          } else {
-            // 两边都有内容 → 只移用户数据中没有的文件
-            console.log('[init] Both app root and userData have test-suites, merging...')
-            const srcItems = readdirSync(legacyDir)
-            for (const item of srcItems) {
-              const srcPath = join(legacyDir, item)
-              const dstPath = join(scriptsDir, item)
-              if (!existsSync(dstPath)) {
-                cpSync(srcPath, dstPath, { recursive: true })
-              }
-            }
-            // 迁移完成后删除旧目录
-            rmSync(legacyDir, { recursive: true, force: true })
-            console.log('[init] Merged legacy scripts, removed app root copy')
-          }
-        }
-      } catch (e: any) {
-        console.error('[init] Failed to migrate legacy test-suites:', e.message)
-        // 回退：逐个复制（跨设备时 renameSync 会失败）
-        try {
-          if (existsSync(legacyDir)) {
-            if (!existsSync(scriptsDir)) mkdirSync(scriptsDir, { recursive: true })
-            const srcItems = readdirSync(legacyDir)
-            if (srcItems.length > 0) {
-              for (const item of srcItems) {
-                const srcPath = join(legacyDir, item)
-                const dstPath = join(scriptsDir, item)
-                if (!existsSync(dstPath)) {
-                  cpSync(srcPath, dstPath, { recursive: true })
-                }
-              }
-              rmSync(legacyDir, { recursive: true, force: true })
-              console.log('[init] Legacy scripts migrated via fallback copy')
-            }
-          }
-        } catch (e2: any) {
-          console.error('[init] Fallback migration also failed:', e2.message)
-        }
-      }
-    }
-  }
-
   // ── 确保用户数据目录存在 ──
   if (!existsSync(scriptsDir)) {
     try {
@@ -1108,28 +1067,60 @@ app.whenReady().then(() => {
     }
   }
 
-  // ── 首次运行：从安装包 resources 复制初始脚本 ──
+  // ── 首次运行：从安装包复制初始脚本到用户数据目录 ──
+  let justCopied = false
   if (app.isPackaged) {
-    const bundledDir = join(process.resourcesPath, 'test-suites')
-    console.log('[init] Checking bundled test-suites:', bundledDir, 'exists:', existsSync(bundledDir))
-    if (existsSync(bundledDir)) {
-      try {
-        const userItems = existsSync(scriptsDir) ? readdirSync(scriptsDir) : []
-        console.log('[init] User scripts dir items:', userItems.length)
-        if (userItems.length === 0) {
-          cpSync(bundledDir, scriptsDir, { recursive: true })
-          console.log('[init] Copied bundled test-suites to:', scriptsDir)
-          // 验证复制结果
-          const afterCopy = readdirSync(scriptsDir)
-          console.log('[init] After copy, scripts dir has', afterCopy.length, 'items:', afterCopy.join(', '))
-        } else {
-          console.log('[init] test-suites already has', userItems.length, 'items, skipping copy')
+    const userItems = existsSync(scriptsDir) ? readdirSync(scriptsDir) : []
+    if (userItems.length === 0) {
+      // 尝试多个可能的 bundled 路径
+      const candidates = [
+        join(process.resourcesPath, 'test-suites'),           // extraResources {from,to}
+        join(process.resourcesPath, '..', 'test-suites'),     // extraResources string
+        join(__dirname, '..', '..', 'resources', 'test-suites'), // fallback
+      ]
+      let copied = false
+      for (const bundledDir of candidates) {
+        if (existsSync(bundledDir)) {
+          try {
+            console.log('[init] Copying from bundled:', bundledDir)
+            cpSync(bundledDir, scriptsDir, { recursive: true })
+            const after = existsSync(scriptsDir) ? readdirSync(scriptsDir) : []
+            console.log('[init] Copied', after.length, 'items to:', scriptsDir)
+            copied = after.length > 0
+            if (copied) break
+          } catch (e: any) {
+            console.error('[init] Copy failed from', bundledDir, ':', e.message)
+          }
         }
-      } catch (e: any) {
-        console.error('[init] Failed to copy bundled test-suites:', e.message, e.stack)
+      }
+      if (!copied) {
+        // 没有 bundled 脚本，创建一个说明文件
+        try {
+          const { writeFileSync } = require('fs')
+          const readme = join(scriptsDir, 'README.txt')
+          writeFileSync(readme, [
+            '供应链测试工具 - 脚本目录',
+            '',
+            '请将您的 Python 测试脚本放在此目录下。',
+            '按产品线组织：',
+            '  信e融/  - 信e融相关脚本',
+            '  订e融/  - 订e融相关脚本',
+            '  货e融/  - 货e融相关脚本',
+            '  账e融/  - 账e融相关脚本',
+            '  票e融/  - 票e融相关脚本',
+            '  common/ - 通用脚本',
+            '  config/ - 配置文件',
+            '  utils/  - 工具脚本',
+            '',
+            '脚本目录路径：' + scriptsDir,
+          ].join('\n'), 'utf-8')
+          console.log('[init] Created README in empty scripts dir')
+        } catch {}
+      } else {
+        justCopied = true
       }
     } else {
-      console.warn('[init] Bundled test-suites not found, creating empty scripts dir')
+      console.log('[init] Scripts dir already has', userItems.length, 'items')
     }
   }
 
@@ -1138,6 +1129,19 @@ app.whenReady().then(() => {
   testRunner.setAIService(aiService)
   registerIpcHandlers()
   createWindow()
+
+  // ── 首次复制后自动打开文件夹，让用户知道脚本在哪里 ──
+  if (justCopied) {
+    mainWindow?.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        shell.openPath(scriptsDir).then((err) => {
+          if (err) console.error('[init] Failed to open scripts dir:', err)
+          else console.log('[init] Opened scripts dir for user')
+        })
+      }, 1000)
+    })
+  }
+
   initAutoUpdater(mainWindow!)
 
   app.on('activate', () => {
