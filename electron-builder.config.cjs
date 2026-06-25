@@ -39,8 +39,8 @@ module.exports = {
   },
   publish: {
     provider: 'github',
-    owner: '401151407-hue',
-    repo: 'supply-chain-tester',
+    owner: process.env.GH_OWNER || 'your-github-username',
+    repo: process.env.GH_REPO || 'your-repo-name',
     releaseType: 'release',
   },
   releaseInfo: {
