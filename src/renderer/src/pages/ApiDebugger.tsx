@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Send, Loader2, Clock, Plus, Trash2, Copy, ChevronDown, Save, Bookmark, X, FolderPlus, Folder, ChevronRight, Variable, Search, Sparkles, CheckCircle2, Eye, Code2, FileCode, Upload, Gauge, Zap, AlertCircle } from 'lucide-react'
+import { Send, Loader2, Clock, Plus, Trash2, Copy, ChevronDown, Save, Bookmark, X, FolderPlus, Folder, ChevronRight, Variable, Search, Sparkles, CheckCircle2, Eye, Code2, FileCode, Upload, Download, Gauge, Zap, AlertCircle, Pencil } from 'lucide-react'
 import { useAppStore } from '../store'
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view'
+import { EditorView, keymap, lineNumbers, highlightActiveLine, Decoration, ViewPlugin, MatchDecorator, ViewUpdate } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -24,6 +24,13 @@ interface Collection {
 }
 
 interface VarItem { id: string; key: string; value: string; comment: string }
+
+// ── 模块级状态缓存（跨导航保持数据不丢失）──
+let cachedTabs: TabState[] | null = null
+let cachedActiveTabId: string | null = null
+let cachedHistory: HistoryItem[] | null = null
+let cachedProtocol: string | null = null
+let cachedExpandedIds: string[] | null = null
 
 interface TabState {
   id: string
@@ -68,13 +75,130 @@ function persistVars(env: string, vars: VarItem[]) {
   localStorage.setItem(`api_vars_${env}`, JSON.stringify(vars))
 }
 
+/** 生成合法格式随机身份证号 */
+function genIdCard(): string {
+  const area = String(Math.floor(Math.random() * 900000) + 100000)
+  const y = 1970 + Math.floor(Math.random() * 40)
+  const m = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')
+  const d = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')
+  const seq = Array(3).fill(0).map(() => Math.floor(Math.random() * 10)).join('')
+  const raw = area + y + m + d + seq
+  const w = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
+  const ck = '10X98765432'
+  let s = 0; for (let i = 0; i < 17; i++) s += parseInt(raw[i]) * w[i]
+  return raw + ck[s % 11]
+}
+
+/** 生成随机统一社会信用代码 */
+function genCreditCode(): string {
+  const chars = '0123456789ABCDEFGHJKLMNPQRTUWXY'
+  return Array(18).fill(0).map(() => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
+
 /** 替换字符串中的 {{变量}} */
 function interpolate(str: string, vars: VarItem[]): string {
   return str.replace(/\{\{(\w+)\}\}/g, (_, name) => {
     const v = vars.find(v => v.key === name)
-    return v ? v.value : `{{${name}}}`
+    if (v) return v.value
+    // 系统内置变量
+    switch (name) {
+      case 'timestampMs': return Date.now().toString()
+      case 'randomInt': return Math.floor(Math.random() * 10000).toString()
+      case 'randomStr': return Math.random().toString(36).slice(2, 10)
+      case 'today': return new Date().toISOString().slice(0, 10)
+      case 'yesterday': return new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+      case 'tomorrow': return new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+      case 'randomPhone': return '1' + String(Math.floor(Math.random() * 9) + 3) + Array(9).fill(0).map(() => Math.floor(Math.random() * 10)).join('')
+      case 'randomId': return Array(18).fill(0).map(() => Math.floor(Math.random() * 10)).join('')
+      case 'guid': return crypto.randomUUID().replace(/-/g, '')
+      case 'randomIdCard': return genIdCard()
+      case 'randomCreditCode': return genCreditCode()
+      case 'timestamp': return Math.floor(Date.now() / 1000).toString()
+      case 'uuid': return crypto.randomUUID()
+    }
+    return `{{${name}}}`
   })
 }
+
+/** 渲染带变量高亮的文本片段 */
+function renderHighlightedText(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  const regex = /\{\{(\w+)\}\}/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    parts.push(
+      <span key={match.index} className="text-[#7dd3fc] bg-[#7dd3fc]/15 rounded px-0.5 font-medium italic">
+        {match[0]}
+      </span>
+    )
+    lastIndex = regex.lastIndex
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+  return parts
+}
+
+/** 带 {{变量}} 高亮的输入框 */
+function HighlightedInput({ value, onChange, onKeyDown, onBlur, placeholder, className = '' }: {
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void
+  placeholder?: string
+  className?: string
+}) {
+  return (
+    <div className="relative flex-1">
+      {/* 高亮背景层 */}
+      <div
+        className={`absolute inset-0 pointer-events-none overflow-hidden flex items-center px-3 text-sm font-mono whitespace-pre ${className}`}
+        aria-hidden="true"
+      >
+        <span className={value ? '' : 'text-muted/30'}>
+          {value ? renderHighlightedText(value) : placeholder}
+        </span>
+      </div>
+      {/* 透明前景输入层 */}
+      <input
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className={`w-full h-full px-3 text-sm font-mono outline-none bg-transparent border border-border/5 focus:border-accent/50 transition-colors placeholder:text-transparent text-transparent caret-foreground rounded-lg ${className}`}
+        style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+      />
+    </div>
+  )
+}
+
+/** CodeMirror {{变量}} 高亮装饰器 */
+const varMatchDecorator = new MatchDecorator({
+  regexp: /\{\{(\w+)\}\}/g,
+  decoration: (match) => {
+    const name = match[1]
+    const exists = true // 由调用方通过 envVars 判断，这里先统一高亮
+    return Decoration.mark({
+      class: 'cm-var-interpolation',
+      attributes: { 'data-var': name }
+    })
+  }
+})
+
+const varHighlightPlugin = ViewPlugin.fromClass(class {
+  decorations: any
+  constructor(view: EditorView) {
+    this.decorations = varMatchDecorator.createDeco(view)
+  }
+  update(update: ViewUpdate) {
+    this.decorations = varMatchDecorator.updateDeco(update, this.decorations)
+  }
+}, { decorations: v => v.decorations })
 
 function loadCollections(): Collection[] {
   try {
@@ -120,6 +244,7 @@ function JsonEditor({ value, onChange, readOnly, contentRef }: {
         keymap.of(defaultKeymap),
         json(),
         oneDark,
+        varHighlightPlugin,
         EditorState.readOnly.of(readOnly || false),
         !readOnly && EditorView.updateListener.of(update => {
           if (update.docChanged) {
@@ -153,6 +278,33 @@ function JsonEditor({ value, onChange, readOnly, contentRef }: {
   }, [value])
 
   return <div ref={containerRef} className="flex-1 overflow-hidden rounded-lg border border-border/5 focus-within:border-accent/50" />
+}
+
+/** 保存飞入目标分组动画 */
+function FlyToTarget({ startX, startY, endX, endY, text }: {
+  startX: number; startY: number; endX: number; endY: number; text: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const dx = endX - startX
+    const dy = endY - startY
+    el.animate([
+      { transform: `translate(-50%, -50%) scale(1)`, opacity: 1 },
+      { transform: `translate(-50%, -50%) scale(1.1)`, opacity: 1, offset: 0.3 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.3)`, opacity: 0 },
+    ], { duration: 500, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' })
+  }, [])
+  return (
+    <div ref={ref}
+      className="fixed pointer-events-none z-[100] flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-foreground text-sm font-medium shadow-lg"
+      style={{ left: startX, top: startY }}
+    >
+      <Save size={14} />
+      {text}
+    </div>
+  )
 }
 
 /** 分组选择弹窗（选中高亮 + 确认按钮） */
@@ -238,6 +390,14 @@ function GroupPickerModal({ collections, newGroupName, onNewGroupNameChange, onS
 function EditableName({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editing) {
+      // 延迟聚焦确保 DOM 已挂载
+      requestAnimationFrame(() => inputRef.current?.select())
+    }
+  }, [editing])
 
   function commit() {
     setEditing(false)
@@ -248,32 +408,106 @@ function EditableName({ value, onChange }: { value: string; onChange: (v: string
   if (editing) {
     return (
       <input
+        ref={inputRef}
         value={draft}
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value); setEditing(false) } }}
-        className="flex-1 px-2 py-0.5 text-sm font-medium bg-surface border border-accent/50 rounded outline-none"
-        autoFocus
+        className="flex-1 px-2 py-0.5 text-sm font-medium bg-surface border border-accent/50 rounded outline-none animate-fade-in"
       />
     )
   }
   return (
     <span
-      onDoubleClick={() => { setDraft(value); setEditing(true) }}
-      className="flex-1 px-2 py-0.5 text-sm font-medium text-foreground cursor-default select-none"
-      title="双击修改名称"
+      onClick={() => { setDraft(value); setEditing(true) }}
+      className="group flex items-center gap-1.5 px-2 py-0.5 text-sm font-medium rounded cursor-text
+                 hover:bg-hover/5 transition-colors"
+      title="点击修改名称"
     >
-      {value || '新请求'}
+      <span className="text-foreground/80 group-hover:text-foreground transition-colors">
+        {value || '未命名接口'}
+      </span>
+      <Pencil size={11} className="opacity-0 group-hover:opacity-40 text-muted transition-opacity shrink-0" />
     </span>
+  )
+}
+
+/** 系统变量弹出框（从按钮处展开/收缩） */
+function SysVarsPopover({ closing, onClose, anchorRef }: { closing: boolean; onClose: () => void; anchorRef: React.RefObject<HTMLButtonElement | null> }) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [animating, setAnimating] = useState(true)
+  const [pos, setPos] = useState({ right: 0, top: 0 })
+
+  useEffect(() => {
+    if (anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect()
+      setPos({
+        right: window.innerWidth - rect.right + 100,
+        top: rect.top - 4,
+      })
+    }
+    requestAnimationFrame(() => setAnimating(false))
+  }, [])
+
+  const sysVars = [
+    { name: '{{timestampMs}}', desc: '时间戳(毫秒)', preview: Date.now().toString() },
+    { name: '{{randomInt}}', desc: '随机整数', preview: Math.floor(Math.random()*10000).toString() },
+    { name: '{{randomStr}}', desc: '随机字符串', preview: Math.random().toString(36).slice(2,10) },
+    { name: '{{randomPhone}}', desc: '随机手机号', preview: '1' + String(Math.floor(Math.random()*9)+3) + Array(9).fill(0).map(() => Math.floor(Math.random()*10)).join('') },
+    { name: '{{randomId}}', desc: '随机18位ID', preview: Array(18).fill(0).map(() => Math.floor(Math.random()*10)).join('') },
+    { name: '{{guid}}', desc: 'GUID', preview: crypto.randomUUID().replace(/-/g, '') },
+    { name: '{{randomIdCard}}', desc: '随机身份证', preview: genIdCard() },
+    { name: '{{randomCreditCode}}', desc: '随机信用代码', preview: genCreditCode() },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-40" onClick={onClose}>
+      <div ref={cardRef}
+        className="absolute w-[480px] bg-surface-light border border-border/10 rounded-xl shadow-xl p-4 origin-top-right transition-all duration-200"
+        style={{
+          right: pos.right,
+          top: pos.top,
+          ...(closing || animating
+            ? { opacity: 0, transform: 'scale(0.3)' }
+            : { opacity: 1, transform: 'scale(1)' })
+        }}
+        onClick={e => e.stopPropagation()}>
+        <h4 className="text-[11px] uppercase tracking-widest text-muted mb-2.5">系统变量</h4>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[10px] text-muted/50 px-1">
+            <span className="w-[150px] shrink-0">变量名</span>
+            <span className="w-[88px] shrink-0">说明</span>
+            <span className="flex-1">生成效果</span>
+          </div>
+          {sysVars.map(v => (
+            <div key={v.name} className="group flex items-center gap-2">
+              <code className="w-[150px] text-xs text-accent-light font-mono italic shrink-0 truncate">{v.name}</code>
+              <span className="w-[88px] text-[11px] text-muted/60 shrink-0 truncate">{v.desc}</span>
+              <span className="flex-1 text-xs text-foreground font-mono bg-surface rounded px-2 py-1 break-all">{v.preview}</span>
+              <button
+                onClick={() => { navigator.clipboard.writeText(v.name); onClose() }}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-all shrink-0"
+                title="复制变量名">
+                <Copy size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
 export function ApiDebugger() {
   const { env } = useAppStore()
 
-  // 多标签管理
-  const [tabs, setTabs] = useState<TabState[]>(() => [newBlankTab()])
-  const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id ?? '')
+  // 多标签管理（从缓存恢复，跨导航保持状态）
+  const [tabs, setTabs] = useState<TabState[]>(() => cachedTabs || [newBlankTab()])
+  const [activeTabId, setActiveTabId] = useState<string>(() => cachedActiveTabId || tabs[0]?.id || '')
+
+  // 同步到缓存
+  useEffect(() => { cachedTabs = tabs }, [tabs])
+  useEffect(() => { cachedActiveTabId = activeTabId }, [activeTabId])
 
   function getActiveTab(): TabState {
     return tabs.find(t => t.id === activeTabId) || tabs[0]
@@ -326,7 +560,8 @@ export function ApiDebugger() {
   const setResponse = (v: TabState['response']) => updateActiveTab({ response: v })
   const setEditingRequest = (v: TabState['editingRequest']) => updateActiveTab({ editingRequest: v })
 
-  const [protocol, setProtocol] = useState<string>('http://')
+  const [protocol, setProtocol] = useState<string>(() => cachedProtocol || 'https://')
+  useEffect(() => { cachedProtocol = protocol }, [protocol])
   const bodyContentRef = useRef('')  // 实时同步最新 body，绕过 React 状态延迟
   const [activeTabKey, setActiveTabKey] = useState<TabKey>('params')
   const [isSending, setIsSending] = useState(false)
@@ -336,7 +571,8 @@ export function ApiDebugger() {
   const [sentRequest, setSentRequest] = useState<{
     method: string; url: string; headers: Record<string, string>; body?: string
   } | null>(null)
-  const [history, setHistory] = useState<HistoryItem[]>([])
+  const [history, setHistory] = useState<HistoryItem[]>(() => cachedHistory || [])
+  useEffect(() => { cachedHistory = history }, [history])
 
   // ── 并发性能测试状态 ──
   const [showPerfPanel, setShowPerfPanel] = useState(false)
@@ -404,6 +640,7 @@ export function ApiDebugger() {
   const originalVarsRef = useRef<VarItem[]>([])
   const [showVars, setShowVars] = useState(false)
   const [varsClosing, setVarsClosing] = useState(false)
+  const [deletingVarId, setDeletingVarId] = useState<string | null>(null)
   const [varSearch, setVarSearch] = useState('')
   const [varSearchInput, setVarSearchInput] = useState('')
   const [newVarKey, setNewVarKey] = useState('')
@@ -443,7 +680,11 @@ export function ApiDebugger() {
     setNewVarKey(''); setNewVarValue(''); setNewVarComment('')
   }
   function removeVar(id: string) {
-    setEnvVars(envVars.filter(v => v.id !== id))
+    setDeletingVarId(id)
+    setTimeout(() => {
+      setEnvVars(prev => prev.filter(v => v.id !== id))
+      setDeletingVarId(null)
+    }, 200)
   }
   function updateVar(id: string, field: 'key' | 'value' | 'comment', val: string) {
     if (field === 'key' && val.trim() && envVars.some(v => v.id !== id && v.key === val.trim())) return
@@ -460,7 +701,108 @@ export function ApiDebugger() {
   const [showSavePicker, setShowSavePicker] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(cachedExpandedIds || []))
+  useEffect(() => { cachedExpandedIds = [...expandedIds] }, [expandedIds])
+  const [renamingCollId, setRenamingCollId] = useState<string | null>(null)
+  const [renameCollName, setRenameCollName] = useState('')
+  const [showSysVars, setShowSysVars] = useState(false)
+  const [sysVarsClosing, setSysVarsClosing] = useState(false)
+
+  function closeSysVars() {
+    setSysVarsClosing(true)
+    setTimeout(() => { setShowSysVars(false); setSysVarsClosing(false) }, 200)
+  }
+  function openSysVars() {
+    setSysVarsClosing(false)
+    setShowSysVars(true)
+  }
+  const [dragItem, setDragItem] = useState<{ reqId: string; fromCollId: string } | null>(null)
+  const [dragOverCollId, setDragOverCollId] = useState<string | null>(null)
+
+  // ── 确认对话框 ──
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null)
+
+  function showConfirm(message: string, onConfirm: () => void) {
+    setConfirmDialog({ message, onConfirm })
+  }
+
+  // ── 保存飞入动画 ──
+  const saveBtnRef = useRef<HTMLDivElement>(null)
+  const sysVarsBtnRef = useRef<HTMLButtonElement>(null)
+  const collRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const [flyAnim, setFlyAnim] = useState<{ startX: number; startY: number; endX: number; endY: number; text: string } | null>(null)
+
+  function triggerFlyTo(collId: string) {
+    const btn = saveBtnRef.current
+    const target = collRefs.current.get(collId)
+    if (!btn || !target) return
+    const btnRect = btn.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    setFlyAnim({
+      startX: btnRect.left + btnRect.width / 2,
+      startY: btnRect.top + btnRect.height / 2,
+      endX: targetRect.left + targetRect.width / 2,
+      endY: targetRect.top + targetRect.height / 2,
+      text: editingRequest ? '更新' : '保存',
+    })
+    setTimeout(() => setFlyAnim(null), 600)
+  }
+
+  // ── 拖拽处理 ──
+  function handleDragStart(e: React.DragEvent, reqId: string, fromCollId: string) {
+    setDragItem({ reqId, fromCollId })
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('application/json', JSON.stringify({ reqId, fromCollId }))
+  }
+  function handleDragOver(e: React.DragEvent, collId: string) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverCollId !== collId) {
+      setDragOverCollId(collId)
+      // 自动展开目标分组，确保 drop zone 可接收事件
+      setExpandedIds(prev => new Set([...prev, collId]))
+    }
+  }
+  function handleDragLeave(e: React.DragEvent) {
+    // 只在真正离开容器时清除
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+      setDragOverCollId(null)
+    }
+  }
+  function handleDrop(e: React.DragEvent, toCollId: string) {
+    e.preventDefault()
+    setDragOverCollId(null)
+    setDragItem(null)
+    try {
+      const raw = e.dataTransfer.getData('application/json')
+      if (!raw) return
+      const { reqId, fromCollId } = JSON.parse(raw) as { reqId: string; fromCollId: string }
+      if (fromCollId === toCollId) return
+      const fromCol = collections.find(c => c.id === fromCollId)
+      const toCol = collections.find(c => c.id === toCollId)
+      if (!fromCol || !toCol) return
+      const item = fromCol.items.find(it => it.id === reqId)
+      if (!item) return
+      const updated = collections.map(c => {
+        if (c.id === fromCollId) return { ...c, items: c.items.filter(it => it.id !== reqId) }
+        if (c.id === toCollId) return { ...c, items: [...c.items, item] }
+        return c
+      })
+      setCollections(updated)
+      persistCollections(updated)
+      setExpandedIds(prev => new Set([...prev, toCollId]))
+      setDragItem(null)
+      setDragOverCollId(null)
+    } catch { /* ignore */ }
+    setDragItem(null)
+    setDragOverCollId(null)
+  }
+
+  function handleDragEnd() {
+    setDragItem(null)
+    setDragOverCollId(null)
+  }
 
   async function handleSend() {
     if (!url.trim() || isSending) return
@@ -534,41 +876,45 @@ export function ApiDebugger() {
   // 保存到指定分组
   function saveToGroup(collId: string) {
     if (!url.trim()) return
-    const cleanParams = params.filter(p => p.key.trim()).map(p => ({ key: p.key.trim(), value: p.value }))
-    const cleanHeaders = headers.filter(h => h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value }))
-    const reqName = tab.name || '未命名接口'
-    setCollections(prev => {
-      const item: SavedRequest = {
-        id: Date.now().toString(), name: reqName,
-        method, url: url.trim(),
-        headers: cleanHeaders, params: cleanParams,
-        body, createdAt: new Date().toISOString(),
-      }
-      const updated = editingRequest
-        ? prev.map(c => c.id === editingRequest.collId ? {
-            ...c,
-            items: c.id === collId
-              ? c.items.map(i => i.id === editingRequest.reqId ? { ...i, name: reqName, method, url: url.trim(), headers: cleanHeaders, params: cleanParams, body } : i)
-              : c.items.filter(i => i.id !== editingRequest.reqId),
-          } : c.id === collId ? { ...c, items: [...c.items, item] } : c) as Collection[]
-        : prev.map(c => c.id === collId ? { ...c, items: [...c.items, item] } : c)
-      persistCollections(updated)
-      return updated
-    })
-    setEditingRequest(null)
-    // 重新查找刚保存的 item 设置 editing 状态
-    setTimeout(() => {
-      setCollections(current => {
-        const col = current.find(c => c.id === collId)
-        if (col) {
-          const last = col.items[col.items.length - 1]
-          if (last) setEditingRequest({ collId, reqId: last.id })
-        }
-        return current
-      })
-    }, 0)
     setShowSavePicker(false)
     setNewGroupName('')
+    triggerFlyTo(collId)
+    setTimeout(() => {
+      const cleanParams = params.filter(p => p.key.trim()).map(p => ({ key: p.key.trim(), value: p.value }))
+      const cleanHeaders = headers.filter(h => h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value }))
+      const reqName = tab.name || '未命名接口'
+      setCollections(prev => {
+        const item: SavedRequest = {
+          id: Date.now().toString(), name: reqName,
+          method, url: url.trim(),
+          headers: cleanHeaders, params: cleanParams,
+          body, createdAt: new Date().toISOString(),
+        }
+        const updated = editingRequest
+          ? prev.map(c => c.id === editingRequest.collId ? {
+              ...c,
+              items: c.id === collId
+                ? c.items.map(i => i.id === editingRequest.reqId ? { ...i, name: reqName, method, url: url.trim(), headers: cleanHeaders, params: cleanParams, body } : i)
+                : c.items.filter(i => i.id !== editingRequest.reqId),
+            } : c.id === collId ? { ...c, items: [...c.items, item] } : c) as Collection[]
+          : prev.map(c => c.id === collId ? { ...c, items: [...c.items, item] } : c)
+        persistCollections(updated)
+        return updated
+      })
+      setEditingRequest(null)
+      setExpandedIds(prev => new Set([...prev, collId]))
+      // 重新查找刚保存的 item 设置 editing 状态
+      setTimeout(() => {
+        setCollections(current => {
+          const col = current.find(c => c.id === collId)
+          if (col) {
+            const last = col.items[col.items.length - 1]
+            if (last) setEditingRequest({ collId, reqId: last.id })
+          }
+          return current
+        })
+      }, 0)
+    }, 250)
   }
 
   // 保存当前请求（默认存到默认分组，Ctrl+点击弹窗选分组）
@@ -666,7 +1012,7 @@ export function ApiDebugger() {
     )
     setCollections(updated)
     persistCollections(updated)
-    setExpandedId(collId)
+    setExpandedIds(prev => new Set([...prev, collId]))
   }
 
   // ── Postman 导入 ──
@@ -892,52 +1238,67 @@ export function ApiDebugger() {
               onChange={e => setProtocol(e.target.value)}
               className="h-9 pl-3 pr-6 text-xs font-mono outline-none
                          bg-surface border-y border-l border-border/5 focus:border-accent/50
-                         appearance-none cursor-pointer text-muted shrink-0"
+                         appearance-none cursor-pointer text-muted shrink-0 rounded-l-lg"
             >
               <option value="https://">https://</option>
               <option value="http://">http://</option>
             </select>
             <ChevronDown size={10} className="absolute left-[76px] top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-            <input
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              onBlur={e => syncUrlToParams(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder="api.example.com/endpoint"
-              className="flex-1 h-9 rounded-r-lg px-3 text-sm font-mono outline-none
-                         bg-surface border border-border/5 focus:border-accent/50 transition-colors
-                         placeholder:text-muted/30"
-            />
+            <div className="flex-1 h-9 relative rounded-r-lg border border-border/5 focus-within:border-accent/50 overflow-hidden bg-surface">
+              <div
+                className="absolute inset-0 pointer-events-none flex items-center px-3 text-sm font-mono whitespace-pre overflow-hidden"
+                aria-hidden="true"
+              >
+                <span className={url ? '' : 'text-muted/30'}>
+                  {url ? renderHighlightedText(url) : 'api.example.com/endpoint'}
+                </span>
+              </div>
+              <input
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                onBlur={e => syncUrlToParams(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                placeholder="api.example.com/endpoint"
+                className="w-full h-full px-3 text-sm font-mono outline-none bg-transparent placeholder:text-transparent"
+                style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+              />
+            </div>
           </div>
           {/* Send */}
           <button
             onClick={handleSend}
             disabled={isSending || !url.trim()}
             className="flex items-center gap-1.5 px-5 h-9 rounded-lg text-sm font-semibold
-                       bg-accent hover:bg-accent-light text-foreground
+                       bg-accent hover:bg-accent-light text-foreground active:scale-95
                        disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
             {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             发送
           </button>
           {/* Save */}
+          <div ref={saveBtnRef}>
           {editingRequest ? (
             <button onClick={(e) => handleSave(e)}
+              disabled={!url.trim()}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
-                         bg-success/20 hover:bg-success/30 text-success transition-all active:scale-90"
+                         bg-success/20 hover:bg-success/30 text-success transition-all active:scale-90
+                         disabled:opacity-30 disabled:cursor-not-allowed"
               title="Ctrl+点击可选择分组">
               <Save size={14} />
               更新
             </button>
           ) : (
             <button onClick={(e) => handleSave(e)}
+              disabled={!url.trim()}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
-                         bg-accent/20 hover:bg-accent/30 text-accent-light transition-all"
+                         bg-accent/20 hover:bg-accent/30 text-accent-light transition-all
+                         disabled:opacity-30 disabled:cursor-not-allowed"
               title="Ctrl+点击可选择分组">
               <Save size={14} />
               保存
             </button>
           )}
+          </div>
         </div>
 
         {/* 变量弹窗 */}
@@ -989,7 +1350,7 @@ export function ApiDebugger() {
                   <p className="text-xs text-muted text-center py-4">{varSearch ? '无匹配变量' : '暂无变量'}</p>
                 )}
                 {filteredVars.map(v => (
-                  <div key={v.id} className="flex items-center gap-2">
+                  <div key={v.id} className={`flex items-center gap-2 ${deletingVarId === v.id ? 'animate-slide-out-left' : ''}`}>
                     <input value={v.key}
                       onChange={e => updateVar(v.id, 'key', e.target.value)}
                       className="w-28 rounded-lg px-3 py-2 text-xs font-mono bg-surface border border-border/5 outline-none focus:border-accent/50 text-accent-light shrink-0" />
@@ -1001,7 +1362,7 @@ export function ApiDebugger() {
                       placeholder="注释"
                       className="w-28 rounded-lg px-2 py-2 text-[11px] bg-surface border border-border/5 outline-none focus:border-accent/50 text-muted shrink-0" />
                     <button onClick={() => removeVar(v.id)}
-                      className="p-1.5 rounded-lg hover:bg-red-500/20 text-muted hover:text-red-400 shrink-0"><Trash2 size={12} /></button>
+                      className="p-1.5 rounded-lg hover:bg-red-500/20 text-muted hover:text-red-400 shrink-0 transition-colors"><Trash2 size={12} /></button>
                   </div>
                 ))}
               </div>
@@ -1199,18 +1560,30 @@ export function ApiDebugger() {
               </div>
               {params.map(p => (
                 <div key={p.id} className="flex gap-1 items-center">
-                  <input
-                    value={p.key} onChange={e => updateParam(p.id, 'key', e.target.value)}
-                    placeholder="Key"
-                    className="w-48 rounded px-2 py-1 text-xs font-mono outline-none
-                               bg-surface border border-border/5 focus:border-accent/50"
-                  />
-                  <input
-                    value={p.value} onChange={e => updateParam(p.id, 'value', e.target.value)}
-                    placeholder="Value"
-                    className="flex-1 rounded px-2 py-1 text-xs font-mono outline-none
-                               bg-surface border border-border/5 focus:border-accent/50"
-                  />
+                  <div className="w-48 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                      <span className={p.key ? '' : 'text-muted/30'}>
+                        {p.key ? renderHighlightedText(p.key) : 'Key'}
+                      </span>
+                    </div>
+                    <input value={p.key} onChange={e => updateParam(p.id, 'key', e.target.value)}
+                      placeholder="Key"
+                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                    />
+                  </div>
+                  <div className="flex-1 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                      <span className={p.value ? '' : 'text-muted/30'}>
+                        {p.value ? renderHighlightedText(p.value) : 'Value'}
+                      </span>
+                    </div>
+                    <input value={p.value} onChange={e => updateParam(p.id, 'value', e.target.value)}
+                      placeholder="Value"
+                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                    />
+                  </div>
                   <button onClick={() => removeParam(p.id)}
                     className="p-1 rounded hover:bg-red-500/20 text-muted hover:text-red-400">
                     <Trash2 size={12} />
@@ -1229,18 +1602,30 @@ export function ApiDebugger() {
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
               {headers.map(h => (
                 <div key={h.id} className="flex gap-1 items-center">
-                  <input
-                    value={h.key} onChange={e => updateHeader(h.id, 'key', e.target.value)}
-                    placeholder="Key"
-                    className="w-48 rounded px-2 py-1 text-xs font-mono outline-none
-                               bg-surface border border-border/5 focus:border-accent/50"
-                  />
-                  <input
-                    value={h.value} onChange={e => updateHeader(h.id, 'value', e.target.value)}
-                    placeholder="Value"
-                    className="flex-1 rounded px-2 py-1 text-xs font-mono outline-none
-                               bg-surface border border-border/5 focus:border-accent/50"
-                  />
+                  <div className="w-48 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                      <span className={h.key ? '' : 'text-muted/30'}>
+                        {h.key ? renderHighlightedText(h.key) : 'Key'}
+                      </span>
+                    </div>
+                    <input value={h.key} onChange={e => updateHeader(h.id, 'key', e.target.value)}
+                      placeholder="Key"
+                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                    />
+                  </div>
+                  <div className="flex-1 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                      <span className={h.value ? '' : 'text-muted/30'}>
+                        {h.value ? renderHighlightedText(h.value) : 'Value'}
+                      </span>
+                    </div>
+                    <input value={h.value} onChange={e => updateHeader(h.id, 'value', e.target.value)}
+                      placeholder="Value"
+                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                    />
+                  </div>
                   <button onClick={() => removeHeader(h.id)}
                     className="p-1 rounded hover:bg-red-500/20 text-muted hover:text-red-400">
                     <Trash2 size={12} />
@@ -1526,96 +1911,214 @@ export function ApiDebugger() {
         </div>
 
         {/* 右侧：分组 + 历史 */}
-        <aside className="w-56 border-l border-border/5 bg-surface-light/10 overflow-y-auto shrink-0">
-          {/* 分组 */}
-          <div className="px-3 py-2 text-[10px] text-muted uppercase tracking-wider flex items-center justify-between">
-          {/* 变量 */}
-          <div className="px-3 py-2 text-[10px] text-muted uppercase tracking-wider border-b border-border/5">
+        <aside className="w-56 border-l border-border/5 bg-surface-light/10 overflow-y-auto shrink-0 flex flex-col">
+          {/* 变量入口 */}
+          <div className="px-3 py-2 border-b border-border/5 flex items-center gap-1">
             <button
               onClick={openVarsModal}
-              className="flex items-center gap-1.5 w-full hover:text-foreground transition-colors">
-              <Variable size={12} />
+              className="flex items-center gap-1.5 flex-1 text-[11px] text-muted hover:text-foreground transition-colors">
+              <Variable size={13} />
               变量 ({envVars.length})
+            </button>
+            <div className="relative">
+              <button
+                ref={sysVarsBtnRef}
+                onClick={() => showSysVars ? closeSysVars() : openSysVars()}
+                className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors"
+                title="系统变量">
+                <Sparkles size={13} />
+              </button>
+              {showSysVars && createPortal(
+                <SysVarsPopover closing={sysVarsClosing} onClose={closeSysVars} anchorRef={sysVarsBtnRef} />, document.body)}
+            </div>
+          </div>
+
+          {/* 分组标题栏 */}
+          <div className="px-3 py-2 flex items-center justify-end gap-1.5">
+            <button onClick={() => setShowNewGroup(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium
+                         bg-accent/15 hover:bg-accent/25 text-accent-light transition-all" title="新建分组">
+              <FolderPlus size={13} />
+              新建
+            </button>
+            <button onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium
+                         bg-surface hover:bg-hover/10 text-muted hover:text-foreground border border-border/5 transition-all" title="导入 Postman / 备份">
+              <Download size={13} />
+              导入
+            </button>
+            <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+            <button onClick={() => {
+              // 导出为 Postman Collection v2.1 格式
+              const postmanItems = collections.map(c => ({
+                name: c.name,
+                item: c.items.map(req => {
+                  const item: any = {
+                    name: req.name,
+                    request: {
+                      method: req.method,
+                      url: req.url.startsWith('http') ? { raw: req.url, protocol: req.url.split('://')[0], host: [req.url.split('://')[1]?.split('/')[0] || ''], path: req.url.split('://')[1]?.split('/').slice(1) || [] } : req.url,
+                      header: req.headers.filter(h => h.key).map(h => ({ key: h.key, value: h.value })),
+                    },
+                  }
+                  if (req.body && req.method !== 'GET') {
+                    try {
+                      item.request.body = { mode: 'raw', raw: JSON.stringify(JSON.parse(req.body), null, 2), options: { raw: { language: 'json' } } }
+                    } catch { item.request.body = { mode: 'raw', raw: req.body } }
+                  }
+                  if (req.params.filter(p => p.key).length > 0) {
+                    item.request.url = { raw: req.url, query: req.params.filter(p => p.key).map(p => ({ key: p.key, value: p.value })) }
+                  }
+                  return item
+                }),
+              }))
+              const postman = {
+                info: { name: 'API Collections', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+                item: postmanItems,
+              }
+              const blob = new Blob([JSON.stringify(postman, null, 2)], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url; a.download = `postman-collection-${new Date().toISOString().slice(0,10)}.json`
+              a.click(); URL.revokeObjectURL(url)
+            }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium
+                         bg-surface hover:bg-hover/10 text-muted hover:text-foreground border border-border/5 transition-all" title="导出为 Postman 格式">
+              <Upload size={13} />
+              导出
             </button>
           </div>
 
-            接口分组
-            <div className="flex items-center gap-0.5">
-              <button onClick={() => setShowNewGroup(true)}
-                className="p-0.5 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-all duration-200" title="新建分组">
-                <FolderPlus size={12} />
-              </button>
-              <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportFile} className="hidden" />
-              <button onClick={() => fileInputRef.current?.click()}
-                className="p-0.5 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-all duration-200" title="导入 Postman">
-                <Upload size={12} />
-              </button>
-            </div>
-          </div>
+          {/* 新建分组输入 */}
           {showNewGroup && (
             <div className="px-3 pb-2 flex gap-1 animate-fade-in">
               <input
                 value={newGroupName}
                 onChange={e => setNewGroupName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') createCollection(); if (e.key === 'Escape') setShowNewGroup(false) }}
+                onBlur={() => {
+                  if (newGroupName.trim()) setTimeout(() => createCollection(), 150)
+                  else setTimeout(() => setShowNewGroup(false), 150)
+                }}
                 placeholder="分组名称"
-                className="flex-1 rounded px-2 py-1 text-xs outline-none bg-surface border border-border/5 focus:border-accent/50 transition-all duration-200"
+                className="flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none bg-surface border border-border/5 focus:border-accent/50"
                 autoFocus
               />
-              <button onClick={createCollection} disabled={!newGroupName.trim()}
-                className="p-1 rounded bg-accent/20 text-accent-light disabled:opacity-30 transition-all duration-200">
-                <Plus size={12} />
-              </button>
             </div>
           )}
-          {collections.length === 0 ? (
-            <p className="px-3 text-xs text-muted mb-2 animate-fade-in">点击 📁+ 新建分组</p>
-          ) : (
+
+          {/* 分组列表 */}
+          <div className="flex-1 px-2 space-y-0.5">
+          {collections.length === 0 ? null : (
             collections.map(c => (
-              <div key={c.id} className="border-b border-border/5 last:border-0">
-                <button onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                  className="w-full flex items-center gap-1.5 px-3 py-1.5 hover:bg-hover/5 text-left group transition-colors duration-150">
-                  <span className={`transition-transform duration-200 ${expandedId === c.id ? 'rotate-0' : ''}`}>
-                    {expandedId === c.id ? <ChevronDown size={10} className="text-muted" /> : <ChevronRight size={10} className="text-muted" />}
+              <div key={c.id}>
+                {/* 分组标题 — 仿 NavItem 风格 */}
+                {renamingCollId === c.id ? (
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <Folder size={14} className="shrink-0 text-muted" />
+                    <input
+                      value={renameCollName}
+                      onChange={e => setRenameCollName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          if (renameCollName.trim()) {
+                            setCollections(prev => {
+                              const updated = prev.map(col => col.id === c.id ? { ...col, name: renameCollName.trim() } : col)
+                              persistCollections(updated)
+                              return updated
+                            })
+                          }
+                          setRenamingCollId(null)
+                        }
+                        if (e.key === 'Escape') setRenamingCollId(null)
+                      }}
+                      onBlur={() => {
+                        if (renameCollName.trim()) {
+                          setCollections(prev => {
+                            const updated = prev.map(col => col.id === c.id ? { ...col, name: renameCollName.trim() } : col)
+                            persistCollections(updated)
+                            return updated
+                          })
+                        }
+                        setRenamingCollId(null)
+                      }}
+                      className="flex-1 px-1 py-0.5 text-[13px] font-medium bg-surface border border-accent/50 rounded outline-none animate-fade-in"
+                      autoFocus
+                    />
+                    <span className="text-[10px] opacity-60">{c.items.length}</span>
+                  </div>
+                ) : (
+                <button
+                  ref={el => { if (el) collRefs.current.set(c.id, el); else collRefs.current.delete(c.id) }}
+                  onClick={e => {
+                    if (e.ctrlKey || e.metaKey) {
+                      e.preventDefault()
+                      setRenameCollName(c.name)
+                      setRenamingCollId(c.id)
+                      return
+                    }
+                    setExpandedIds(prev => {
+                      const next = new Set(prev)
+                      if (next.has(c.id)) next.delete(c.id); else next.add(c.id)
+                      return next
+                    })
+                  }}
+                  className={`w-full flex items-center gap-2 rounded-lg text-sm transition-colors group text-muted hover:bg-hover/5 hover:text-foreground px-3 py-2`}
+                  title="Ctrl+点击重命名"
+                >
+                  <span className="transition-transform duration-200">
+                    {expandedIds.has(c.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </span>
-                  <Folder size={12} className="text-warning" />
-                  <span className="text-[11px] text-foreground flex-1">{c.name}</span>
-                  <span className="text-[10px] text-muted">{c.items.length}</span>
-                  <button onClick={(e) => { e.stopPropagation(); addToCollection(c.id) }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-all duration-200" title="新建接口">
-                    <Plus size={10} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); if (confirm('删除整个分组？')) deleteCollection(c.id) }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 transition-all duration-200">
-                    <Trash2 size={10} />
+                  <Folder size={14} className="shrink-0" />
+                  <span className="flex-1 text-left text-[13px] font-medium truncate">{c.name}</span>
+                  <span className="text-[10px] opacity-60">{c.items.length}</span>
+                  <button onClick={(e) => { e.stopPropagation(); showConfirm('确定删除整个分组及其所有接口？', () => deleteCollection(c.id)) }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 transition-all">
+                    <Trash2 size={11} />
                   </button>
                 </button>
-                <div className={`overflow-hidden transition-all duration-300 ease-out ${expandedId === c.id ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                )}
+
+                {/* 分组内接口列表 — 仿子菜单风格 (左侧竖线) */}
+                <div
+                  className={`grid transition-all duration-300 ease-out min-h-[4px] ${expandedIds.has(c.id) ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+                  onDragOver={(e) => handleDragOver(e, c.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, c.id)}
+                >
+                  <div className={`ml-4 border-l border-border/10 pl-2 py-0.5 space-y-0.5 overflow-hidden min-h-0 transition-colors ${dragOverCollId === c.id ? '!border-accent/50 bg-accent/5 rounded' : ''}`}>
                   {c.items.map((req, i) => (
                     <button key={req.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, req.id, c.id)}
+                      onDragEnd={handleDragEnd}
                       onClick={() => loadRequest(req, c.id)}
-                      className={`w-full text-left pl-8 pr-2 py-1.5 hover:bg-hover/5 group/item transition-colors duration-150 ${flashReqId === req.id ? 'animate-flash' : ''}`}
+                      className={`w-full text-left rounded-md px-2.5 py-1.5 hover:bg-hover/5 group/item transition-colors
+                        ${flashReqId === req.id ? 'animate-flash' : ''}
+                        ${dragItem?.reqId === req.id ? 'opacity-40' : ''}`}
                       style={{ animationDelay: `${flashReqId === req.id ? 0 : i * 40}ms` }}
                     >
                       <div className="flex items-center gap-1.5">
-                        <span className={`text-[10px] font-mono font-bold
+                        <span className={`text-[10px] font-mono font-bold shrink-0
                           ${req.method === 'GET' ? 'text-success' : req.method === 'POST' ? 'text-warning' :
                             req.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
                           {req.method}
                         </span>
-                        <span className="text-[11px] text-foreground truncate flex-1">{req.name}</span>
+                        <span className="text-[12px] truncate flex-1">{req.name}</span>
                         <button onClick={(e) => { e.stopPropagation(); deleteRequest(c.id, req.id) }}
-                          className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 transition-all duration-200">
+                          className="opacity-0 group-hover/item:opacity-100 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 transition-all">
                           <Trash2 size={10} />
                         </button>
                       </div>
-                      <p className="text-[10px] text-muted truncate">{req.url}</p>
+                      {req.url && <p className="text-[10px] text-muted truncate mt-0.5">{req.url}</p>}
                     </button>
                   ))}
+                  </div>
                 </div>
               </div>
             ))
           )}
+          </div>
 
           {/* 历史记录 */}
           <div className="px-3 py-2 text-[10px] text-muted uppercase tracking-wider border-t border-border/5 mt-1">请求历史</div>
@@ -1650,6 +2153,33 @@ export function ApiDebugger() {
         </aside>
       </div>
 
+      {/* 确认对话框 */}
+      {confirmDialog && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+          onClick={() => setConfirmDialog(null)}>
+          <div className="bg-surface-light border border-border/10 rounded-2xl p-6 w-80 shadow-2xl animate-zoom-in"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle size={18} className="text-warning" />
+              <h3 className="text-sm font-semibold">确认操作</h3>
+            </div>
+            <p className="text-sm text-muted mb-6">{confirmDialog.message}</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 rounded-lg text-xs font-medium bg-hover/5 hover:bg-hover/10 text-muted transition-colors">
+                取消
+              </button>
+              <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null) }}
+                className="px-4 py-2 rounded-lg text-xs font-medium bg-danger/20 hover:bg-danger/30 text-danger transition-colors">
+                删除
+              </button>
+            </div>
+          </div>
+        </div>, document.body)}
+
+      {/* 保存飞入动画 */}
+      {flyAnim && createPortal(
+        <FlyToTarget key={flyAnim.startX + flyAnim.startY} {...flyAnim} />, document.body)}
       {/* 分组选择弹窗 (Ctrl+保存/更新) */}
       {showSavePicker && createPortal(
         <GroupPickerModal

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useAppStore } from '../store'
-import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2 } from 'lucide-react'
+import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2, X } from 'lucide-react'
 
 interface ScriptVar {
   key: string
@@ -54,6 +54,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
   const [scriptVars, setScriptVars] = useState<ScriptVar[]>([])
   const [varValues, setVarValues] = useState<Record<string, string>>({})
   const [clearing, setClearing] = useState(false)
+  const [deletingVar, setDeletingVar] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -102,6 +103,19 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
     loadVars()
     return () => { cancelled = true }
   }, [subProduct, product, scannedScripts])
+
+  function handleDeleteVar(key: string) {
+    setDeletingVar(key)
+    setTimeout(() => {
+      setScriptVars(prev => prev.filter(v => v.key !== key))
+      setVarValues(prev => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+      setDeletingVar(null)
+    }, 200)
+  }
 
   async function handleRun(scriptName: string, scriptPath: string) {
     let scriptVals = { ...varValues }
@@ -224,8 +238,25 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
                       ? commentText.slice(sepIdx + 1).trim()
                       : (commentText ? `请输入${commentText}` : undefined)
                     return (
-                    <div key={v.key} className={clearing ? 'animate-swipe-out' : ''}>
-                      <label className="text-[10px] text-muted mb-1 block">{label}</label>
+                    <div
+                      key={v.key}
+                      className={
+                        'group/var relative ' +
+                        (deletingVar === v.key ? 'animate-swipe-out' : '') +
+                        (clearing ? ' animate-swipe-out' : '')
+                      }
+                    >
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[10px] text-muted block">{label}</label>
+                        <button
+                          onClick={() => handleDeleteVar(v.key)}
+                          className="opacity-0 group-hover/var:opacity-100 text-muted hover:text-danger
+                                     transition-all p-0.5 rounded hover:bg-danger/10"
+                          title={`删除变量 ${label}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
                       <input
                         type="text"
                         value={varValues[v.key] || ''}

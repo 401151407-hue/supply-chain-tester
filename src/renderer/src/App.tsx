@@ -11,7 +11,7 @@ import { AIAssistant } from './components/AIAssistant'
 import { useAppStore } from './store'
 
 export default function App() {
-  const { activeTab, navKey, setTestCases, setReports, loadAIConfig, theme, scriptParams, selectedSubProduct } = useAppStore()
+  const { activeTab, setTestCases, setReports, loadAIConfig, theme, scriptParams, selectedSubProduct } = useAppStore()
   const [showAISettings, setShowAISettings] = useState(false)
 
   // 同步主题 class 到 html 元素
@@ -44,10 +44,9 @@ export default function App() {
     }
   }
 
-  function renderContent() {
-    // 动态子产品（来自扫描发现的新子产品）
-    const subProduct = selectedSubProduct
+  const subProduct = selectedSubProduct
 
+  function renderContent() {
     switch (activeTab) {
       case 'xinerong':
       case 'dingerong':
@@ -55,17 +54,9 @@ export default function App() {
       case 'zhangerong':
       case 'piaoerong':
         return <ProductPage product={activeTab} subProduct={subProduct ?? undefined} />
-      case 'zhangerong_nengliang':
-        return <ProductPage product="zhangerong" subProduct="能良账e融" />
-      case 'zhangerong_guolian':
-        return <ProductPage product="zhangerong" subProduct="国联账e融" />
       case 'script':
         return scriptParams ? (
-          <ScriptRunner
-            scriptPath={scriptParams.scriptPath}
-            scriptName={`${scriptParams.subProduct} - ${scriptParams.scriptName}`}
-            vars={scriptParams.vars}
-          />
+          <ScriptRunner scriptPath={scriptParams.scriptPath} scriptName={`${scriptParams.subProduct} - ${scriptParams.scriptName}`} vars={scriptParams.vars} />
         ) : <TestEditor />
       case 'editor':
         return <TestEditor />
@@ -84,9 +75,7 @@ export default function App() {
     <div className="flex h-full">
       <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
       <main className="flex-1 overflow-hidden">
-        <div key={navKey} className="page-enter h-full">
-          {renderContent()}
-        </div>
+        {renderContent()}
       </main>
       {showAISettings && (
         <AISettingsPanel onClose={() => setShowAISettings(false)} />
