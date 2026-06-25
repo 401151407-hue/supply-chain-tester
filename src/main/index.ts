@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain, shell, Menu, type MenuItemConstructorOptio
 import { join, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, cpSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, statSync, mkdirSync } from 'fs'
 import { TestRunner } from './test-runner'
 import { ReportStore } from './report-store'
 import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
@@ -1057,27 +1057,13 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
 app.whenReady().then(() => {
   const scriptsDir = getScriptsDir()
 
-  // ── 确保脚本目录存在 ──
+  // 确保脚本目录存在（Windows 上由 NSIS 安装程序创建，这里是 Mac 兜底）
   if (!existsSync(scriptsDir)) {
-    // 尝试从 resources 复制（Mac DMG 等非 NSIS 平台需要）
-    const bundledSrc = join(process.resourcesPath, 'test-suites')
-    if (existsSync(bundledSrc)) {
-      try {
-        mkdirSync(join(scriptsDir, '..'), { recursive: true })
-        cpSync(bundledSrc, scriptsDir, { recursive: true })
-        console.log('[init] Copied scripts from resources to:', scriptsDir)
-      } catch (e: any) {
-        console.error('[init] Copy from resources failed:', e.message)
-      }
-    }
-    // 兜底：创建空目录
-    if (!existsSync(scriptsDir)) {
-      try {
-        mkdirSync(scriptsDir, { recursive: true })
-        console.log('[init] Created empty scripts dir:', scriptsDir)
-      } catch (e: any) {
-        console.error('[init] Failed to create scripts dir:', e.message)
-      }
+    try {
+      mkdirSync(scriptsDir, { recursive: true })
+      console.log('[init] Created scripts dir:', scriptsDir)
+    } catch (e: any) {
+      console.error('[init] Failed to create scripts dir:', e.message)
     }
   }
 
