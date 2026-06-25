@@ -339,7 +339,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
                      hover:bg-hover/5 hover:text-foreground transition-colors"
         >
           <FolderOpen size={14} />
-          打开数据目录
+          打开脚本目录
         </button>
 
         <div className="border-t border-border/5 pt-1.5 mt-1.5">
@@ -385,7 +385,7 @@ function createNewCase() {
 
 function openFolder() {
   const api = (window as any).supplyChainTester
-  if (api?.openDataFolder) {
-    api.openDataFolder().catch(() => {})
+  if (api?.openScriptsFolder) {
+    api.openScriptsFolder().catch(() => {})
   }
 }

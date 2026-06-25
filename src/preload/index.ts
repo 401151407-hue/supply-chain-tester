@@ -164,6 +164,10 @@ const api = {
   /** 当前系统的路径分隔符 */
   pathSep: process.platform === 'win32' ? '\\' : '/',
 
+  /** 打开脚本目录 */
+  openScriptsFolder: (): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('app:open-scripts-folder'),
+
   /** 打开数据目录 */
   openDataFolder: (): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('app:open-data-folder'),
