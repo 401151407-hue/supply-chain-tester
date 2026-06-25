@@ -867,6 +867,15 @@ print(f"CHROMIUM_OK={has_chromium}")
     }
   })
 
+  // 用默认浏览器打开链接
+  ipcMain.handle('shell:open-external', async (_event, url: string) => {
+    try {
+      await shell.openExternal(url)
+    } catch (err: any) {
+      console.error('[shell:open-external] Error:', err.message)
+    }
+  })
+
   // ── 自动更新 ──
   ipcMain.handle(IPC_CHANNELS.UPDATE_GET_STATE, () => getUpdateState())
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, () => doCheckUpdates())

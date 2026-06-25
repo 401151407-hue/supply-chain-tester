@@ -175,6 +175,10 @@ const api = {
   /** 用系统默认程序打开文件 */
   openPath: (filePath: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:open-path', filePath),
+
+  /** 在默认浏览器打开链接 */
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke('shell:open-external', url),
 }
 
 contextBridge.exposeInMainWorld('supplyChainTester', api)

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { Download, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+import { Download, CheckCircle, AlertCircle, Loader2, RefreshCw, ExternalLink } from 'lucide-react'
 
 interface UpdateState {
   status: string
@@ -126,14 +126,16 @@ export function UpdateIndicator() {
           {isLan && <span className="text-[9px] text-accent-light ml-auto">🌐 局域网</span>}
         </div>
         <button
-          onClick={handleDownload}
-          disabled={downloading}
+          onClick={() => {
+            const api = (window as any).supplyChainTester
+            if (api?.openExternal) {
+              api.openExternal('http://pingcode.wxsbank.com/wiki/spaces/TMC-KJGL/pages/66cebf9899d0e3383ba90739')
+            }
+          }}
           className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-[10px] font-medium
-                     bg-accent/20 hover:bg-accent/30 text-accent-light transition-colors
-                     disabled:opacity-50"
+                     bg-warning/20 hover:bg-warning/30 text-warning transition-colors"
         >
-          {downloading ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
-          {downloading ? '准备下载...' : '下载更新'}
+          <ExternalLink size={10} /> 打开更新说明
         </button>
       </div>
     )
