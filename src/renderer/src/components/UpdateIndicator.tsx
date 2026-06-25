@@ -86,7 +86,20 @@ export function UpdateIndicator() {
     return (
       <div className="px-2 py-1.5 space-y-1">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted truncate flex-1">v{currentVersion}</span>
+          <span
+            className="text-[10px] text-muted truncate flex-1 cursor-pointer hover:underline"
+            title="Ctrl/Cmd + 点击查看更新说明"
+            onClick={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                const api = (window as any).supplyChainTester
+                if (api?.openExternal) {
+                  api.openExternal('http://pingcode.wxsbank.com/wiki/spaces/TMC-KJGL/pages/66cebf9899d0e3383ba90739')
+                }
+              }
+            }}
+          >
+            v{currentVersion}
+          </span>
           <button
             onClick={handleCheck}
             disabled={checking}
