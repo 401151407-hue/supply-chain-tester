@@ -154,6 +154,85 @@ function JsonEditor({ value, onChange, readOnly, contentRef }: {
   return <div ref={containerRef} className="flex-1 overflow-hidden rounded-lg border border-border/5 focus-within:border-accent/50" />
 }
 
+/** 分组选择弹窗（选中高亮 + 确认按钮） */
+function GroupPickerModal({ collections, newGroupName, onNewGroupNameChange, onSelect, onClose, persistCollections, setCollections }: {
+  collections: Collection[]
+  newGroupName: string
+  onNewGroupNameChange: (v: string) => void
+  onSelect: (collId: string) => void
+  onClose: () => void
+  persistCollections: (list: Collection[]) => void
+  setCollections: React.Dispatch<React.SetStateAction<Collection[]>>
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  function handleConfirm() {
+    if (selectedId) onSelect(selectedId)
+  }
+
+  function handleCreateAndSelect() {
+    if (!newGroupName.trim()) return
+    const id = Date.now().toString()
+    const updated = [...collections, { id, name: newGroupName.trim(), items: [] }]
+    setCollections(updated); persistCollections(updated)
+    onSelect(id)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-surface rounded-xl border border-border/10 shadow-2xl w-72 p-4 animate-zoom-in" onClick={e => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold mb-3">选择保存到分组</h3>
+        {collections.length === 0 ? (
+          <p className="text-xs text-muted mb-3">暂无分组，请在下方新建</p>
+        ) : (
+          <div className="space-y-1 max-h-48 overflow-y-auto mb-2">
+            {collections.map(c => (
+              <button key={c.id}
+                onClick={() => setSelectedId(c.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors
+                  ${selectedId === c.id
+                    ? 'bg-accent/20 text-accent-light border border-accent/30'
+                    : 'hover:bg-accent/10 hover:text-accent-light border border-transparent'}`}
+              >
+                <Folder size={14} className={`${selectedId === c.id ? 'text-accent-light' : 'text-warning'} shrink-0`} />
+                <span className="truncate">{c.name}</span>
+                <span className="text-[10px] text-muted ml-auto">{c.items.length}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {/* 新建分组 */}
+        <div className="flex gap-1 pt-2 border-t border-border/5">
+          <input
+            value={newGroupName}
+            onChange={e => onNewGroupNameChange(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleCreateAndSelect() }}
+            placeholder="新建分组..."
+            className="flex-1 rounded px-2 py-1.5 text-xs outline-none bg-surface-light border border-border/5 focus:border-accent/50"
+          />
+          <button
+            onClick={handleCreateAndSelect}
+            disabled={!newGroupName.trim()}
+            className="px-3 py-1.5 rounded text-xs font-medium bg-accent/20 text-accent-light hover:bg-accent/30 disabled:opacity-30 transition-colors">
+            新建
+          </button>
+        </div>
+        {/* 确认 + 取消 */}
+        <div className="flex gap-2 mt-3">
+          <button onClick={onClose}
+            className="flex-1 py-2 rounded-lg text-xs font-medium bg-hover/5 hover:bg-hover/10 text-muted transition-colors">
+            取消
+          </button>
+          <button onClick={handleConfirm} disabled={!selectedId}
+            className="flex-1 py-2 rounded-lg text-xs font-medium bg-accent hover:bg-accent-light text-foreground disabled:opacity-30 transition-colors">
+            确认
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** 可双击编辑的名称组件 */
 function EditableName({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [editing, setEditing] = useState(false)
@@ -1569,60 +1648,15 @@ export function ApiDebugger() {
 
       {/* 分组选择弹窗 (Ctrl+保存/更新) */}
       {showSavePicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setShowSavePicker(false); setNewGroupName('') }}>
-          <div className="bg-surface rounded-xl border border-border/10 shadow-2xl w-72 p-4 animate-zoom-in" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold mb-3">选择保存到分组</h3>
-            {collections.length === 0 ? (
-              <p className="text-xs text-muted">暂无分组，请先新建</p>
-            ) : (
-              <div className="space-y-1 max-h-48 overflow-y-auto mb-2">
-                {collections.map(c => (
-                  <button key={c.id}
-                    onClick={() => saveToGroup(c.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm
-                               hover:bg-accent/10 hover:text-accent-light transition-colors">
-                    <Folder size={14} className="text-warning shrink-0" />
-                    <span className="truncate">{c.name}</span>
-                    <span className="text-[10px] text-muted ml-auto">{c.items.length}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* 新建分组 */}
-            <div className="flex gap-1 pt-2 border-t border-border/5">
-              <input
-                value={newGroupName}
-                onChange={e => setNewGroupName(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && newGroupName.trim()) {
-                    const id = Date.now().toString()
-                    const updated = [...collections, { id, name: newGroupName.trim(), items: [] }]
-                    setCollections(updated); persistCollections(updated)
-                    saveToGroup(id)
-                  }
-                }}
-                placeholder="新建分组..."
-                className="flex-1 rounded px-2 py-1.5 text-xs outline-none bg-surface-light border border-border/5 focus:border-accent/50"
-              />
-              <button
-                onClick={() => {
-                  if (!newGroupName.trim()) return
-                  const id = Date.now().toString()
-                  const updated = [...collections, { id, name: newGroupName.trim(), items: [] }]
-                  setCollections(updated); persistCollections(updated)
-                  saveToGroup(id)
-                }}
-                disabled={!newGroupName.trim()}
-                className="px-3 py-1.5 rounded text-xs font-medium bg-accent/20 text-accent-light hover:bg-accent/30 disabled:opacity-30 transition-colors">
-                新建
-              </button>
-            </div>
-            <button onClick={() => { setShowSavePicker(false); setNewGroupName('') }}
-              className="mt-2 w-full py-2 rounded-lg text-xs font-medium bg-hover/5 hover:bg-hover/10 text-muted transition-colors">
-              取消
-            </button>
-          </div>
-        </div>
+        <GroupPickerModal
+          collections={collections}
+          newGroupName={newGroupName}
+          onNewGroupNameChange={setNewGroupName}
+          onSelect={(collId) => saveToGroup(collId)}
+          onClose={() => { setShowSavePicker(false); setNewGroupName('') }}
+          persistCollections={persistCollections}
+          setCollections={setCollections}
+        />
       )}
     </div>
   )
