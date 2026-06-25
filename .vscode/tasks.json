@@ -644,6 +644,40 @@
 			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\release.bat",
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "fix-zip",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\fix-zip.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "fix-and-retry-release",
+			"type": "shell",
+			"command": "cmd /c d:\\Ikun\\supply-chain-tester\\scripts\\retry-release.bat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git-pull",
+			"type": "shell",
+			"command": "cmd /c \"set GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes && git pull\"",
+			"isBackground": false
+		},
+		{
+			"label": "git-pull",
+			"type": "shell",
+			"command": "$env:GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new'; git pull",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git-pull-v2",
+			"type": "shell",
+			"command": "$env:GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new'; git pull",
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
