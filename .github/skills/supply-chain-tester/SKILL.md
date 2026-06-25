@@ -30,6 +30,10 @@ argument-hint: '[开发|打包|发布|变量|脚本|产品线]'
 # Node.js 路径
 export PATH="$HOME/local/node-v20.19.0-darwin-x64/bin:$PATH"
 
+# GitHub 发布配置（已写入 ~/.zshrc，新终端自动生效）
+export GH_OWNER="your-github-username"
+export GH_REPO="your-repo-name"
+
 # 项目根目录
 cd /Users/liaochenglu/Desktop/supply-chain-tester
 
@@ -39,11 +43,9 @@ npm run dev
 # 仅提交代码（不构建不发布）
 git add -A && git commit -m "描述" && git push
 
-# 完整发布（仅用户明确要求时才执行，会消耗 GitHub Actions 时长）
+# 完整发布（仅用户明确要求时才执行）
 git add -A && git commit -m "描述" && npm version patch && git push && git push --tags && npm run release
 ```
-
-> ⚠️ **重要规则**：`npm run release` 会触发CI构建，消耗 GitHub Actions 免费时长。**AI 只能在用户明确说"构建并发布"时才能执行发布命令**，其他情况只提交代码（`git push`）。
 ```
 
 ## 项目结构
@@ -103,9 +105,12 @@ electron-builder.config.cjs  # 打包配置
 
 ### 3. 打包与发布 (electron-builder.config.cjs)
 
-- **extraResources 只打包 `test-suites` 和 `python-portable`**，不含 Chromium
-- `test-suites` 目录打包到 `resources/test-suites/`，供应用运行时读取
-- 用户通过 UtilsPage 一键安装 Playwright Chromium
+- **extraResources 已清空** —— test-suites 包含敏感公司脚本，**严禁打包进安装程序**
+- Windows NSIS 安装脚本 (`build/installer.nsh`) 负责：
+  - **全新安装**：创建空 `test-suites/` 目录在安装根目录下（与 `.exe` 同级）
+  - **覆盖安装/升级**：卸载前用 `xcopy /E` 备份整个 `test-suites/` 到临时目录，安装后恢复，**确保用户脚本不丢失**
+- **发布配置使用环境变量**（`GH_OWNER`、`GH_REPO`），不在代码中暴露 GitHub 账号
+- **Windows 架构**：固定为 `x64`（`arch: ['x64']`），避免交叉编译 ARM64 导致用户无法运行
 
 **安装包命名规则**（`artifactName` 配置）：
 
@@ -130,7 +135,9 @@ electron-builder.config.cjs  # 打包配置
 
 **完整发布流程**：
 ```bash
-# 本地 Mac 构建+发布 Mac 包 + CI 自动构建 Windows 包
+# 本地 Mac 构建+发布 Mac 包（需要先设置环境变量）
+# export GH_OWNER="your-username"  # 已在 ~/.zshrc 中配置
+# export GH_REPO="your-repo"       # 已在 ~/.zshrc 中配置
 git add -A && git commit -m "描述" && npm version patch && git push && git push --tags && npm run release
 ```
 - `npm version patch` 创建新 tag（如 v0.1.18）
@@ -139,8 +146,9 @@ git add -A && git commit -m "描述" && npm version patch && git push && git pus
 
 ### 4. 脚本扫描 (src/main/index.ts)
 
-- `scanScriptsDirectory()` 扫描 `test-suites/` 下的产品目录（dev 模式）
-- 打包后扫描 `resources/test-suites/`（通过 `extraResources` 配置）
+- `scanScriptsDirectory()` 扫描 `getScriptsDir()` 返回的目录
+- 打包后路径：`<安装目录>/test-suites/`（与 .exe 同级），由 NSIS 安装程序创建
+- 开发模式路径：项目根目录 `test-suites/`
 - 产品 key 通过目录名推断：包含 `信|xin` → `xinerong`，以此类推
 - 子目录作为 subProduct，`.py` 文件作为脚本列表
 - 同时扫描 `common/`, `config/`, `utils/` 目录
@@ -209,7 +217,7 @@ git add -A && git commit -m "描述" && npm version patch && git push && git pus
 
 `test-suites/` 包含公司各产品线的 Python 自动化脚本，内容涉及内部接口地址、数据库连接等敏感信息，**已通过 `.gitignore` 永久排除，不会提交到 GitHub**。
 
-### 产品线对照
+### 目录结构
 
 | 目录 | 产品线 | 子产品 |
 |------|--------|--------|
@@ -218,6 +226,26 @@ git add -A && git commit -m "描述" && npm version patch && git push && git pus
 | `test-suites/货e融/` | 货e融 | 测试专用 |
 | `test-suites/账e融/` | 账e融 | 国联账e融、能良账e融 |
 | `test-suites/票e融/` | 票e融 | 韶欢票e融 |
+| `test-suites/common/` | 通用脚本 | — |
+| `test-suites/config/` | 配置模板 | — |
+| `test-suites/utils/` | 工具库 | — |
+
+### 运行时行为
+
+- **运行时路径**：打包后在 app 安装根目录下（与 `SupplyChainTester.exe` 同级）
+- **Windows**：NSIS 安装程序创建空目录，用户自行放入 `.py` 脚本
+- **Mac**：app 首次启动时自动创建空目录（`getScriptsDir()` 兜底）
+- **升级保护**：NSIS 脚本在卸载前用 `xcopy /E` 递归备份到 `%TEMP%`，安装后恢复
+- **严禁**将 `test-suites/` 加入 `extraResources` 打包，这会泄露敏感脚本
+
+### 代码实现
+
+| 文件 | 职责 |
+|------|------|
+| `build/installer.nsh` | NSIS 自定义脚本：创建空目录 + 升级备份恢复 |
+| `src/main/index.ts` → `getScriptsDir()` | 返回 `join(process.resourcesPath, '..', 'test-suites')` |
+| `electron-builder.config.cjs` | `extraResources` 清空 + `include: 'build/installer.nsh'` |
+| `.gitignore` | 包含 `test-suites/`，确保不入库 |
 | `test-suites/common/` | 通用查询 | 项目信息/客户信息/测试查询/授信类 |
 | `test-suites/utils/` | 工具库 | 数据库/环境配置/导出/计数器/随机生成 |
 | `test-suites/config/` | 配置模板 | Excel 导入模板 |
