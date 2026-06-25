@@ -19,7 +19,9 @@ module.exports = {
     },
   ],
   win: {
-    target: ['nsis'],
+    target: [
+      { target: 'nsis', arch: ['x64'] },
+    ],
     icon: null,
   },
   nsis: {
