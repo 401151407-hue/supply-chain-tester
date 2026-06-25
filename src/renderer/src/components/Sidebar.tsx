@@ -51,8 +51,8 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
     setIsScanning(true)
     setXinerongExpanded(false); setDingerongExpanded(false); setZhangerongExpanded(false)
     setHuoerongExpanded(false); setPiaoerongExpanded(false)
-    // 触发页面动画
-    useAppStore.getState().navigateTo(useAppStore.getState().activeTab)
+    // 触发页面动画，保留当前子产品选择
+    useAppStore.getState().navigateTo(useAppStore.getState().activeTab, useAppStore.getState().selectedSubProduct)
     // 清空所有脚本运行输出
     useAppStore.getState().clearAllScriptRunStates()
     const api = (window as any).supplyChainTester
