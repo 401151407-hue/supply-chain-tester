@@ -15,7 +15,7 @@ module.exports = {
   extraResources: [
     {
       from: 'test-suites',
-      to: 'test-suites',
+      to: '../test-suites',
     },
   ],
   win: {
@@ -26,6 +26,7 @@ module.exports = {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
     artifactName: '${productName}-${version}-Windows.${ext}',
+    include: 'build/installer.nsh',
   },
   mac: {
     target: [

@@ -16,10 +16,10 @@ import { browserOpen, browserRead, browserClick, browserType, browserScreenshot,
 
 const isDev = !app.isPackaged
 
-/** 获取脚本根目录（dev: 项目根, packaged: 用户数据目录，升级不丢失） */
+/** 获取脚本根目录（dev: 项目根, packaged: app 安装目录，升级时由 NSIS 脚本保护） */
 function getScriptsDir(): string {
   if (app.isPackaged) {
-    return join(app.getPath('userData'), 'test-suites')
+    return join(process.resourcesPath, '..', 'test-suites')
   }
   return join(__dirname, '../..', 'test-suites')
 }
@@ -1057,91 +1057,37 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
 app.whenReady().then(() => {
   const scriptsDir = getScriptsDir()
 
-  // ── 确保用户数据目录存在 ──
+  // ── 确保脚本目录存在 ──
   if (!existsSync(scriptsDir)) {
-    try {
-      mkdirSync(scriptsDir, { recursive: true })
-      console.log('[init] Created scripts dir:', scriptsDir)
-    } catch (e: any) {
-      console.error('[init] Failed to create scripts dir:', e.message)
+    // 尝试从 resources 复制（Mac DMG 等非 NSIS 平台需要）
+    const bundledSrc = join(process.resourcesPath, 'test-suites')
+    if (existsSync(bundledSrc)) {
+      try {
+        mkdirSync(join(scriptsDir, '..'), { recursive: true })
+        cpSync(bundledSrc, scriptsDir, { recursive: true })
+        console.log('[init] Copied scripts from resources to:', scriptsDir)
+      } catch (e: any) {
+        console.error('[init] Copy from resources failed:', e.message)
+      }
+    }
+    // 兜底：创建空目录
+    if (!existsSync(scriptsDir)) {
+      try {
+        mkdirSync(scriptsDir, { recursive: true })
+        console.log('[init] Created empty scripts dir:', scriptsDir)
+      } catch (e: any) {
+        console.error('[init] Failed to create scripts dir:', e.message)
+      }
     }
   }
 
-  // ── 首次运行：从安装包复制初始脚本到用户数据目录 ──
-  let justCopied = false
-  if (app.isPackaged) {
-    const userItems = existsSync(scriptsDir) ? readdirSync(scriptsDir) : []
-    if (userItems.length === 0) {
-      // 尝试多个可能的 bundled 路径
-      const candidates = [
-        join(process.resourcesPath, 'test-suites'),           // extraResources {from,to}
-        join(process.resourcesPath, '..', 'test-suites'),     // extraResources string
-        join(__dirname, '..', '..', 'resources', 'test-suites'), // fallback
-      ]
-      let copied = false
-      for (const bundledDir of candidates) {
-        if (existsSync(bundledDir)) {
-          try {
-            console.log('[init] Copying from bundled:', bundledDir)
-            cpSync(bundledDir, scriptsDir, { recursive: true })
-            const after = existsSync(scriptsDir) ? readdirSync(scriptsDir) : []
-            console.log('[init] Copied', after.length, 'items to:', scriptsDir)
-            copied = after.length > 0
-            if (copied) break
-          } catch (e: any) {
-            console.error('[init] Copy failed from', bundledDir, ':', e.message)
-          }
-        }
-      }
-      if (!copied) {
-        // 没有 bundled 脚本，创建一个说明文件
-        try {
-          const { writeFileSync } = require('fs')
-          const readme = join(scriptsDir, 'README.txt')
-          writeFileSync(readme, [
-            '供应链测试工具 - 脚本目录',
-            '',
-            '请将您的 Python 测试脚本放在此目录下。',
-            '按产品线组织：',
-            '  信e融/  - 信e融相关脚本',
-            '  订e融/  - 订e融相关脚本',
-            '  货e融/  - 货e融相关脚本',
-            '  账e融/  - 账e融相关脚本',
-            '  票e融/  - 票e融相关脚本',
-            '  common/ - 通用脚本',
-            '  config/ - 配置文件',
-            '  utils/  - 工具脚本',
-            '',
-            '脚本目录路径：' + scriptsDir,
-          ].join('\n'), 'utf-8')
-          console.log('[init] Created README in empty scripts dir')
-        } catch {}
-      } else {
-        justCopied = true
-      }
-    } else {
-      console.log('[init] Scripts dir already has', userItems.length, 'items')
-    }
-  }
+  console.log('[init] Scripts dir:', scriptsDir, 'exists:', existsSync(scriptsDir))
 
   buildMenu()
   loadAIConfig()
   testRunner.setAIService(aiService)
   registerIpcHandlers()
   createWindow()
-
-  // ── 首次复制后自动打开文件夹，让用户知道脚本在哪里 ──
-  if (justCopied) {
-    mainWindow?.webContents.once('did-finish-load', () => {
-      setTimeout(() => {
-        shell.openPath(scriptsDir).then((err) => {
-          if (err) console.error('[init] Failed to open scripts dir:', err)
-          else console.log('[init] Opened scripts dir for user')
-        })
-      }, 1000)
-    })
-  }
-
   initAutoUpdater(mainWindow!)
 
   app.on('activate', () => {
