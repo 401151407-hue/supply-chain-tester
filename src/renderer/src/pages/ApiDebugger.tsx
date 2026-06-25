@@ -377,6 +377,7 @@ export function ApiDebugger() {
   // 分组管理
   const [collections, setCollections] = useState<Collection[]>(loadCollections)
   const [flashReqId, setFlashReqId] = useState<string | null>(null)
+  const [showSavePicker, setShowSavePicker] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -450,8 +451,54 @@ export function ApiDebugger() {
     }
   }
 
-  // 保存当前请求到分组（新增或更新）
-  function handleSave() {
+  // 保存到指定分组
+  function saveToGroup(collId: string) {
+    if (!url.trim()) return
+    const cleanParams = params.filter(p => p.key.trim()).map(p => ({ key: p.key.trim(), value: p.value }))
+    const cleanHeaders = headers.filter(h => h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value }))
+    const reqName = tab.name || '未命名接口'
+    setCollections(prev => {
+      const item: SavedRequest = {
+        id: Date.now().toString(), name: reqName,
+        method, url: url.trim(),
+        headers: cleanHeaders, params: cleanParams,
+        body, createdAt: new Date().toISOString(),
+      }
+      const updated = editingRequest
+        ? prev.map(c => c.id === editingRequest.collId ? {
+            ...c,
+            items: c.id === collId
+              ? c.items.map(i => i.id === editingRequest.reqId ? { ...i, name: reqName, method, url: url.trim(), headers: cleanHeaders, params: cleanParams, body } : i)
+              : c.items.filter(i => i.id !== editingRequest.reqId),
+          } : c.id === collId ? { ...c, items: [...c.items, item] } : c) as Collection[]
+        : prev.map(c => c.id === collId ? { ...c, items: [...c.items, item] } : c)
+      persistCollections(updated)
+      return updated
+    })
+    setEditingRequest(null)
+    // 重新查找刚保存的 item 设置 editing 状态
+    setTimeout(() => {
+      setCollections(current => {
+        const col = current.find(c => c.id === collId)
+        if (col) {
+          const last = col.items[col.items.length - 1]
+          if (last) setEditingRequest({ collId, reqId: last.id })
+        }
+        return current
+      })
+    }, 0)
+    setShowSavePicker(false)
+    setNewGroupName('')
+  }
+
+  // 保存当前请求（默认存到默认分组，Ctrl+点击弹窗选分组）
+  function handleSave(e?: React.MouseEvent) {
+    const ctrl = e?.ctrlKey || e?.metaKey
+    if (ctrl) {
+      e?.preventDefault()
+      setShowSavePicker(true)
+      return
+    }
     if (!url.trim()) return
     const cleanParams = params.filter(p => p.key.trim()).map(p => ({ key: p.key.trim(), value: p.value }))
     const cleanHeaders = headers.filter(h => h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value }))
@@ -471,35 +518,17 @@ export function ApiDebugger() {
       })
       setFlashReqId(editingRequest.reqId); setTimeout(() => setFlashReqId(null), 700)
     } else {
-      setCollections(prev => {
-        let target = prev.find(c => c.name === '默认分组')
-        if (!target) {
-          target = { id: uid(), name: '默认分组', items: [] }
-          prev = [...prev, target]
-        }
-        const item: SavedRequest = {
-          id: Date.now().toString(), name: reqName,
-          method, url: url.trim(),
-          headers: cleanHeaders, params: cleanParams,
-          body, createdAt: new Date().toISOString(),
-        }
-        const updated = prev.map(c => c.id === target!.id ? { ...c, items: [...c.items, item] } : c)
-        persistCollections(updated)
-        return updated
-      })
-      // 标记为编辑状态（后续保存会更新而非新增）
-      // 注意：state 中还没有 item.id，所以用 setTimeout 延迟设置
-      setTimeout(() => {
-        setCollections(current => {
-          const def = current.find(c => c.name === '默认分组')
-          if (def) {
-            const last = def.items[def.items.length - 1]
-            if (last) setEditingRequest({ collId: def.id, reqId: last.id })
-          }
-          return current
-        })
-      }, 0)
+      saveToGroup(getOrCreateDefaultId())
     }
+  }
+
+  function getOrCreateDefaultId(): string {
+    let def = collections.find(c => c.name === '默认分组')
+    if (!def) {
+      def = { id: uid(), name: '默认分组', items: [] }
+      setCollections(prev => { const u = [...prev, def!]; persistCollections(u); return u })
+    }
+    return def.id
   }
 
   // 新建请求时清除编辑状态
@@ -819,16 +848,18 @@ export function ApiDebugger() {
           </button>
           {/* Save */}
           {editingRequest ? (
-            <button onClick={handleSave}
+            <button onClick={(e) => handleSave(e)}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
-                         bg-success/20 hover:bg-success/30 text-success transition-all active:scale-90">
+                         bg-success/20 hover:bg-success/30 text-success transition-all active:scale-90"
+              title="Ctrl+点击可选择分组">
               <Save size={14} />
               更新
             </button>
           ) : (
-            <button onClick={handleSave}
+            <button onClick={(e) => handleSave(e)}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
-                         bg-accent/20 hover:bg-accent/30 text-accent-light transition-all">
+                         bg-accent/20 hover:bg-accent/30 text-accent-light transition-all"
+              title="Ctrl+点击可选择分组">
               <Save size={14} />
               保存
             </button>
@@ -1535,6 +1566,64 @@ export function ApiDebugger() {
           )}
         </aside>
       </div>
+
+      {/* 分组选择弹窗 (Ctrl+保存/更新) */}
+      {showSavePicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setShowSavePicker(false); setNewGroupName('') }}>
+          <div className="bg-surface rounded-xl border border-border/10 shadow-2xl w-72 p-4 animate-zoom-in" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold mb-3">选择保存到分组</h3>
+            {collections.length === 0 ? (
+              <p className="text-xs text-muted">暂无分组，请先新建</p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto mb-2">
+                {collections.map(c => (
+                  <button key={c.id}
+                    onClick={() => saveToGroup(c.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm
+                               hover:bg-accent/10 hover:text-accent-light transition-colors">
+                    <Folder size={14} className="text-warning shrink-0" />
+                    <span className="truncate">{c.name}</span>
+                    <span className="text-[10px] text-muted ml-auto">{c.items.length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* 新建分组 */}
+            <div className="flex gap-1 pt-2 border-t border-border/5">
+              <input
+                value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newGroupName.trim()) {
+                    const id = Date.now().toString()
+                    const updated = [...collections, { id, name: newGroupName.trim(), items: [] }]
+                    setCollections(updated); persistCollections(updated)
+                    saveToGroup(id)
+                  }
+                }}
+                placeholder="新建分组..."
+                className="flex-1 rounded px-2 py-1.5 text-xs outline-none bg-surface-light border border-border/5 focus:border-accent/50"
+              />
+              <button
+                onClick={() => {
+                  if (!newGroupName.trim()) return
+                  const id = Date.now().toString()
+                  const updated = [...collections, { id, name: newGroupName.trim(), items: [] }]
+                  setCollections(updated); persistCollections(updated)
+                  saveToGroup(id)
+                }}
+                disabled={!newGroupName.trim()}
+                className="px-3 py-1.5 rounded text-xs font-medium bg-accent/20 text-accent-light hover:bg-accent/30 disabled:opacity-30 transition-colors">
+                新建
+              </button>
+            </div>
+            <button onClick={() => { setShowSavePicker(false); setNewGroupName('') }}
+              className="mt-2 w-full py-2 rounded-lg text-xs font-medium bg-hover/5 hover:bg-hover/10 text-muted transition-colors">
+              取消
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
