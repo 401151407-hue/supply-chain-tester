@@ -154,6 +154,40 @@ function JsonEditor({ value, onChange, readOnly, contentRef }: {
   return <div ref={containerRef} className="flex-1 overflow-hidden rounded-lg border border-border/5 focus-within:border-accent/50" />
 }
 
+/** 可双击编辑的名称组件 */
+function EditableName({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+
+  function commit() {
+    setEditing(false)
+    if (draft.trim() && draft !== value) onChange(draft.trim())
+    else setDraft(value)
+  }
+
+  if (editing) {
+    return (
+      <input
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value); setEditing(false) } }}
+        className="flex-1 px-2 py-0.5 text-sm font-medium bg-surface border border-accent/50 rounded outline-none"
+        autoFocus
+      />
+    )
+  }
+  return (
+    <span
+      onDoubleClick={() => { setDraft(value); setEditing(true) }}
+      className="flex-1 px-2 py-0.5 text-sm font-medium text-foreground cursor-default select-none"
+      title="双击修改名称"
+    >
+      {value || '新请求'}
+    </span>
+  )
+}
+
 export function ApiDebugger() {
   const { env } = useAppStore()
 
@@ -679,35 +713,44 @@ export function ApiDebugger() {
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden animate-fade-in" key={activeTabId}>
           {/* 标签栏 */}
-          <div className="px-2 py-1 border-b border-border/5 bg-surface-light/10 flex items-center gap-0.5 overflow-x-auto shrink-0">
-            {tabs.map(t => (
-              <button key={t.id}
-                onClick={() => switchTab(t.id)}
-                onMouseDown={e => e.button === 1 && closeTab(t.id)}
-                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs transition-colors whitespace-nowrap
-                  ${t.id === activeTabId
-                    ? 'bg-surface text-foreground font-medium'
-                    : 'bg-transparent text-muted hover:bg-hover/5 hover:text-foreground'}`}
-              >
-                <span className={`font-mono text-[10px] ${t.method === 'GET' ? 'text-success' : t.method === 'POST' ? 'text-warning' : t.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
-                  {t.method}
-                </span>
-                <span className="max-w-[100px] truncate">{t.name || '新请求'}</span>
-                {tabs.length > 1 && (
-                  <span
-                    onClick={e => { e.stopPropagation(); closeTab(t.id) }}
-                    className="opacity-0 group-hover:opacity-100 ml-0.5 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400"
-                  >×</span>
-                )}
-              </button>
-            ))}
+          <div className="px-2 py-1 border-b border-border/5 bg-surface-light/10 flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-0.5 overflow-x-auto flex-1">
+              {tabs.map(t => (
+                <button key={t.id}
+                  onClick={() => switchTab(t.id)}
+                  onMouseDown={e => e.button === 1 && closeTab(t.id)}
+                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs transition-colors whitespace-nowrap shrink-0
+                    ${t.id === activeTabId
+                      ? 'bg-surface text-foreground font-medium'
+                      : 'bg-transparent text-muted hover:bg-hover/5 hover:text-foreground'}`}
+                >
+                  <span className={`font-mono text-[10px] ${t.method === 'GET' ? 'text-success' : t.method === 'POST' ? 'text-warning' : t.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
+                    {t.method}
+                  </span>
+                  <span className="max-w-[100px] truncate">{t.name || '新请求'}</span>
+                  {tabs.length > 1 && (
+                    <span
+                      onClick={e => { e.stopPropagation(); closeTab(t.id) }}
+                      className="opacity-0 group-hover:opacity-100 ml-0.5 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400"
+                    >×</span>
+                  )}
+                </button>
+              ))}
+            </div>
             <button
               onClick={createTab}
-              className="p-1 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-colors ml-1 shrink-0"
+              className="p-1 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-colors shrink-0"
               title="新建标签"
             >
               <Plus size={14} />
             </button>
+          </div>
+          {/* 请求名称栏 */}
+          <div className="px-4 py-2 border-b border-border/5 bg-surface-light/15 flex items-center gap-2 shrink-0">
+            <EditableName
+              value={tab.name}
+              onChange={v => updateActiveTab({ name: v || '新请求' })}
+            />
           </div>
           {/* 请求栏 */}
           <div className="px-4 py-3 border-b border-border/5 bg-surface-light/20 shrink-0 space-y-2">
