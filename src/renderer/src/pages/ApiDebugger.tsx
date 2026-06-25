@@ -1042,7 +1042,7 @@ export function ApiDebugger() {
               </div>
             </div>
           </div>
-        )}
+        ), document.body)}
       </div>
 
       {/* ── 并发性能测试面板 ── */}
@@ -1662,7 +1662,7 @@ export function ApiDebugger() {
           persistCollections={persistCollections}
           setCollections={setCollections}
         />
-      )}
+      ), document.body)}
     </div>
   )
 }
