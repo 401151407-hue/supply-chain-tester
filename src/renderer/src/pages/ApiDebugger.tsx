@@ -127,8 +127,8 @@ function JsonEditor({ value, onChange, readOnly, contentRef }: {
 
 export function ApiDebugger() {
   const { env } = useAppStore()
-  const [method, setMethod] = useState<string>('GET')
-  const [protocol, setProtocol] = useState<string>('https://')
+  const [method, setMethod] = useState<string>('POST')
+  const [protocol, setProtocol] = useState<string>('http://')
   const [url, setUrl] = useState('')
   const [headers, setHeaders] = useState<HeaderRow[]>([{ id: 1, key: '', value: '' }])
   const [params, setParams] = useState<HeaderRow[]>([{ id: 1, key: '', value: '' }])
