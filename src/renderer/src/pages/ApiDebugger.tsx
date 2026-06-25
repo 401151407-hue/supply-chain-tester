@@ -713,16 +713,16 @@ export function ApiDebugger() {
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden animate-fade-in" key={activeTabId}>
           {/* 标签栏 */}
-          <div className="px-2 py-1 border-b border-border/5 bg-surface-light/10 flex items-center gap-0.5 shrink-0">
-            <div className="flex items-center gap-0.5 overflow-x-auto flex-1">
+          <div className="px-2 py-0 flex items-end gap-0.5 shrink-0 overflow-x-auto">
+            <div className="flex items-end gap-0.5 flex-1">
               {tabs.map(t => (
                 <button key={t.id}
                   onClick={() => switchTab(t.id)}
                   onMouseDown={e => e.button === 1 && closeTab(t.id)}
-                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs transition-colors whitespace-nowrap shrink-0
+                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs transition-colors whitespace-nowrap shrink-0 border border-b-0
                     ${t.id === activeTabId
-                      ? 'bg-surface text-foreground font-medium'
-                      : 'bg-transparent text-muted hover:bg-hover/5 hover:text-foreground'}`}
+                      ? 'bg-surface border-border/5 text-foreground font-medium'
+                      : 'bg-transparent border-transparent text-muted hover:bg-hover/5 hover:text-foreground'}`}
                 >
                   <span className={`font-mono text-[10px] ${t.method === 'GET' ? 'text-success' : t.method === 'POST' ? 'text-warning' : t.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
                     {t.method}
@@ -739,21 +739,21 @@ export function ApiDebugger() {
             </div>
             <button
               onClick={createTab}
-              className="p-1 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-colors shrink-0"
+              className="p-1 mb-1 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-colors shrink-0"
               title="新建标签"
             >
               <Plus size={14} />
             </button>
           </div>
           {/* 请求名称栏 */}
-          <div className="px-4 py-2 border-b border-border/5 bg-surface-light/15 flex items-center gap-2 shrink-0">
+          <div className="px-4 py-2 bg-surface flex items-center gap-2 shrink-0">
             <EditableName
               value={tab.name}
               onChange={v => updateActiveTab({ name: v || '新请求' })}
             />
           </div>
           {/* 请求栏 */}
-          <div className="px-4 py-3 border-b border-border/5 bg-surface-light/20 shrink-0 space-y-2">
+          <div className="px-4 py-3 border-b border-border/5 bg-surface shrink-0 space-y-2">
         <div className="flex gap-2">
           {/* Method */}
           <div className="relative">
