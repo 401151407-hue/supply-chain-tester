@@ -855,10 +855,6 @@ export function ApiDebugger() {
               保存
             </button>
           )}
-              <Save size={14} />
-              保存
-            </button>
-          )}
         </div>
 
         {/* 变量弹窗 */}
