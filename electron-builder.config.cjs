@@ -13,6 +13,10 @@ module.exports = {
     '**/node_modules/playwright/**',
   ],
   extraResources: [
+    {
+      from: 'test-suites',
+      to: 'test-suites',
+    },
   ],
   win: {
     target: ['nsis'],

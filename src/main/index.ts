@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain, shell, Menu, type MenuItemConstructorOptio
 import { join, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, readdirSync, statSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, cpSync } from 'fs'
 import { TestRunner } from './test-runner'
 import { ReportStore } from './report-store'
 import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
@@ -1039,7 +1039,33 @@ app.whenReady().then(() => {
   // 确保 test-suites 目录存在（用户数据目录，升级不丢失）
   const scriptsDir = getScriptsDir()
   if (!existsSync(scriptsDir)) {
-    try { mkdirSync(scriptsDir, { recursive: true }); console.log('[init] Created scripts dir:', scriptsDir) } catch {}
+    try {
+      mkdirSync(scriptsDir, { recursive: true })
+      console.log('[init] Created scripts dir:', scriptsDir)
+    } catch (e: any) {
+      console.error('[init] Failed to create scripts dir:', e.message)
+    }
+  }
+
+  // 首次运行：将打包的 test-suites 从 resources 复制到用户数据目录
+  if (app.isPackaged) {
+    const bundledDir = join(process.resourcesPath, 'test-suites')
+    if (existsSync(bundledDir)) {
+      // 只在用户数据目录为空时才复制（已有内容说明之前已复制过或用户已手动添加）
+      try {
+        const userItems = readdirSync(scriptsDir)
+        if (userItems.length === 0) {
+          cpSync(bundledDir, scriptsDir, { recursive: true })
+          console.log('[init] Copied bundled test-suites to:', scriptsDir)
+        } else {
+          console.log('[init] test-suites already has content, skipping copy')
+        }
+      } catch (e: any) {
+        console.error('[init] Failed to copy bundled test-suites:', e.message)
+      }
+    } else {
+      console.warn('[init] Bundled test-suites not found at:', bundledDir)
+    }
   }
   buildMenu()
   loadAIConfig()
