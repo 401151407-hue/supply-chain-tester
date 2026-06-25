@@ -820,12 +820,6 @@ export function ApiDebugger() {
         <Send size={18} className="text-accent" />
         <h2 className="text-lg font-semibold">API 调试</h2>
         <div className="flex-1" />
-        <button onClick={openVarsModal}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-            ${showVars || envVars.length > 0 ? 'bg-accent/20 text-accent-light' : 'bg-hover/5 text-muted hover:bg-hover/10 hover:text-foreground'}`}>
-          <Variable size={13} />
-          变量 ({envVars.length})
-        </button>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
@@ -1536,6 +1530,16 @@ export function ApiDebugger() {
         <aside className="w-56 border-l border-border/5 bg-surface-light/10 overflow-y-auto shrink-0">
           {/* 分组 */}
           <div className="px-3 py-2 text-[10px] text-muted uppercase tracking-wider flex items-center justify-between">
+          {/* 变量 */}
+          <div className="px-3 py-2 text-[10px] text-muted uppercase tracking-wider border-b border-border/5">
+            <button
+              onClick={openVarsModal}
+              className="flex items-center gap-1.5 w-full hover:text-foreground transition-colors">
+              <Variable size={12} />
+              变量 ({envVars.length})
+            </button>
+          </div>
+
             接口分组
             <div className="flex items-center gap-0.5">
               <button onClick={() => setShowNewGroup(true)}
