@@ -34,17 +34,6 @@ export function UpdateIndicator() {
     }
   }, [])
 
-  // 应用启动后自动检查一次
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (api?.checkForUpdates) {
-        setChecking(true)
-        api.checkForUpdates().finally(() => setChecking(false))
-      }
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [])
-
   async function handleCheck() {
     if (!api?.checkForUpdates || checking) return
     setChecking(true)
