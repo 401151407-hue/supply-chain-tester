@@ -443,6 +443,61 @@ export function ApiDebugger() {
     setExpandedId(collId)
   }
 
+  // ── Postman 导入 ──
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function importPostman(json: string) {
+    try {
+      const data = JSON.parse(json)
+      const newCols: Collection[] = []
+      const items = data.item || []
+
+      function walk(list: any[], parentName?: string) {
+        for (const item of list) {
+          if (item.request) {
+            const req = item.request
+            let rawUrl = ''
+            if (typeof req.url === 'string') rawUrl = req.url
+            else if (req.url?.raw) rawUrl = req.url.raw
+            else if (req.url) rawUrl = String(req.url)
+            const headers = (req.header || []).map((h: any) => ({ key: h.key || '', value: h.value || '' }))
+            let body = ''
+            if (req.body?.mode === 'raw' && req.body.raw) body = req.body.raw
+            const saved: SavedRequest = {
+              id: uid(), name: item.name || '未命名',
+              method: req.method || 'GET', url: rawUrl,
+              headers,
+              params: [],
+              body,
+              createdAt: new Date().toISOString(),
+            }
+            const colName = parentName || data.info?.name || '导入'
+            let col = newCols.find(c => c.name === colName)
+            if (!col) { col = { id: uid(), name: colName, items: [] }; newCols.push(col) }
+            col.items.push(saved)
+          } else if (item.item) {
+            walk(item.item, item.name)
+          }
+        }
+      }
+      walk(items)
+      if (newCols.length === 0) return
+      setCollections([...collections, ...newCols])
+      persistCollections([...collections, ...newCols])
+    } catch { }
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      importPostman(reader.result as string)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+    reader.readAsText(file)
+  }
+
   // 响应体大小计算
   const responseSize = useMemo(() => {
     if (!response?.body) return 0
@@ -1242,10 +1297,17 @@ export function ApiDebugger() {
           {/* 分组 */}
           <div className="px-3 py-2 text-[10px] text-muted uppercase tracking-wider flex items-center justify-between">
             接口分组
-            <button onClick={() => setShowNewGroup(true)}
-              className="p-0.5 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-all duration-200" title="新建分组">
-              <FolderPlus size={12} />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button onClick={() => setShowNewGroup(true)}
+                className="p-0.5 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-all duration-200" title="新建分组">
+                <FolderPlus size={12} />
+              </button>
+              <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+              <button onClick={() => fileInputRef.current?.click()}
+                className="p-0.5 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-all duration-200" title="导入 Postman">
+                <Upload size={12} />
+              </button>
+            </div>
           </div>
           {showNewGroup && (
             <div className="px-3 pb-2 flex gap-1 animate-fade-in">
