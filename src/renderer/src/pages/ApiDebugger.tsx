@@ -95,6 +95,49 @@ function genCreditCode(): string {
   return Array(18).fill(0).map(() => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
 
+/** 解析 cURL 命令 */
+function parseCurl(curl: string): { method: string; url: string; headers: { key: string; value: string }[]; body: string } | null {
+  try {
+    const clean = curl.replace(/\s*\\\n\s*/g, ' ').trim()
+    let method = 'GET'
+    let url = ''
+    const headers: { key: string; value: string }[] = []
+    let body = ''
+
+    // Extract URL
+    const urlMatch = clean.match(/curl\s+(?:-[^\s]+\s+)*['"]?(https?:\/\/[^\s'"]+)['"]?/)
+    if (urlMatch) url = urlMatch[1]
+    // Also try: curl 'url' pattern
+    if (!url) {
+      const m2 = clean.match(/curl\s+['"]?(https?:\/\/[^\s'"]+)['"]?/)
+      if (m2) url = m2[1]
+    }
+
+    // Method
+    const methodMatch = clean.match(/-X\s+['"]?(\w+)['"]?/i)
+    if (methodMatch) method = methodMatch[1].toUpperCase()
+
+    // Headers
+    const headerRegex = /-H\s+['"]([^'"]+)['"]/g
+    let hm: RegExpExecArray | null
+    while ((hm = headerRegex.exec(clean)) !== null) {
+      const colonIdx = hm[1].indexOf(':')
+      if (colonIdx > 0) headers.push({ key: hm[1].slice(0, colonIdx).trim(), value: hm[1].slice(colonIdx + 1).trim() })
+    }
+
+    // Body / Data
+    const dataMatch = clean.match(/(?:--data(?:-raw|-binary)?|-d)\s+['"]([^'"]+)['"]/)
+    if (dataMatch) body = dataMatch[1]
+    if (!body) {
+      const dm2 = clean.match(/(?:--data(?:-raw|-binary)?|-d)\s+([^\s-][^'"]+?)(?:\s+-|$)/)
+      if (dm2) body = dm2[1]
+    }
+
+    if (!url) return null
+    return { method, url, headers, body }
+  } catch { return null }
+}
+
 /** 替换字符串中的 {{变量}} */
 function interpolate(str: string, vars: VarItem[]): string {
   return str.replace(/\{\{(\w+)\}\}/g, (_, name) => {
@@ -707,6 +750,7 @@ export function ApiDebugger() {
   const [renameCollName, setRenameCollName] = useState('')
   const [showSysVars, setShowSysVars] = useState(false)
   const [sysVarsClosing, setSysVarsClosing] = useState(false)
+  const [showCurlImport, setShowCurlImport] = useState(false)
 
   function closeSysVars() {
     setSysVarsClosing(true)
@@ -872,6 +916,18 @@ export function ApiDebugger() {
       setIsSending(false)
     }
   }
+
+  // ── Ctrl+Enter 发送 ──
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        handleSend()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [url, method, headers, params, body, isSending])
 
   // 保存到指定分组
   function saveToGroup(collId: string) {
@@ -1196,9 +1252,12 @@ export function ApiDebugger() {
               ))}
             </div>
             <button
-              onClick={createTab}
+              onClick={e => {
+                if (e.ctrlKey || e.metaKey) { setShowCurlImport(true); return }
+                createTab()
+              }}
               className="p-1 mb-1 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-colors shrink-0"
-              title="新建标签"
+              title="新建标签 · Ctrl+点击导入 cURL"
             >
               <Plus size={14} />
             </button>
@@ -2152,6 +2211,50 @@ export function ApiDebugger() {
           )}
         </aside>
       </div>
+
+      {/* cURL 导入弹窗 */}
+      {showCurlImport && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+          onClick={() => setShowCurlImport(false)}>
+          <div className="bg-surface-light border border-border/10 rounded-2xl p-6 w-[520px] shadow-2xl animate-zoom-in"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <Code2 size={18} className="text-accent-light" />
+              <h3 className="text-sm font-semibold">导入 cURL</h3>
+            </div>
+            <textarea
+              autoFocus
+              placeholder={`粘贴 cURL 命令，例如：
+curl -X POST https://api.example.com/users -H "Content-Type: application/json" -d '{"name":"test"}'`}
+              className="w-full h-40 bg-surface border border-border/5 rounded-xl p-3 text-xs font-mono outline-none focus:border-accent/50 resize-none"
+              id="curl-import-textarea"
+            />
+            <p className="text-[10px] text-muted mt-2">Chrome DevTools: 右键请求 → Copy → Copy as cURL</p>
+            <div className="flex gap-2 justify-end mt-4">
+              <button onClick={() => setShowCurlImport(false)}
+                className="px-4 py-2 rounded-lg text-xs font-medium bg-hover/5 hover:bg-hover/10 text-muted transition-colors">
+                取消
+              </button>
+              <button onClick={() => {
+                const textarea = document.getElementById('curl-import-textarea') as HTMLTextAreaElement
+                if (!textarea?.value.trim()) return
+                const parsed = parseCurl(textarea.value)
+                if (!parsed) { alert('无法解析 cURL 命令'); return }
+                setUrl(parsed.url.replace(/^https?:\/\//, ''))
+                if (parsed.url.startsWith('https://')) setProtocol('https://')
+                else if (parsed.url.startsWith('http://')) setProtocol('http://')
+                setMethod(parsed.method)
+                const h = parsed.headers.map((h, i) => ({ id: i + 1, key: h.key, value: h.value }))
+                if (h.length > 0) updateActiveTab({ headers: h })
+                if (parsed.body) updateActiveTab({ body: parsed.body })
+                setShowCurlImport(false)
+              }}
+                className="px-4 py-2 rounded-lg text-xs font-medium bg-accent hover:bg-accent-light text-foreground transition-colors">
+                导入
+              </button>
+            </div>
+          </div>
+        </div>, document.body)}
 
       {/* 确认对话框 */}
       {confirmDialog && createPortal(
