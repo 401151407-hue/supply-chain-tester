@@ -721,7 +721,7 @@ export function ApiDebugger() {
                   onMouseDown={e => e.button === 1 && closeTab(t.id)}
                   className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs transition-colors whitespace-nowrap shrink-0 border border-b-0
                     ${t.id === activeTabId
-                      ? 'bg-surface border-border/5 text-foreground font-medium'
+                      ? 'bg-accent/10 border-border/5 border-t-2 border-t-accent text-foreground font-semibold'
                       : 'bg-transparent border-transparent text-muted hover:bg-hover/5 hover:text-foreground'}`}
                 >
                   <span className={`font-mono text-[10px] ${t.method === 'GET' ? 'text-success' : t.method === 'POST' ? 'text-warning' : t.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
