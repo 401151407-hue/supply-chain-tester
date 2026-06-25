@@ -24,6 +24,35 @@ interface Collection {
 
 interface VarItem { id: string; key: string; value: string; comment: string }
 
+interface TabState {
+  id: string
+  name: string
+  method: string
+  url: string
+  headers: HeaderRow[]
+  params: HeaderRow[]
+  body: string
+  response: {
+    status?: number; statusText?: string; headers?: Record<string,string>
+    body?: string; duration?: number; error?: string
+  } | null
+  editingRequest: { collId: string; reqId: string } | null
+}
+
+function newBlankTab(name?: string): TabState {
+  return {
+    id: uid(),
+    name: name || '新请求',
+    method: 'POST',
+    url: '',
+    headers: [{ id: 1, key: '', value: '' }],
+    params: [{ id: 1, key: '', value: '' }],
+    body: '',
+    response: null,
+    editingRequest: null,
+  }
+}
+
 function uid(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
@@ -127,20 +156,67 @@ function JsonEditor({ value, onChange, readOnly, contentRef }: {
 
 export function ApiDebugger() {
   const { env } = useAppStore()
-  const [method, setMethod] = useState<string>('POST')
+
+  // 多标签管理
+  const [tabs, setTabs] = useState<TabState[]>(() => [newBlankTab()])
+  const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id ?? '')
+
+  function getActiveTab(): TabState {
+    return tabs.find(t => t.id === activeTabId) || tabs[0]
+  }
+  const tab = getActiveTab()
+
+  // 从当前 tab 派生各字段
+  const method = tab.method
+  const url = tab.url
+  const headers = tab.headers
+  const params = tab.params
+  const body = tab.body
+  const response = tab.response
+  const editingRequest = tab.editingRequest
+
+  function updateTab(id: string, patch: Partial<TabState>) {
+    setTabs(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
+  }
+  function updateActiveTab(patch: Partial<TabState>) {
+    updateTab(activeTabId, patch)
+  }
+
+  function createTab() {
+    const t = newBlankTab()
+    setTabs(prev => [...prev, t])
+    setActiveTabId(t.id)
+  }
+  function closeTab(id: string) {
+    if (tabs.length <= 1) return
+    setTabs(prev => {
+      const idx = prev.findIndex(t => t.id === id)
+      const next = prev.filter(t => t.id !== id)
+      if (id === activeTabId) {
+        const newIdx = Math.min(idx, next.length - 1)
+        if (next[newIdx]) setActiveTabId(next[newIdx].id)
+      }
+      return next
+    })
+  }
+  function switchTab(id: string) {
+    setActiveTabId(id)
+  }
+
+  // setX wrappers
+  const setMethod = (v: string) => updateActiveTab({ method: v })
+  const setUrl = (v: string) => updateActiveTab({ url: v })
+  const setHeaders = (v: HeaderRow[]) => updateActiveTab({ headers: v })
+  const setParams = (v: HeaderRow[]) => updateActiveTab({ params: v })
+  const setBody = (v: string) => updateActiveTab({ body: v })
+  const setResponse = (v: TabState['response']) => updateActiveTab({ response: v })
+  const setEditingRequest = (v: TabState['editingRequest']) => updateActiveTab({ editingRequest: v })
+
   const [protocol, setProtocol] = useState<string>('http://')
-  const [url, setUrl] = useState('')
-  const [headers, setHeaders] = useState<HeaderRow[]>([{ id: 1, key: '', value: '' }])
-  const [params, setParams] = useState<HeaderRow[]>([{ id: 1, key: '', value: '' }])
-  const [body, setBody] = useState('')
   const bodyContentRef = useRef('')  // 实时同步最新 body，绕过 React 状态延迟
-  const [activeTab, setActiveTab] = useState<TabKey>('params')
+  const [activeTabKey, setActiveTabKey] = useState<TabKey>('params')
   const [isSending, setIsSending] = useState(false)
 
-  const [response, setResponse] = useState<{
-    status?: number; statusText?: string; headers?: Record<string,string>
-    body?: string; duration?: number; error?: string
-  } | null>(null)
   const [responseFormatted, setResponseFormatted] = useState(true)
   const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'cookies' | 'request'>('body')
   const [sentRequest, setSentRequest] = useState<{
@@ -266,7 +342,6 @@ export function ApiDebugger() {
 
   // 分组管理
   const [collections, setCollections] = useState<Collection[]>(loadCollections)
-  const [editingRequest, setEditingRequest] = useState<{ collId: string; reqId: string } | null>(null)
   const [flashReqId, setFlashReqId] = useState<string | null>(null)
   const [saveTargetId, setSaveTargetId] = useState<string>('')
   const [saveName, setSaveName] = useState('')
@@ -386,26 +461,25 @@ export function ApiDebugger() {
 
   // 新建请求时清除编辑状态
   function startNewRequest() {
-    setEditingRequest(null)
-    setMethod('POST')
-    setUrl('')
-    setParams([{ id: 1, key: '', value: '' }])
-    setHeaders([{ id: 1, key: '', value: '' }])
-    setBody('')
-    setResponse(null)
+    createTab()
   }
 
   function loadRequest(req: SavedRequest, collId: string) {
-    setMethod(req.method); setUrl(req.url)
-    setParams(req.params && req.params.length > 0
-      ? req.params.map((p, i) => ({ id: i + 1, key: p.key, value: p.value }))
-      : [{ id: 1, key: '', value: '' }])
-    setHeaders(req.headers.length > 0
-      ? req.headers.map((h, i) => ({ id: i + 1, key: h.key, value: h.value }))
-      : [{ id: 1, key: '', value: '' }])
-    setBody(req.body); setResponse(null)
-    bodyContentRef.current = req.body  // 立即同步 ref，避免 CodeMirror 异步延迟
-    setEditingRequest({ collId, reqId: req.id })
+    updateActiveTab({
+      name: req.name,
+      method: req.method,
+      url: req.url,
+      params: req.params && req.params.length > 0
+        ? req.params.map((p, i) => ({ id: i + 1, key: p.key, value: p.value }))
+        : [{ id: 1, key: '', value: '' }],
+      headers: req.headers.length > 0
+        ? req.headers.map((h, i) => ({ id: i + 1, key: h.key, value: h.value }))
+        : [{ id: 1, key: '', value: '' }],
+      body: req.body,
+      response: null,
+      editingRequest: { collId, reqId: req.id },
+    })
+    bodyContentRef.current = req.body
   }
 
   function deleteRequest(collId: string, reqId: string) {
@@ -603,7 +677,38 @@ export function ApiDebugger() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden animate-fade-in" key={editingRequest?.reqId ?? 'new'}>
+        <div className="flex-1 flex flex-col overflow-hidden animate-fade-in" key={activeTabId}>
+          {/* 标签栏 */}
+          <div className="px-2 py-1 border-b border-border/5 bg-surface-light/10 flex items-center gap-0.5 overflow-x-auto shrink-0">
+            {tabs.map(t => (
+              <button key={t.id}
+                onClick={() => switchTab(t.id)}
+                onMouseDown={e => e.button === 1 && closeTab(t.id)}
+                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs transition-colors whitespace-nowrap
+                  ${t.id === activeTabId
+                    ? 'bg-surface text-foreground font-medium'
+                    : 'bg-transparent text-muted hover:bg-hover/5 hover:text-foreground'}`}
+              >
+                <span className={`font-mono text-[10px] ${t.method === 'GET' ? 'text-success' : t.method === 'POST' ? 'text-warning' : t.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
+                  {t.method}
+                </span>
+                <span className="max-w-[100px] truncate">{t.name || '新请求'}</span>
+                {tabs.length > 1 && (
+                  <span
+                    onClick={e => { e.stopPropagation(); closeTab(t.id) }}
+                    className="opacity-0 group-hover:opacity-100 ml-0.5 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400"
+                  >×</span>
+                )}
+              </button>
+            ))}
+            <button
+              onClick={createTab}
+              className="p-1 rounded hover:bg-accent/20 text-muted hover:text-accent-light transition-colors ml-1 shrink-0"
+              title="新建标签"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
           {/* 请求栏 */}
           <div className="px-4 py-3 border-b border-border/5 bg-surface-light/20 shrink-0 space-y-2">
         <div className="flex gap-2">
@@ -945,9 +1050,9 @@ export function ApiDebugger() {
           <div className="flex border-b border-border/5 px-4 bg-surface-light/10">
             {(['params', 'headers', 'body'] as TabKey[]).map(t => (
               <button key={t}
-                onClick={() => setActiveTab(t)}
+                onClick={() => setActiveTabKey(t)}
                 className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors
-                  ${activeTab === t ? 'border-accent text-accent-light' : 'border-transparent text-muted hover:text-foreground'}`}
+                  ${activeTabKey === t ? 'border-accent text-accent-light' : 'border-transparent text-muted hover:text-foreground'}`}
               >
                 {t === 'params' ? 'Params' : t === 'headers' ? 'Headers' : 'Body'}
                 {t === 'params' && params.filter(p => p.key.trim()).length > 0 && (
@@ -958,7 +1063,7 @@ export function ApiDebugger() {
           </div>
 
           {/* Params 编辑 */}
-          {activeTab === 'params' && (
+          {activeTabKey === 'params' && (
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] text-muted uppercase tracking-wider">Query Params</span>
@@ -992,7 +1097,7 @@ export function ApiDebugger() {
           )}
 
           {/* Headers 编辑 */}
-          {activeTab === 'headers' && (
+          {activeTabKey === 'headers' && (
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
               {headers.map(h => (
                 <div key={h.id} className="flex gap-1 items-center">
@@ -1022,7 +1127,7 @@ export function ApiDebugger() {
           )}
 
           {/* Body 编辑 */}
-          {activeTab === 'body' && (
+          {activeTabKey === 'body' && (
             <div className="flex-1 flex flex-col overflow-hidden p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] text-muted uppercase tracking-wider">Body</span>
