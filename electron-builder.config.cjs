@@ -32,8 +32,6 @@ module.exports = {
     target: [
       { target: 'dmg', arch: ['x64'] },
       { target: 'dmg', arch: ['arm64'] },
-      { target: 'zip', arch: ['x64'] },
-      { target: 'zip', arch: ['arm64'] },
     ],
     // 未签名 App 跳过 Gatekeeper 评估
     gatekeeperAssess: false,
