@@ -1040,10 +1040,8 @@ export function ApiDebugger() {
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        ), document.body)}
-      </div>
+            </div>, document.body)}
+        </div>
 
       {/* ── 并发性能测试面板 ── */}
       <div className="px-4 border-b border-border/5 bg-surface-light/10 shrink-0">
@@ -1661,8 +1659,7 @@ export function ApiDebugger() {
           onClose={() => { setShowSavePicker(false); setNewGroupName('') }}
           persistCollections={persistCollections}
           setCollections={setCollections}
-        />
-      ), document.body)}
+        />, document.body)}
     </div>
   )
 }
