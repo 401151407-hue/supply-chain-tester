@@ -377,7 +377,6 @@ export function ApiDebugger() {
   // 分组管理
   const [collections, setCollections] = useState<Collection[]>(loadCollections)
   const [flashReqId, setFlashReqId] = useState<string | null>(null)
-  const [showSavePicker, setShowSavePicker] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -451,75 +450,56 @@ export function ApiDebugger() {
     }
   }
 
-  function getDefaultCollectionId(): string {
-    let def = collections.find(c => c.name === '默认分组')
-    if (!def) {
-      def = { id: uid(), name: '默认分组', items: [] }
-      setCollections(prev => { const u = [...prev, def!]; persistCollections(u); return u })
-    }
-    return def.id
-  }
-
   // 保存当前请求到分组（新增或更新）
-  function handleSave(e?: React.MouseEvent, forcePick?: boolean) {
+  function handleSave() {
     if (!url.trim()) return
     const cleanParams = params.filter(p => p.key.trim()).map(p => ({ key: p.key.trim(), value: p.value }))
     const cleanHeaders = headers.filter(h => h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value }))
     const reqName = tab.name || '未命名接口'
+
     if (editingRequest) {
-      const updated = collections.map(c => c.id === editingRequest.collId ? {
-        ...c,
-        items: c.items.map(i => i.id === editingRequest.reqId ? {
-          ...i, name: reqName, method, url: url.trim(),
-          headers: cleanHeaders, params: cleanParams, body,
-        } : i),
-      } : c)
-      setCollections(updated); persistCollections(updated)
+      setCollections(prev => {
+        const updated = prev.map(c => c.id === editingRequest.collId ? {
+          ...c,
+          items: c.items.map(i => i.id === editingRequest.reqId ? {
+            ...i, name: reqName, method, url: url.trim(),
+            headers: cleanHeaders, params: cleanParams, body,
+          } : i),
+        } : c)
+        persistCollections(updated)
+        return updated
+      })
       setFlashReqId(editingRequest.reqId); setTimeout(() => setFlashReqId(null), 700)
     } else {
-      const ctrl = e?.ctrlKey || e?.metaKey
-      if (ctrl || forcePick) {
-        e?.preventDefault()
-        setShowSavePicker(true)
-        return
-      }
-      const targetCollId = getDefaultCollectionId()
-      const item: SavedRequest = {
-        id: Date.now().toString(), name: reqName,
-        method, url: url.trim(),
-        headers: cleanHeaders, params: cleanParams,
-        body, createdAt: new Date().toISOString(),
-      }
-      const updated = collections.map(c =>
-        c.id === targetCollId ? { ...c, items: [...c.items, item] } : c
-      )
-      setCollections(updated); persistCollections(updated)
-      setEditingRequest({ collId: targetCollId, reqId: item.id })
+      setCollections(prev => {
+        let target = prev.find(c => c.name === '默认分组')
+        if (!target) {
+          target = { id: uid(), name: '默认分组', items: [] }
+          prev = [...prev, target]
+        }
+        const item: SavedRequest = {
+          id: Date.now().toString(), name: reqName,
+          method, url: url.trim(),
+          headers: cleanHeaders, params: cleanParams,
+          body, createdAt: new Date().toISOString(),
+        }
+        const updated = prev.map(c => c.id === target!.id ? { ...c, items: [...c.items, item] } : c)
+        persistCollections(updated)
+        return updated
+      })
+      // 标记为编辑状态（后续保存会更新而非新增）
+      // 注意：state 中还没有 item.id，所以用 setTimeout 延迟设置
+      setTimeout(() => {
+        setCollections(current => {
+          const def = current.find(c => c.name === '默认分组')
+          if (def) {
+            const last = def.items[def.items.length - 1]
+            if (last) setEditingRequest({ collId: def.id, reqId: last.id })
+          }
+          return current
+        })
+      }, 0)
     }
-    setShowSavePicker(false)
-  }
-
-  function handlePickAndSave(collId: string) {
-    setSaveTargetId(collId)
-    handleSave(undefined, false)  // forcePick=false, but collId is set... 
-
-    // Actually need a different approach: save to the picked group
-    if (!url.trim()) { setShowSavePicker(false); return }
-    const cleanParams = params.filter(p => p.key.trim()).map(p => ({ key: p.key.trim(), value: p.value }))
-    const cleanHeaders = headers.filter(h => h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value }))
-    const reqName = tab.name || '未命名接口'
-    const item: SavedRequest = {
-      id: Date.now().toString(), name: reqName,
-      method, url: url.trim(),
-      headers: cleanHeaders, params: cleanParams,
-      body, createdAt: new Date().toISOString(),
-    }
-    const updated = collections.map(c =>
-      c.id === collId ? { ...c, items: [...c.items, item] } : c
-    )
-    setCollections(updated); persistCollections(updated)
-    setEditingRequest({ collId, reqId: item.id })
-    setShowSavePicker(false)
   }
 
   // 新建请求时清除编辑状态
@@ -839,18 +819,16 @@ export function ApiDebugger() {
           </button>
           {/* Save */}
           {editingRequest ? (
-            <button onClick={(e) => handleSave(e)}
+            <button onClick={handleSave}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
-                         bg-success/20 hover:bg-success/30 text-success transition-all active:scale-90"
-              title="Ctrl+点击可选择分组">
+                         bg-success/20 hover:bg-success/30 text-success transition-all active:scale-90">
               <Save size={14} />
               更新
             </button>
           ) : (
-            <button onClick={(e) => handleSave(e)}
+            <button onClick={handleSave}
               className="flex items-center gap-1.5 px-4 h-9 rounded-lg text-sm font-medium
-                         bg-accent/20 hover:bg-accent/30 text-accent-light transition-all"
-              title="保存到默认分组 · Ctrl+点击可选择分组">
+                         bg-accent/20 hover:bg-accent/30 text-accent-light transition-all">
               <Save size={14} />
               保存
             </button>
@@ -1557,35 +1535,6 @@ export function ApiDebugger() {
           )}
         </aside>
       </div>
-
-      {/* 分组选择弹窗 (Ctrl+保存) */}
-      {showSavePicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowSavePicker(false)}>
-          <div className="bg-surface rounded-xl border border-border/10 shadow-2xl w-72 p-4 animate-zoom-in" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold mb-3">选择保存分组</h3>
-            {collections.length === 0 ? (
-              <p className="text-xs text-muted">暂无分组，请先新建分组</p>
-            ) : (
-              <div className="space-y-1 max-h-60 overflow-y-auto">
-                {collections.map(c => (
-                  <button key={c.id}
-                    onClick={() => handlePickAndSave(c.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm
-                               hover:bg-accent/10 hover:text-accent-light transition-colors">
-                    <Folder size={14} className="text-warning shrink-0" />
-                    <span className="truncate">{c.name}</span>
-                    <span className="text-[10px] text-muted ml-auto">{c.items.length}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <button onClick={() => setShowSavePicker(false)}
-              className="mt-3 w-full py-2 rounded-lg text-xs font-medium bg-hover/5 hover:bg-hover/10 text-muted transition-colors">
-              取消
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
