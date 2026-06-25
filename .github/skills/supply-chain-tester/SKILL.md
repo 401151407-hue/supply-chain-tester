@@ -105,7 +105,10 @@ electron-builder.config.cjs  # 打包配置
 
 ### 3. 打包与发布 (electron-builder.config.cjs)
 
-- **extraResources 已清空** —— test-suites 包含敏感公司脚本，**严禁打包进安装程序**
+- **🚫 extraResources 必须为空** —— 严禁添加任何内容！
+  - `test-suites/` 包含公司内部接口地址、数据库连接等敏感信息，**绝对不能打包进安装程序**
+  - 当前配置：`extraResources` 字段已彻底删除，不存在于配置文件中
+  - ⚠️ 如果在另一台机器上重建仓库或修改配置，**务必确认 `extraResources` 未被重新添加**
 - Windows NSIS 安装脚本 (`build/installer.nsh`) 负责：
   - **全新安装**：创建空 `test-suites/` 目录在安装根目录下（与 `.exe` 同级）
   - **覆盖安装/升级**：卸载前用 `xcopy /E` 备份整个 `test-suites/` 到临时目录，安装后恢复，**确保用户脚本不丢失**
