@@ -9,7 +9,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { defaultKeymap } from '@codemirror/commands'
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const
-type TabKey = 'params' | 'headers' | 'body'
+type TabKey = 'params' | 'headers' | 'body' | 'prescript' | 'postscript'
 
 interface HeaderRow { id: number; key: string; value: string }
 interface HistoryItem { method: string; url: string; status?: number; duration?: number; time: string }
@@ -17,7 +17,7 @@ interface HistoryItem { method: string; url: string; status?: number; duration?:
 interface SavedRequest {
   id: string; name: string; method: string; url: string
   headers: { key: string; value: string }[]; params: { key: string; value: string }[]
-  body: string; createdAt: string
+  body: string; preScript: string; postScript: string; createdAt: string
 }
 interface Collection {
   id: string; name: string; items: SavedRequest[]
@@ -40,6 +40,8 @@ interface TabState {
   headers: HeaderRow[]
   params: HeaderRow[]
   body: string
+  preScript: string
+  postScript: string
   response: {
     status?: number; statusText?: string; headers?: Record<string,string>
     body?: string; duration?: number; error?: string
@@ -56,6 +58,8 @@ function newBlankTab(name?: string): TabState {
     headers: [{ id: 1, key: '', value: '' }],
     params: [{ id: 1, key: '', value: '' }],
     body: '',
+    preScript: '',
+    postScript: '',
     response: null,
     editingRequest: null,
   }
@@ -323,6 +327,106 @@ function JsonEditor({ value, onChange, readOnly, contentRef }: {
   return <div ref={containerRef} className="flex-1 overflow-hidden rounded-lg border border-border/5 focus-within:border-accent/50" />
 }
 
+/** ── JSON 树形视图 ── */
+interface FlatNode { key: string; path: string; depth: number; data: any; isCollapsible: boolean; isLast: boolean }
+
+function flattenJSON(data: any, path: string, depth: number, maxDepth: number): FlatNode[] {
+  const result: FlatNode[] = []
+  const isCollapsible = data !== null && typeof data === 'object'
+  const isArray = Array.isArray(data)
+  const entries: [string, any][] = isCollapsible
+    ? isArray ? data.map((v: any, i: number) => [String(i), v] as [string, any]) : Object.entries(data)
+    : []
+  result.push({ key: path.split('.').pop() || 'root', path, depth, data, isCollapsible, isLast: false })
+  if (isCollapsible && depth < maxDepth) {
+    entries.forEach(([key, val], idx) => {
+      const childPath = path ? `${path}.${key}` : key
+      const children = flattenJSON(val, childPath, depth + 1, maxDepth)
+      if (children.length > 0) children[children.length - 1].isLast = idx === entries.length - 1
+      result.push(...children)
+    })
+  }
+  return result
+}
+
+function TreeRoot({ data, onExtractVar }: { data: any; onExtractVar?: (key: string, val: any) => void }) {
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set(['']))
+  const flatNodes = useMemo(() => flattenJSON(data, '', 0, 10), [data])
+  useEffect(() => {
+    const autoExpand = new Set<string>([''])
+    for (const n of flatNodes) { if (n.isCollapsible && n.depth < 3) autoExpand.add(n.path) }
+    setExpandedPaths(autoExpand)
+  }, [flatNodes])
+  const visibleNodes = useMemo(() => flatNodes.filter(n => {
+    if (n.path === '') return true
+    const parentPath = n.path.split('.').slice(0, -1).join('.')
+    return expandedPaths.has(parentPath)
+  }), [flatNodes, expandedPaths])
+  const [valPopover, setValPopover] = useState<{ x: number; y: number; path: string; val: any } | null>(null)
+
+  return (
+    <div>
+      {visibleNodes.map((node, i) => {
+        const padLeft = node.depth * 16
+        const isArray = Array.isArray(node.data)
+        const bracket = isArray ? ['[', ']'] : ['{', '}']
+        const obj = node.data && typeof node.data === 'object' ? node.data : {}
+        const length = isArray ? node.data.length : Object.keys(obj).length
+        if (!node.isCollapsible) {
+          return (
+            <div key={node.path || `leaf-${i}`} className="flex items-start group hover:bg-hover/5 rounded" style={{ paddingLeft: padLeft }}>
+              <span className="text-accent-light mr-1.5 shrink-0">"{node.key}":</span>
+              <span
+                onClick={onExtractVar ? (e) => {
+                  e.stopPropagation()
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                  const top = rect.bottom + 3 > window.innerHeight - 60 ? rect.top - 60 : rect.bottom + 3
+                  setValPopover({ x: Math.min(rect.left, window.innerWidth - 160), y: top, path: node.path, val: node.data })
+                } : undefined}
+                className={`${onExtractVar ? 'cursor-pointer hover:underline hover:underline-offset-2 decoration-dotted decoration-muted/30 rounded px-0.5 -mx-0.5' : ''} ${typeof node.data === 'string' ? 'text-success' : typeof node.data === 'number' ? 'text-warning' : typeof node.data === 'boolean' ? 'text-blue-400' : 'text-muted'}`}
+                title={onExtractVar ? '点击复制或存为变量' : undefined}
+              >{typeof node.data === 'string' ? `"${node.data}"` : String(node.data ?? 'null')}</span>
+            </div>
+          )
+        }
+        const nodePath = node.path
+        const isOpen = expandedPaths.has(nodePath)
+        return (
+          <div key={nodePath || 'root'}>
+            <div className="flex items-center cursor-pointer hover:bg-hover/5 rounded select-none" style={{ paddingLeft: padLeft }}
+              onClick={() => setExpandedPaths(prev => { const next = new Set(prev); if (next.has(nodePath)) next.delete(nodePath); else next.add(nodePath); return next })}>
+              <span className="w-3.5 inline-flex items-center justify-center shrink-0 text-muted">{isOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}</span>
+              {node.key !== 'root' && <span className="text-accent-light mr-1.5">"{node.key}":</span>}
+              {!isOpen ? <><span className="text-muted/40">{bracket[0]}</span><span className="text-muted/30 ml-1">{length} {isArray ? 'items' : 'keys'}</span><span className="text-muted/40">{bracket[1]}</span></> : <span className="text-muted/40">{bracket[0]}</span>}
+            </div>
+            {isOpen && node.isLast && <div style={{ paddingLeft: padLeft }}><span className="text-muted/40">{bracket[1]}</span></div>}
+          </div>
+        )
+      })}
+      {valPopover && <>
+        <div className="fixed inset-0 z-[59]" onClick={() => setValPopover(null)} />
+        <div className="fixed z-[60] bg-surface border border-border/10 rounded-lg shadow-xl py-1 px-1 text-[11px]" style={{ left: valPopover.x, top: valPopover.y }}>
+          <button onClick={() => { navigator.clipboard.writeText(typeof valPopover.val === 'string' ? valPopover.val : String(valPopover.val)); setValPopover(null) }} className="flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors whitespace-nowrap"><Copy size={11} /> 复制值</button>
+          <button onClick={() => { onExtractVar?.(valPopover.path, valPopover.val); setValPopover(null) }} className="flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded hover:bg-hover/10 text-muted hover:text-accent-light transition-colors whitespace-nowrap"><Variable size={11} /> 存为变量</button>
+        </div>
+      </>}
+    </div>
+  )
+}
+
+function JsonTreeView({ value, onExtractVar }: { value: string; onExtractVar?: (key: string, val: any) => void }) {
+  let parsed: any
+  try { parsed = JSON.parse(value) } catch {
+    return <div className="p-4 space-y-2"><div className="text-xs text-danger font-mono">无效 JSON</div><pre className="text-[10px] text-muted/50 whitespace-pre-wrap break-all max-h-40 overflow-y-auto">{value.slice(0, 500) || '(空字符串)'}</pre></div>
+  }
+  return (
+    <div className="p-2 font-mono text-xs leading-relaxed overflow-y-auto h-full">
+      {onExtractVar && <div className="text-[10px] text-muted/40 mb-1 select-none flex items-center gap-1"><Variable size={10} />点击彩色值可复制或存为变量</div>}
+      <TreeRoot data={parsed} onExtractVar={onExtractVar} />
+    </div>
+  )
+}
+
 /** 保存飞入目标分组动画 */
 function FlyToTarget({ startX, startY, endX, endY, text }: {
   startX: number; startY: number; endX: number; endY: number; text: string
@@ -563,6 +667,8 @@ export function ApiDebugger() {
   const headers = tab.headers
   const params = tab.params
   const body = tab.body
+  const preScript = tab.preScript
+  const postScript = tab.postScript
   const response = tab.response
   const editingRequest = tab.editingRequest
 
@@ -597,9 +703,15 @@ export function ApiDebugger() {
   // setX wrappers
   const setMethod = (v: string) => updateActiveTab({ method: v })
   const setUrl = (v: string) => updateActiveTab({ url: v })
-  const setHeaders = (v: HeaderRow[]) => updateActiveTab({ headers: v })
-  const setParams = (v: HeaderRow[]) => updateActiveTab({ params: v })
+  const setHeaders = (v: HeaderRow[] | ((prev: HeaderRow[]) => HeaderRow[])) => {
+    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, headers: typeof v === 'function' ? v(t.headers) : v } : t))
+  }
+  const setParams = (v: HeaderRow[] | ((prev: HeaderRow[]) => HeaderRow[])) => {
+    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, params: typeof v === 'function' ? v(t.params) : v } : t))
+  }
   const setBody = (v: string) => updateActiveTab({ body: v })
+  const setPreScript = (v: string) => updateActiveTab({ preScript: v })
+  const setPostScript = (v: string) => updateActiveTab({ postScript: v })
   const setResponse = (v: TabState['response']) => updateActiveTab({ response: v })
   const setEditingRequest = (v: TabState['editingRequest']) => updateActiveTab({ editingRequest: v })
 
@@ -609,7 +721,6 @@ export function ApiDebugger() {
   const [activeTabKey, setActiveTabKey] = useState<TabKey>('params')
   const [isSending, setIsSending] = useState(false)
 
-  const [responseFormatted, setResponseFormatted] = useState(true)
   const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'cookies' | 'request'>('body')
   const [sentRequest, setSentRequest] = useState<{
     method: string; url: string; headers: Record<string, string>; body?: string
@@ -631,6 +742,21 @@ export function ApiDebugger() {
     items: { index: number; status?: number; duration: number; body?: string; error?: string }[]
   } | null>(null)
   const [batchError, setBatchError] = useState<string | null>(null)
+  const [responseViewMode, setResponseViewMode] = useState<'tree' | 'pretty' | 'raw'>('tree')
+  const [showCodeExport, setShowCodeExport] = useState(false)
+  const [collRunner, setCollRunner] = useState<{
+    running: boolean; collName: string; results: { name: string; method: string; url: string; status?: number; duration?: number; error?: string }[]; done: number; total: number
+  } | null>(null)
+  const runnerAbortRef = useRef(false)
+  // 滑动索引（必须在 activeTabKey 和 responseTab 之后）
+  const reqTabOrder: TabKey[] = ['params', 'headers', 'body', 'prescript', 'postscript']
+  const reqTabIndex = reqTabOrder.indexOf(activeTabKey)
+  const resTabOrder = ['body', 'cookies', 'headers', 'request'] as const
+  const resTabIndex = resTabOrder.indexOf(responseTab)
+  const [loadedReqTabs, setLoadedReqTabs] = useState<Set<TabKey>>(() => new Set(['params']))
+  const [loadedResTabs, setLoadedResTabs] = useState<Set<string>>(() => new Set(['body']))
+  useEffect(() => { setLoadedReqTabs(prev => { const next = new Set(prev); next.add(activeTabKey); return next }) }, [activeTabKey])
+  useEffect(() => { setLoadedResTabs(prev => { const next = new Set(prev); next.add(responseTab); return next }) }, [responseTab])
 
   async function handleBatchSend() {
     if (!url.trim() || batchRunning) return
@@ -853,6 +979,16 @@ export function ApiDebugger() {
     setIsSending(true)
     setResponse(null)
 
+    // ── 前置脚本 ──
+    if (preScript.trim()) {
+      try {
+        const sandbox = { env: { get: (k: string) => envVars.find(v => v.key === k)?.value ?? '', set: (k: string, v: string) => {
+          setEnvVars(prev => { const exists = prev.find(x => x.key === k); const updated = exists ? prev.map(x => x.key === k ? { ...x, value: v } : x) : [...prev, { id: uid(), key: k, value: v, comment: '' }]; persistVars(env, updated); return updated })
+        }}, console: { log: (...args: any[]) => console.log('[前置脚本]', ...args) } }
+        new Function('sandbox', `with(sandbox) { ${preScript} }`)(sandbox)
+      } catch (err: any) { console.error('[前置脚本] 执行失败:', err.message) }
+    }
+
     const reqHeaders: Record<string, string> = {}
     for (const h of headers) {
       if (h.key.trim()) reqHeaders[h.key.trim()] = h.value
@@ -906,6 +1042,21 @@ export function ApiDebugger() {
         body: interpolatedBody,
       })
       setResponse(res)
+      // ── 后置脚本 ──
+      if (postScript.trim() && res.body) {
+        try {
+          let parsedBody: any = undefined
+          try { parsedBody = JSON.parse(res.body) } catch {}
+          const sandbox = {
+            response: { status: res.status, headers: res.headers || {}, body: res.body, json: () => parsedBody },
+            env: { get: (k: string) => envVars.find(v => v.key === k)?.value ?? '', set: (k: string, v: string) => {
+              setEnvVars(prev => { const exists = prev.find(x => x.key === k); const updated = exists ? prev.map(x => x.key === k ? { ...x, value: v } : x) : [...prev, { id: uid(), key: k, value: v, comment: '' }]; persistVars(env, updated); return updated })
+            }},
+            console: { log: (...args: any[]) => console.log('[后置脚本]', ...args) },
+          }
+          new Function('sandbox', `with(sandbox) { ${postScript} }`)(sandbox)
+        } catch (err: any) { console.error('[后置脚本] 执行失败:', err.message) }
+      }
       setHistory(prev => [{
         method, url: fullUrl, status: res.status,
         duration: res.duration, time: new Date().toLocaleTimeString('zh-CN'),
@@ -929,6 +1080,87 @@ export function ApiDebugger() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [url, method, headers, params, body, isSending])
 
+  /** 从响应 JSON 树中点击值 → 生成 env.set() 代码插入后置脚本 */
+  function handleExtractVar(path: string, _val: any) {
+    const cleanPath = path.replace(/^\./, '')
+    const code = `env.set('${cleanPath}', response.json().${cleanPath})`
+    const currentScript = postScript.trim()
+    const newScript = currentScript ? `${currentScript}\n${code}` : code
+    updateActiveTab({ postScript: newScript })
+    setActiveTabKey('postscript')
+  }
+
+  /** 构建完整请求 URL */
+  function buildFullUrl(reqMethod: string, reqUrl: string, reqParams: HeaderRow[]): string {
+    const trimmed = reqUrl.trim()
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : protocol + trimmed
+    const base = withProto.replace(/\?.*$/, '')
+    const activeParams = reqParams.filter(p => p.key.trim())
+    const qs = activeParams.map(p =>
+      `${encodeURIComponent(interpolate(p.key.trim(), envVars))}=${encodeURIComponent(interpolate(p.value, envVars))}`
+    ).join('&')
+    return interpolate(qs ? `${base}?${qs}` : base, envVars)
+  }
+
+  /** 集合 Runner */
+  async function runCollection(collId: string) {
+    const col = collections.find(c => c.id === collId)
+    if (!col || col.items.length === 0 || collRunner?.running) return
+    const api = (window as any).supplyChainTester
+    if (!api?.apiDebug) return
+    runnerAbortRef.current = false
+    setCollRunner({ running: true, collName: col.name, results: [], done: 0, total: col.items.length })
+    for (let i = 0; i < col.items.length; i++) {
+      if (runnerAbortRef.current) break
+      const req = col.items[i]
+      const reqParams: HeaderRow[] = (req.params || []).length > 0
+        ? req.params.map((p, j) => ({ id: j + 1, key: p.key, value: p.value }))
+        : [{ id: 1, key: '', value: '' }]
+      const reqHeaders = Object.fromEntries(
+        (req.headers || []).filter((h: any) => h.key.trim()).map((h: any) => [h.key, interpolate(h.value, envVars)])
+      )
+      const fullUrl = buildFullUrl(req.method, req.url, reqParams)
+      const reqBody = req.method !== 'GET' ? interpolate(req.body || '', envVars) : undefined
+      try {
+        const res = await api.apiDebug({ method: req.method, url: fullUrl, headers: reqHeaders, body: reqBody })
+        setCollRunner(prev => prev ? { ...prev, done: i + 1, results: [...prev.results, { name: req.name, method: req.method, url: fullUrl, status: res.status, duration: res.duration }] } : null)
+      } catch (err: any) {
+        setCollRunner(prev => prev ? { ...prev, done: i + 1, results: [...prev.results, { name: req.name, method: req.method, url: fullUrl, error: err.message }] } : null)
+      }
+    }
+    setCollRunner(prev => prev ? { ...prev, running: false } : null)
+  }
+
+  /** 生成代码片段 */
+  function generateCodeSnippet(lang: 'curl' | 'python' | 'fetch'): string {
+    const fullUrl = buildFullUrl(method, url, params)
+    const cleanHeaders = headers.filter(h => h.key.trim())
+    const currentBody = bodyContentRef.current || body
+    const interpolatedBody = method !== 'GET' ? interpolate(currentBody, envVars) : undefined
+    switch (lang) {
+      case 'curl': {
+        let cmd = `curl -X ${method} "${fullUrl}"`
+        for (const h of cleanHeaders) cmd += ` \\\n  -H '${h.key.trim()}: ${h.value}'`
+        if (interpolatedBody) cmd += ` \\\n  -d '${interpolatedBody.replace(/'/g, "\\'")}'`
+        return cmd
+      }
+      case 'python': {
+        let code = `import requests\n\nurl = "${fullUrl}"\n`
+        if (cleanHeaders.length > 0) code += `headers = {\n  ${cleanHeaders.map(h => `"${h.key.trim()}": "${h.value}"`).join(',\n  ')}\n}\n`
+        if (interpolatedBody) code += `data = '''${interpolatedBody}'''\n`
+        code += `\nresponse = requests.${method.toLowerCase()}(${['url', cleanHeaders.length > 0 ? 'headers=headers' : '', interpolatedBody ? 'data=data' : ''].filter(Boolean).join(', ')})\nprint(response.status_code, response.text)`
+        return code
+      }
+      case 'fetch': {
+        let code = `fetch("${fullUrl}", {\n  method: "${method}",\n`
+        if (cleanHeaders.length > 0) code += `  headers: {\n    ${cleanHeaders.map(h => `"${h.key.trim()}": "${h.value}"`).join(',\n    ')}\n  },\n`
+        if (interpolatedBody) code += `  body: \`${interpolatedBody}\`,\n`
+        code += `})\n  .then(r => r.text())\n  .then(console.log)`
+        return code
+      }
+    }
+  }
+
   // 保存到指定分组
   function saveToGroup(collId: string) {
     if (!url.trim()) return
@@ -944,13 +1176,13 @@ export function ApiDebugger() {
           id: Date.now().toString(), name: reqName,
           method, url: url.trim(),
           headers: cleanHeaders, params: cleanParams,
-          body, createdAt: new Date().toISOString(),
+          body, preScript, postScript, createdAt: new Date().toISOString(),
         }
         const updated = editingRequest
           ? prev.map(c => c.id === editingRequest.collId ? {
               ...c,
               items: c.id === collId
-                ? c.items.map(i => i.id === editingRequest.reqId ? { ...i, name: reqName, method, url: url.trim(), headers: cleanHeaders, params: cleanParams, body } : i)
+                ? c.items.map(i => i.id === editingRequest.reqId ? { ...i, name: reqName, method, url: url.trim(), headers: cleanHeaders, params: cleanParams, body, preScript, postScript } : i)
                 : c.items.filter(i => i.id !== editingRequest.reqId),
             } : c.id === collId ? { ...c, items: [...c.items, item] } : c) as Collection[]
           : prev.map(c => c.id === collId ? { ...c, items: [...c.items, item] } : c)
@@ -992,7 +1224,7 @@ export function ApiDebugger() {
           ...c,
           items: c.items.map(i => i.id === editingRequest.reqId ? {
             ...i, name: reqName, method, url: url.trim(),
-            headers: cleanHeaders, params: cleanParams, body,
+            headers: cleanHeaders, params: cleanParams, body, preScript, postScript,
           } : i),
         } : c)
         persistCollections(updated)
@@ -1030,6 +1262,8 @@ export function ApiDebugger() {
         ? req.headers.map((h, i) => ({ id: i + 1, key: h.key, value: h.value }))
         : [{ id: 1, key: '', value: '' }],
       body: req.body,
+      preScript: req.preScript || '',
+      postScript: req.postScript || '',
       response: null,
       editingRequest: { collId, reqId: req.id },
     })
@@ -1060,7 +1294,7 @@ export function ApiDebugger() {
       id: Date.now().toString(),
       name: '新建接口',
       method: 'POST', url: '',
-      headers: [], params: [], body: '',
+      headers: [], params: [], body: '', preScript: '', postScript: '',
       createdAt: new Date().toISOString(),
     }
     const updated = collections.map(c =>
@@ -1096,7 +1330,7 @@ export function ApiDebugger() {
               method: req.method || 'GET', url: rawUrl,
               headers,
               params: [],
-              body,
+              body, preScript: '', postScript: '',
               createdAt: new Date().toISOString(),
             }
             const colName = parentName || data.info?.name || '导入'
@@ -1138,14 +1372,14 @@ export function ApiDebugger() {
     return Object.entries(response.headers).sort(([a], [b]) => a.localeCompare(b))
   }, [response?.headers])
 
-  // 格式化响应体
+  // 格式化响应体（用于 Pretty/Raw 展示）
   const formattedBody = useMemo(() => {
     if (!response?.body) return ''
-    if (responseFormatted) {
+    if (responseViewMode === 'pretty') {
       try { return JSON.stringify(JSON.parse(response.body), null, 2) } catch { return response.body }
     }
     return response.body
-  }, [response?.body, responseFormatted])
+  }, [response?.body, responseViewMode])
 
   // 从响应头中提取 Cookies
   const responseCookies = useMemo(() => {
@@ -1593,16 +1827,16 @@ export function ApiDebugger() {
         </div>
       </div>
 
-      {/* Tabs: Headers / Body */}
+      {/* Tabs: Params / Headers / Body / Pre / Post */}
           {/* Tab bar */}
           <div className="flex border-b border-border/5 px-4 bg-surface-light/10">
-            {(['params', 'headers', 'body'] as TabKey[]).map(t => (
+            {(['params', 'headers', 'body', 'prescript', 'postscript'] as TabKey[]).map(t => (
               <button key={t}
                 onClick={() => setActiveTabKey(t)}
                 className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors
                   ${activeTabKey === t ? 'border-accent text-accent-light' : 'border-transparent text-muted hover:text-foreground'}`}
               >
-                {t === 'params' ? 'Params' : t === 'headers' ? 'Headers' : 'Body'}
+                {t === 'params' ? 'Params' : t === 'headers' ? 'Headers' : t === 'body' ? 'Body' : t === 'prescript' ? '前置脚本' : '后置脚本'}
                 {t === 'params' && params.filter(p => p.key.trim()).length > 0 && (
                   <span className="ml-1 text-[10px] text-accent-light">({params.filter(p => p.key.trim()).length})</span>
                 )}
@@ -1720,6 +1954,28 @@ export function ApiDebugger() {
             </div>
           )}
 
+          {/* 前置脚本编辑器 */}
+          {activeTabKey === 'prescript' && (
+            <div className="flex-1 flex flex-col overflow-hidden p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] text-muted uppercase tracking-wider">前置脚本</span>
+                <span className="text-[10px] text-muted/50">请求发送前执行 · env.set(key, value)</span>
+              </div>
+              <JsonEditor key={`pre-${editingRequest?.reqId ?? 'new'}`} value={preScript} onChange={setPreScript} />
+            </div>
+          )}
+
+          {/* 后置脚本编辑器 */}
+          {activeTabKey === 'postscript' && (
+            <div className="flex-1 flex flex-col overflow-hidden p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] text-muted uppercase tracking-wider">后置脚本</span>
+                <span className="text-[10px] text-muted/50">响应返回后执行 · response.json() / env.set(key, value)</span>
+              </div>
+              <JsonEditor key={`post-${editingRequest?.reqId ?? 'new'}`} value={postScript} onChange={setPostScript} />
+            </div>
+          )}
+
           {/* ── 响应区 (Postman 风格) ── */}
           <div className="border-t border-border/5 flex flex-col shrink-0" style={{ height: '42%' }}>
             {/* 状态栏 */}
@@ -1786,23 +2042,15 @@ export function ApiDebugger() {
                   )}
                 </button>
               ))}
-              {/* Body 子模式切换 (Pretty / Raw) */}
+              {/* Body 子模式切换 (Tree / Pretty / Raw) */}
               {responseTab === 'body' && response?.body && (
                 <div className="flex items-center gap-1 ml-auto">
-                  <button
-                    onClick={() => setResponseFormatted(true)}
-                    className={`px-2 py-1 rounded text-[10px] transition-colors
-                      ${responseFormatted ? 'bg-accent/20 text-accent-light' : 'text-muted hover:text-foreground hover:bg-hover/10'}`}
-                  >
-                    Pretty
-                  </button>
-                  <button
-                    onClick={() => setResponseFormatted(false)}
-                    className={`px-2 py-1 rounded text-[10px] transition-colors
-                      ${!responseFormatted ? 'bg-accent/20 text-accent-light' : 'text-muted hover:text-foreground hover:bg-hover/10'}`}
-                  >
-                    Raw
-                  </button>
+                  <button onClick={() => setResponseViewMode('tree')}
+                    className={`px-2 py-1 rounded text-[10px] transition-colors ${responseViewMode === 'tree' ? 'bg-accent/20 text-accent-light' : 'text-muted hover:text-foreground hover:bg-hover/10'}`}>Tree</button>
+                  <button onClick={() => setResponseViewMode('pretty')}
+                    className={`px-2 py-1 rounded text-[10px] transition-colors ${responseViewMode === 'pretty' ? 'bg-accent/20 text-accent-light' : 'text-muted hover:text-foreground hover:bg-hover/10'}`}>Pretty</button>
+                  <button onClick={() => setResponseViewMode('raw')}
+                    className={`px-2 py-1 rounded text-[10px] transition-colors ${responseViewMode === 'raw' ? 'bg-accent/20 text-accent-light' : 'text-muted hover:text-foreground hover:bg-hover/10'}`}>Raw</button>
                 </div>
               )}
             </div>
@@ -1825,6 +2073,12 @@ export function ApiDebugger() {
                         <p className="text-xs text-danger font-mono whitespace-pre-wrap break-all">{response.error}</p>
                       </div>
                     </div>
+                  ) : !response.body ? (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-xs text-muted">(空响应)</p>
+                    </div>
+                  ) : responseViewMode === 'tree' ? (
+                    <JsonTreeView value={response.body} onExtractVar={handleExtractVar} />
                   ) : (
                     <JsonEditor value={formattedBody || '(空响应)'} readOnly />
                   )}

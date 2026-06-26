@@ -191,6 +191,11 @@ body {
   animation: slideOutLeft 0.25s ease-in forwards;
 }
 
+/* 标签内容滑动切换 */
+.tab-slide-track {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 @keyframes particleOut {
   0%   { opacity: 1; filter: blur(0); transform: scale(1); }
   20%  { opacity: 0.9; filter: blur(1px); transform: scale(1.01); }
