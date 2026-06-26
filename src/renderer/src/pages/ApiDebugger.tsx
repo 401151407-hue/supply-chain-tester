@@ -1225,7 +1225,7 @@ export function ApiDebugger() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden" key={activeTabId}>
+        <div className="flex-1 flex flex-col overflow-hidden animate-tab-switch" key={activeTabId}>
           {/* 标签栏 */}
           <div className="px-2 py-0 flex items-end shrink-0">
             <div className="flex items-end gap-0.5 overflow-x-auto flex-1 min-w-0">
