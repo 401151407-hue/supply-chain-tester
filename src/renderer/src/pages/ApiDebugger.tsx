@@ -29,7 +29,6 @@ interface VarItem { id: string; key: string; value: string; comment: string }
 let cachedTabs: TabState[] | null = null
 let cachedActiveTabId: string | null = null
 let cachedHistory: HistoryItem[] | null = null
-let cachedProtocol: string | null = null
 let cachedExpandedIds: string[] | null = null
 
 interface TabState {
@@ -715,11 +714,25 @@ export function ApiDebugger() {
   const setResponse = (v: TabState['response']) => updateActiveTab({ response: v })
   const setEditingRequest = (v: TabState['editingRequest']) => updateActiveTab({ editingRequest: v })
 
-  const [protocol, setProtocol] = useState<string>(() => cachedProtocol || 'https://')
-  useEffect(() => { cachedProtocol = protocol }, [protocol])
   const bodyContentRef = useRef('')  // 实时同步最新 body，绕过 React 状态延迟
   const [activeTabKey, setActiveTabKey] = useState<TabKey>('params')
   const [isSending, setIsSending] = useState(false)
+
+  // 请求区 & 响应区 Tab 滑动方向
+  const REQ_ORDER: TabKey[] = ['params', 'headers', 'body', 'prescript', 'postscript']
+  const RES_ORDER = ['body', 'cookies', 'headers', 'request'] as const
+  const [reqDir, setReqDir] = useState<'left' | 'right'>('right')
+  const [resDir, setResDir] = useState<'left' | 'right'>('right')
+  const switchReqTab = (t: TabKey) => {
+    if (t === activeTabKey) return
+    setReqDir(REQ_ORDER.indexOf(t) > REQ_ORDER.indexOf(activeTabKey) ? 'right' : 'left')
+    setActiveTabKey(t)
+  }
+  const switchResTab = (t: typeof RES_ORDER[number]) => {
+    if (t === responseTab) return
+    setResDir(RES_ORDER.indexOf(t) > RES_ORDER.indexOf(responseTab) ? 'right' : 'left')
+    setResponseTab(t)
+  }
 
   const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'cookies' | 'request'>('body')
   const [sentRequest, setSentRequest] = useState<{
@@ -727,6 +740,123 @@ export function ApiDebugger() {
   } | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>(() => cachedHistory || [])
   useEffect(() => { cachedHistory = history }, [history])
+
+  // ── 后置脚本可视化提取 ──
+  const [postScriptMode, setPostScriptMode] = useState<'visual' | 'code'>('visual')
+  interface Extraction { id: string; path: string; varName: string }
+  const [extractions, setExtractions] = useState<Extraction[]>([])
+  const [savedFlash, setSavedFlash] = useState(false)
+  const [deletingExtId, setDeletingExtId] = useState<string | null>(null)
+  function addExtraction(path: string) {
+    const clean = path.replace(/^\./, '')
+    const varName = clean.replace(/\./g, '_')
+    if (extractions.some(e => e.path === clean)) return
+    setExtractions(prev => [...prev, { id: uid(), path: clean, varName }])
+  }
+  function updateExtractionVar(id: string, varName: string) {
+    setExtractions(prev => prev.map(e => e.id === id ? { ...e, varName } : e))
+  }
+  function removeExtraction(id: string) {
+    setDeletingExtId(id)
+    setTimeout(() => {
+      setExtractions(prev => prev.filter(e => e.id !== id))
+      setDeletingExtId(null)
+    }, 250)
+  }
+  function runExtractions() {
+    if (extractions.length === 0) return
+    const script = extractions.map(e => `env.set('${e.varName}', response.json().${e.path})`).join('\n')
+    // 移除旧的提取行（以 env.set 开头的），替换为新的，保留其他手写代码
+    const oldLines = postScript.split('\n').filter(line => !/^\s*env\.set\(/.test(line))
+    const combined = [...oldLines.filter(l => l.trim()), script].join('\n')
+    updateActiveTab({ postScript: combined })
+    setSavedFlash(true)
+    setTimeout(() => setSavedFlash(false), 1200)
+  }
+  /** 扫描 JSON 中所有叶子路径 */
+  function scanJsonPaths(obj: any, prefix = ''): string[] {
+    if (obj === null || obj === undefined) return []
+    if (typeof obj !== 'object' || obj instanceof Array) return [prefix || '(root)']
+    const paths: string[] = []
+    for (const key of Object.keys(obj)) {
+      const full = prefix ? `${prefix}.${key}` : key
+      const val = obj[key]
+      if (val !== null && typeof val === 'object' && !(val instanceof Array)) {
+        paths.push(...scanJsonPaths(val, full))
+      } else {
+        paths.push(full)
+      }
+    }
+    return paths
+  }
+  /** 一键提取顶层字段 */
+  function extractTopLevel() {
+    try {
+      const json = JSON.parse(response?.body || '{}')
+      if (typeof json !== 'object' || json === null) return
+      const keys = Object.keys(json)
+      keys.forEach(key => {
+        const val = json[key]
+        if (val !== null && typeof val === 'object') return // 跳过嵌套对象，用点选方式提取
+        addExtraction(key)
+      })
+      // 对嵌套对象也添加顶层路径
+      keys.forEach(key => {
+        const val = json[key]
+        if (val !== null && typeof val === 'object' && !(val instanceof Array)) {
+          addExtraction(key)
+        }
+      })
+    } catch { }
+  }
+  /** 一键提取所有叶子字段 */
+  function extractAllLeaves() {
+    try {
+      const json = JSON.parse(response?.body || '{}')
+      const paths = scanJsonPaths(json)
+      paths.forEach(p => addExtraction(p))
+    } catch { }
+  }
+  /** 生成动态提取脚本（运行时遍历 JSON 自动提取） */
+  function generateDynamicScript() {
+    const script = `// 动态提取：自动遍历响应JSON所有字段
+const json = response.json()
+function flatten(obj, prefix = '') {
+  for (const key of Object.keys(obj || {})) {
+    const fullKey = prefix ? prefix + '_' + key : key
+    const val = obj[key]
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      flatten(val, fullKey)
+    } else {
+      env.set(fullKey, String(val))
+    }
+  }
+}
+flatten(json)`
+    const combined = postScript.trim() ? `${postScript.trim()}\n${script}` : script
+    updateActiveTab({ postScript: combined })
+  }
+
+  // ── 请求/响应区拖拽调节高度 ──
+  const [resPanelRatio, setResPanelRatio] = useState(42) // 响应区高度百分比
+  const dragRef = useRef<{ startY: number; startRatio: number } | null>(null)
+  const centerPanelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current || !centerPanelRef.current) return
+      const rect = centerPanelRef.current.getBoundingClientRect()
+      const dy = dragRef.current.startY - e.clientY
+      const newRatio = Math.min(85, Math.max(15, dragRef.current.startRatio + (dy / rect.height) * 100))
+      setResPanelRatio(newRatio)
+    }
+    const onUp = () => { dragRef.current = null }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
 
   // ── 并发性能测试状态 ──
   const [showPerfPanel, setShowPerfPanel] = useState(false)
@@ -778,7 +908,7 @@ export function ApiDebugger() {
       }
 
       const trimmedUrl = url.trim()
-      const baseWithProtocol = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : protocol + trimmedUrl
+      const baseWithProtocol = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : 'http://' + trimmedUrl
       const urlWithoutQS = baseWithProtocol.replace(/\?.*$/, '')
       const activeParams = params.filter(p => p.key.trim())
       const qs = activeParams.map(p =>
@@ -998,7 +1128,7 @@ export function ApiDebugger() {
       const api = (window as any).supplyChainTester
       const trimmedUrl = url.trim()
       // 构建完整 URL：基础路径 + Query Params（忽略 URL 中已有的 ?query）
-      const baseWithProtocol = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : protocol + trimmedUrl
+      const baseWithProtocol = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : 'http://' + trimmedUrl
       const urlWithoutQS = baseWithProtocol.replace(/\?.*$/, '')
       const activeParams = params.filter(p => p.key.trim())
       const qs = activeParams.map(p =>
@@ -1047,15 +1177,35 @@ export function ApiDebugger() {
         try {
           let parsedBody: any = undefined
           try { parsedBody = JSON.parse(res.body) } catch {}
-          const sandbox = {
-            response: { status: res.status, headers: res.headers || {}, body: res.body, json: () => parsedBody },
-            env: { get: (k: string) => envVars.find(v => v.key === k)?.value ?? '', set: (k: string, v: string) => {
-              setEnvVars(prev => { const exists = prev.find(x => x.key === k); const updated = exists ? prev.map(x => x.key === k ? { ...x, value: v } : x) : [...prev, { id: uid(), key: k, value: v, comment: '' }]; persistVars(env, updated); return updated })
-            }},
-            console: { log: (...args: any[]) => console.log('[后置脚本]', ...args) },
+          const extractedVars: { key: string; value: string }[] = []
+          // 直接解析 env.set('key', response.json().path) 模式并执行提取
+          const setRegex = /env\.set\s*\(\s*['"]([^'"]+)['"]\s*,\s*response\.json\(\)\.(.+?)\s*\)/g
+          let match: RegExpExecArray | null
+          while ((match = setRegex.exec(postScript)) !== null) {
+            const varName = match[1]
+            const path = match[2]
+            try {
+              const val = path.split('.').reduce((obj: any, k) => obj?.[k], parsedBody)
+              if (val !== undefined && val !== null) {
+                extractedVars.push({ key: varName, value: String(val) })
+              }
+            } catch { }
           }
-          new Function('sandbox', `with(sandbox) { ${postScript} }`)(sandbox)
-        } catch (err: any) { console.error('[后置脚本] 执行失败:', err.message) }
+          if (extractedVars.length > 0) {
+            setEnvVars(prev => {
+              const merged = [...prev]
+              extractedVars.forEach(({ key, value }) => {
+                const idx = merged.findIndex(v => v.key === key)
+                if (idx >= 0) merged[idx] = { ...merged[idx], value }
+                else merged.push({ id: uid(), key, value, comment: '' })
+              })
+              persistVars(env, merged)
+              return merged
+            })
+          }
+        } catch (err: any) {
+          setResponse({ ...res, error: `后置脚本: ${err.message}` })
+        }
       }
       setHistory(prev => [{
         method, url: fullUrl, status: res.status,
@@ -1093,7 +1243,7 @@ export function ApiDebugger() {
   /** 构建完整请求 URL */
   function buildFullUrl(reqMethod: string, reqUrl: string, reqParams: HeaderRow[]): string {
     const trimmed = reqUrl.trim()
-    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : protocol + trimmed
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : 'http://' + trimmed
     const base = withProto.replace(/\?.*$/, '')
     const activeParams = reqParams.filter(p => p.key.trim())
     const qs = activeParams.map(p =>
@@ -1459,7 +1609,7 @@ export function ApiDebugger() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden animate-tab-switch" key={activeTabId}>
+        <div className="flex-1 flex flex-col overflow-hidden animate-tab-switch" key={activeTabId} ref={centerPanelRef}>
           {/* 标签栏 */}
           <div className="px-2 py-0 flex items-end shrink-0">
             <div className="flex items-end gap-0.5 overflow-x-auto flex-1 min-w-0">
@@ -1511,33 +1661,21 @@ export function ApiDebugger() {
             <select
               value={method}
               onChange={e => setMethod(e.target.value)}
-              className={`h-9 rounded-l-lg pl-3 pr-7 text-xs font-bold outline-none
-                         border border-border/5 focus:border-accent/50
-                         appearance-none cursor-pointer
-                         ${method === 'GET' ? 'bg-success/10 text-success' :
-                           method === 'POST' ? 'bg-warning/10 text-warning' :
-                           method === 'PUT' ? 'bg-blue-500/10 text-blue-400' :
-                           method === 'DELETE' ? 'bg-danger/10 text-danger' :
-                           'bg-accent/10 text-accent-light'}`}
+              className={`h-9 rounded-lg pl-3 pr-7 text-xs font-bold outline-none
+                         bg-surface border border-border/5 focus:border-accent/50
+                         appearance-none cursor-pointer transition-colors
+                         ${method === 'GET' ? '!bg-success/10 text-success !border-success/30' :
+                           method === 'POST' ? '!bg-warning/10 text-warning !border-warning/30' :
+                           method === 'PUT' ? '!bg-blue-500/10 text-blue-400 !border-blue-500/30' :
+                           method === 'DELETE' ? '!bg-danger/10 text-danger !border-danger/30' :
+                           '!bg-accent/10 text-accent-light !border-accent/30'}`}
             >
               {METHODS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
             <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           </div>
           {/* URL */}
-          <div className="relative flex items-center flex-1">
-            <select
-              value={protocol}
-              onChange={e => setProtocol(e.target.value)}
-              className="h-9 pl-3 pr-6 text-xs font-mono outline-none
-                         bg-surface border-y border-l border-border/5 focus:border-accent/50
-                         appearance-none cursor-pointer text-muted shrink-0 rounded-l-lg"
-            >
-              <option value="https://">https://</option>
-              <option value="http://">http://</option>
-            </select>
-            <ChevronDown size={10} className="absolute left-[76px] top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-            <div className="flex-1 h-9 relative rounded-r-lg border border-border/5 focus-within:border-accent/50 overflow-hidden bg-surface">
+          <div className="flex-1 h-9 relative rounded-lg border border-border/5 focus-within:border-accent/50 overflow-hidden bg-surface">
               <div
                 className="absolute inset-0 pointer-events-none flex items-center px-3 text-sm font-mono whitespace-pre overflow-hidden"
                 aria-hidden="true"
@@ -1556,7 +1694,6 @@ export function ApiDebugger() {
                 style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
               />
             </div>
-          </div>
           {/* Send */}
           <button
             onClick={handleSend}
@@ -1832,11 +1969,11 @@ export function ApiDebugger() {
           <div className="flex border-b border-border/5 px-4 bg-surface-light/10">
             {(['params', 'headers', 'body', 'prescript', 'postscript'] as TabKey[]).map(t => (
               <button key={t}
-                onClick={() => setActiveTabKey(t)}
+                onClick={() => switchReqTab(t)}
                 className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors
                   ${activeTabKey === t ? 'border-accent text-accent-light' : 'border-transparent text-muted hover:text-foreground'}`}
               >
-                {t === 'params' ? 'Params' : t === 'headers' ? 'Headers' : t === 'body' ? 'Body' : t === 'prescript' ? '前置脚本' : '后置脚本'}
+                {t === 'params' ? 'Params' : t === 'headers' ? 'Headers' : t === 'body' ? 'Body' : t === 'prescript' ? '前置脚本' : '提取变量'}
                 {t === 'params' && params.filter(p => p.key.trim()).length > 0 && (
                   <span className="ml-1 text-[10px] text-accent-light">({params.filter(p => p.key.trim()).length})</span>
                 )}
@@ -1844,140 +1981,213 @@ export function ApiDebugger() {
             ))}
           </div>
 
-          {/* Params 编辑 */}
-          {activeTabKey === 'params' && (
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-muted uppercase tracking-wider">Query Params</span>
-                <span className="text-[10px] text-muted">URL 自动同步</span>
-              </div>
-              {params.map(p => (
-                <div key={p.id} className="flex gap-1 items-center">
-                  <div className="w-48 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
-                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
-                      <span className={p.key ? '' : 'text-muted/30'}>
-                        {p.key ? renderHighlightedText(p.key) : 'Key'}
-                      </span>
-                    </div>
-                    <input value={p.key} onChange={e => updateParam(p.id, 'key', e.target.value)}
-                      placeholder="Key"
-                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
-                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
-                    />
+          {/* 请求区滑动面板 */}
+          <div className="flex-1 overflow-hidden">
+            <div key={`req-${activeTabKey}`} className={'h-full w-full ' + (reqDir === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left')}>
+              {activeTabKey === 'params' && (
+                <div className="h-full overflow-y-auto p-3 space-y-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] text-muted uppercase tracking-wider">Query Params</span>
+                    <span className="text-[10px] text-muted">URL 自动同步</span>
                   </div>
-                  <div className="flex-1 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
-                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
-                      <span className={p.value ? '' : 'text-muted/30'}>
-                        {p.value ? renderHighlightedText(p.value) : 'Value'}
-                      </span>
+                  {params.map(p => (
+                    <div key={p.id} className="flex gap-1 items-center">
+                      <div className="w-48 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                        <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                          <span className={p.key ? '' : 'text-muted/30'}>
+                            {p.key ? renderHighlightedText(p.key) : 'Key'}
+                          </span>
+                        </div>
+                        <input value={p.key} onChange={e => updateParam(p.id, 'key', e.target.value)}
+                          placeholder="Key"
+                          className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                          style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                        />
+                      </div>
+                      <div className="flex-1 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                        <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                          <span className={p.value ? '' : 'text-muted/30'}>
+                            {p.value ? renderHighlightedText(p.value) : 'Value'}
+                          </span>
+                        </div>
+                        <input value={p.value} onChange={e => updateParam(p.id, 'value', e.target.value)}
+                          placeholder="Value"
+                          className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                          style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                        />
+                      </div>
+                      <button onClick={() => removeParam(p.id)}
+                        className="p-1 rounded hover:bg-red-500/20 text-muted hover:text-red-400">
+                        <Trash2 size={12} />
+                      </button>
                     </div>
-                    <input value={p.value} onChange={e => updateParam(p.id, 'value', e.target.value)}
-                      placeholder="Value"
-                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
-                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
-                    />
-                  </div>
-                  <button onClick={() => removeParam(p.id)}
-                    className="p-1 rounded hover:bg-red-500/20 text-muted hover:text-red-400">
-                    <Trash2 size={12} />
+                  ))}
+                  <button onClick={addParam}
+                    className="flex items-center gap-1 text-xs text-muted hover:text-accent-light transition-colors pt-1">
+                    <Plus size={12} /> 添加 Param
                   </button>
                 </div>
-              ))}
-              <button onClick={addParam}
-                className="flex items-center gap-1 text-xs text-muted hover:text-accent-light transition-colors pt-1">
-                <Plus size={12} /> 添加 Param
-              </button>
-            </div>
-          )}
+              )}
 
-          {/* Headers 编辑 */}
-          {activeTabKey === 'headers' && (
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
-              {headers.map(h => (
-                <div key={h.id} className="flex gap-1 items-center">
-                  <div className="w-48 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
-                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
-                      <span className={h.key ? '' : 'text-muted/30'}>
-                        {h.key ? renderHighlightedText(h.key) : 'Key'}
-                      </span>
+              {activeTabKey === 'headers' && (
+                <div className="h-full overflow-y-auto p-3 space-y-1">
+                  {headers.map(h => (
+                    <div key={h.id} className="flex gap-1 items-center">
+                      <div className="w-48 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                        <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                          <span className={h.key ? '' : 'text-muted/30'}>
+                            {h.key ? renderHighlightedText(h.key) : 'Key'}
+                          </span>
+                        </div>
+                        <input value={h.key} onChange={e => updateHeader(h.id, 'key', e.target.value)}
+                          placeholder="Key"
+                          className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                          style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                        />
+                      </div>
+                      <div className="flex-1 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
+                        <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
+                          <span className={h.value ? '' : 'text-muted/30'}>
+                            {h.value ? renderHighlightedText(h.value) : 'Value'}
+                          </span>
+                        </div>
+                        <input value={h.value} onChange={e => updateHeader(h.id, 'value', e.target.value)}
+                          placeholder="Value"
+                          className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
+                          style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
+                        />
+                      </div>
+                      <button onClick={() => removeHeader(h.id)}
+                        className="p-1 rounded hover:bg-red-500/20 text-muted hover:text-red-400">
+                        <Trash2 size={12} />
+                      </button>
                     </div>
-                    <input value={h.key} onChange={e => updateHeader(h.id, 'key', e.target.value)}
-                      placeholder="Key"
-                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
-                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
-                    />
-                  </div>
-                  <div className="flex-1 h-7 relative rounded overflow-hidden bg-surface border border-border/5 focus-within:border-accent/50">
-                    <div className="absolute inset-0 pointer-events-none flex items-center px-2 text-xs font-mono whitespace-pre overflow-hidden" aria-hidden="true">
-                      <span className={h.value ? '' : 'text-muted/30'}>
-                        {h.value ? renderHighlightedText(h.value) : 'Value'}
-                      </span>
-                    </div>
-                    <input value={h.value} onChange={e => updateHeader(h.id, 'value', e.target.value)}
-                      placeholder="Value"
-                      className="w-full h-full px-2 text-xs font-mono outline-none bg-transparent placeholder:text-transparent"
-                      style={{ color: 'transparent', caretColor: 'rgb(var(--color-foreground))' }}
-                    />
-                  </div>
-                  <button onClick={() => removeHeader(h.id)}
-                    className="p-1 rounded hover:bg-red-500/20 text-muted hover:text-red-400">
-                    <Trash2 size={12} />
+                  ))}
+                  <button onClick={addHeader}
+                    className="flex items-center gap-1 text-xs text-muted hover:text-accent-light transition-colors pt-1">
+                    <Plus size={12} /> 添加 Header
                   </button>
                 </div>
-              ))}
-              <button onClick={addHeader}
-                className="flex items-center gap-1 text-xs text-muted hover:text-accent-light transition-colors pt-1">
-                <Plus size={12} /> 添加 Header
-              </button>
-            </div>
-          )}
+              )}
 
-          {/* Body 编辑 */}
-          {activeTabKey === 'body' && (
-            <div className="flex-1 flex flex-col overflow-hidden p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-muted uppercase tracking-wider">Body</span>
-                <button
-                  onClick={() => {
-                    try {
-                      const current = bodyContentRef.current
-                      const formatted = JSON.stringify(JSON.parse(current), null, 2)
-                      setBody(formatted)
-                      bodyContentRef.current = formatted
-                    } catch { }
-                  }}
-                  className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted hover:text-foreground hover:bg-hover/10 transition-colors">
-                  <Sparkles size={11} /> 美化
-                </button>
-              </div>
-              <JsonEditor key={editingRequest?.reqId ?? 'new'} value={body} onChange={setBody} contentRef={bodyContentRef} />
-            </div>
-          )}
+              {activeTabKey === 'body' && (
+                <div className="h-full flex flex-col overflow-hidden p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] text-muted uppercase tracking-wider">Body</span>
+                    <button
+                      onClick={() => {
+                        try {
+                          const current = bodyContentRef.current
+                          const formatted = JSON.stringify(JSON.parse(current), null, 2)
+                          setBody(formatted)
+                          bodyContentRef.current = formatted
+                        } catch { }
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-muted hover:text-foreground hover:bg-hover/10 transition-colors">
+                      <Sparkles size={11} /> 美化
+                    </button>
+                  </div>
+                  <JsonEditor key={editingRequest?.reqId ?? 'new'} value={body} onChange={setBody} contentRef={bodyContentRef} />
+                </div>
+              )}
 
-          {/* 前置脚本编辑器 */}
-          {activeTabKey === 'prescript' && (
-            <div className="flex-1 flex flex-col overflow-hidden p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-muted uppercase tracking-wider">前置脚本</span>
-                <span className="text-[10px] text-muted/50">请求发送前执行 · env.set(key, value)</span>
-              </div>
-              <JsonEditor key={`pre-${editingRequest?.reqId ?? 'new'}`} value={preScript} onChange={setPreScript} />
-            </div>
-          )}
+              {activeTabKey === 'prescript' && (
+                <div className="h-full flex flex-col overflow-hidden p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] text-muted uppercase tracking-wider">前置脚本</span>
+                    <span className="text-[10px] text-muted/50">请求发送前执行 · env.set(key, value)</span>
+                  </div>
+                  <JsonEditor key={`pre-${editingRequest?.reqId ?? 'new'}`} value={preScript} onChange={setPreScript} />
+                </div>
+              )}
 
-          {/* 后置脚本编辑器 */}
-          {activeTabKey === 'postscript' && (
-            <div className="flex-1 flex flex-col overflow-hidden p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-muted uppercase tracking-wider">后置脚本</span>
-                <span className="text-[10px] text-muted/50">响应返回后执行 · response.json() / env.set(key, value)</span>
-              </div>
-              <JsonEditor key={`post-${editingRequest?.reqId ?? 'new'}`} value={postScript} onChange={setPostScript} />
+              {activeTabKey === 'postscript' && (
+                <div className="h-full flex flex-col min-h-0 overflow-hidden p-3">
+                  <div className="flex-1 flex gap-3 min-h-0">
+                    {/* 左侧：响应 JSON 树 */}
+                    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+                      {response?.body ? (
+                        <>
+                          <div className="text-[10px] text-muted/60 mb-1 shrink-0 flex items-center gap-1">
+                            <Variable size={10} />
+                            点击字段值提取变量
+                          </div>
+                          <div className="flex-1 min-h-0 border border-border/5 rounded-lg overflow-hidden bg-surface/50">
+                            <JsonTreeView value={response.body} onExtractVar={(path) => addExtraction(path)} />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center">
+                          <div className="text-center text-muted">
+                            <Send size={20} className="mx-auto mb-1.5 opacity-10" />
+                            <p className="text-[11px]">发送请求后，在此点击响应字段即可提取变量</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* 右侧：已提取变量 — 始终展示 */}
+                    <div className="w-56 shrink-0 flex flex-col min-h-0">
+                      <div className="flex items-center justify-between mb-1 shrink-0">
+                        <span className="text-[10px] text-muted uppercase tracking-wider">
+                          已提取 ({extractions.length})
+                        </span>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setExtractions([]); updateActiveTab({ postScript: '' }) }}
+                            className="px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-foreground hover:bg-hover/10 transition-colors"
+                            title="清空提取列表和后置脚本">
+                            清空
+                          </button>
+                          <button onClick={runExtractions}
+                            disabled={extractions.length === 0 || savedFlash}
+                            className={`flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-medium transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed
+                              ${savedFlash ? 'bg-success/20 text-success scale-105' : 'bg-accent/20 hover:bg-accent/30 text-accent-light'}`}>
+                            {savedFlash ? <CheckCircle2 size={10} /> : <Sparkles size={10} />}
+                            {savedFlash ? '已保存' : '保存'}
+                          </button>
+                        </div>
+                      </div>
+                      {extractions.length > 0 ? (
+                        <div className="flex-1 overflow-y-auto space-y-1">
+                          {extractions.map(e => (
+                            <div key={e.id} className={`flex items-center gap-1.5 bg-surface rounded-lg px-2 py-1.5 border border-border/5 ${deletingExtId === e.id ? 'animate-slide-out-left' : ''}`}>
+                              <span className="text-[10px] font-mono text-muted truncate flex-1" title={e.path}>{e.path}</span>
+                              <span className="text-[9px] text-muted">→</span>
+                              <input
+                                value={e.varName}
+                                onChange={ev => updateExtractionVar(e.id, ev.target.value)}
+                                className="w-20 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/5 bg-surface-light outline-none focus:border-accent/50 text-accent-light text-center"
+                              />
+                              <button onClick={() => removeExtraction(e.id)}
+                                className="p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 shrink-0">
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-muted/50 py-2">点击左侧 JSON 字段值即可提取</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* ── 拖拽分隔条 ── */}
+          <div
+            className="h-1.5 shrink-0 cursor-row-resize hover:bg-accent/20 active:bg-accent/30 transition-colors group flex items-center justify-center border-t border-border/5"
+            onMouseDown={e => {
+              if (!centerPanelRef.current) return
+              dragRef.current = { startY: e.clientY, startRatio: resPanelRatio }
+              e.preventDefault()
+            }}
+          >
+            <div className="w-8 h-0.5 rounded-full bg-border/30 group-hover:bg-accent/50 transition-colors" />
+          </div>
 
           {/* ── 响应区 (Postman 风格) ── */}
-          <div className="border-t border-border/5 flex flex-col shrink-0" style={{ height: '42%' }}>
+          <div className="flex flex-col shrink-0 border-t border-border/5" style={{ height: `${resPanelRatio}%` }}>
             {/* 状态栏 */}
             <div className="flex items-center gap-3 px-4 py-1.5 bg-surface-light/20 border-b border-border/5 shrink-0">
               <span className="text-[11px] font-semibold text-foreground tracking-wide">Response</span>
@@ -2028,7 +2238,7 @@ export function ApiDebugger() {
               {(['body', 'cookies', 'headers', 'request'] as const).map(t => (
                 <button
                   key={t}
-                  onClick={() => setResponseTab(t)}
+                  onClick={() => switchResTab(t)}
                   className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium border-b-2 transition-colors
                     ${responseTab === t ? 'border-accent text-accent-light' : 'border-transparent text-muted hover:text-foreground'}`}
                 >
@@ -2055,9 +2265,10 @@ export function ApiDebugger() {
               )}
             </div>
 
-            {/* 响应内容区 */}
+            {/* 响应内容区 - 滑动 */}
             <div className="flex-1 overflow-hidden">
-              {!response ? (
+              <div key={`res-${responseTab}`} className={'h-full w-full ' + (resDir === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left')}>
+                {!response ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center text-muted">
                     <Send size={24} className="mx-auto mb-2 opacity-15" />
@@ -2219,6 +2430,7 @@ export function ApiDebugger() {
                   )}
                 </div>
               )}
+              </div>
             </div>
           </div>
         </div>
@@ -2495,8 +2707,6 @@ curl -X POST https://api.example.com/users -H "Content-Type: application/json" -
                 const parsed = parseCurl(textarea.value)
                 if (!parsed) { alert('无法解析 cURL 命令'); return }
                 setUrl(parsed.url.replace(/^https?:\/\//, ''))
-                if (parsed.url.startsWith('https://')) setProtocol('https://')
-                else if (parsed.url.startsWith('http://')) setProtocol('http://')
                 setMethod(parsed.method)
                 const h = parsed.headers.map((h, i) => ({ id: i + 1, key: h.key, value: h.value }))
                 if (h.length > 0) updateActiveTab({ headers: h })
