@@ -11,7 +11,7 @@ import { AIAssistant } from './components/AIAssistant'
 import { useAppStore } from './store'
 
 export default function App() {
-  const { activeTab, setTestCases, setReports, loadAIConfig, theme, scriptParams, selectedSubProduct } = useAppStore()
+  const { activeTab, setTestCases, setReports, loadAIConfig, theme, scriptParams, selectedSubProduct, navKey } = useAppStore()
   const [showAISettings, setShowAISettings] = useState(false)
 
   // 同步主题 class 到 html 元素
@@ -53,7 +53,7 @@ export default function App() {
       case 'huoerong':
       case 'zhangerong':
       case 'piaoerong':
-        return <ProductPage product={activeTab} subProduct={subProduct ?? undefined} />
+        return <ProductPage key={navKey} product={activeTab} subProduct={subProduct ?? undefined} />
       case 'script':
         return scriptParams ? (
           <ScriptRunner scriptPath={scriptParams.scriptPath} scriptName={`${scriptParams.subProduct} - ${scriptParams.scriptName}`} vars={scriptParams.vars} />
@@ -74,7 +74,7 @@ export default function App() {
   return (
     <div className="flex h-full">
       <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
-      <main className="flex-1 overflow-hidden">
+      <main key={navKey} className="flex-1 overflow-hidden animate-fade-in">
         {renderContent()}
       </main>
       {showAISettings && (
