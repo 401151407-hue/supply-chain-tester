@@ -1000,6 +1000,7 @@ flatten(json)`
   const [showSavePicker, setShowSavePicker] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(cachedExpandedIds || []))
   useEffect(() => { cachedExpandedIds = [...expandedIds] }, [expandedIds])
   const [renamingCollId, setRenamingCollId] = useState<string | null>(null)
@@ -2645,36 +2646,47 @@ flatten(json)`
           )}
           </div>
 
-          {/* 历史记录 */}
-          <div className="px-3 py-2 text-[10px] text-muted uppercase tracking-wider border-t border-border/5 mt-1">请求历史</div>
-          {history.length === 0 ? (
-            <p className="px-3 text-xs text-muted">暂无记录</p>
-          ) : (
-            history.map((h, i) => (
-              <button key={i}
-                onClick={() => { setMethod(h.method); setUrl(h.url) }}
-                className="w-full text-left px-3 py-2 hover:bg-hover/5 border-b border-border/5 last:border-0 transition-colors duration-150 animate-fade-in"
-                style={{ animationDelay: `${i * 30}ms` }}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-mono font-bold px-1 rounded
-                    ${h.method === 'GET' ? 'text-success' : h.method === 'POST' ? 'text-warning' :
-                      h.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
-                    {h.method}
-                  </span>
-                  <span className={`text-[10px] font-mono font-bold ml-auto
-                    ${h.status && h.status < 300 ? 'text-success' : h.status && h.status < 400 ? 'text-warning' : 'text-danger'}`}>
-                    {h.status || 'ERR'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted truncate mt-0.5">{h.url}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] text-muted">{h.time}</span>
-                  {h.duration != null && <span className="text-[10px] text-muted">{h.duration}ms</span>}
-                </div>
-              </button>
-            ))
-          )}
+          {/* 历史记录 - 可折叠 */}
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] text-muted uppercase tracking-wider border-t border-border/5 mt-1 hover:text-foreground transition-colors"
+          >
+            <span>请求历史{history.length > 0 ? ` (${history.length})` : ''}</span>
+            <ChevronDown size={12} className={`transition-transform duration-200 ${showHistory ? 'rotate-180' : ''}`} />
+          </button>
+          <div
+            className="overflow-hidden transition-all duration-300 ease-out"
+            style={{ maxHeight: showHistory ? '500px' : '0px', opacity: showHistory ? 1 : 0 }}
+          >
+            {history.length === 0 ? (
+              <p className="px-3 text-xs text-muted">暂无记录</p>
+            ) : (
+              history.map((h, i) => (
+                <button key={i}
+                  onClick={() => { setMethod(h.method); setUrl(h.url) }}
+                  className="w-full text-left px-3 py-2 hover:bg-hover/5 border-b border-border/5 last:border-0 transition-colors duration-150 animate-fade-in"
+                  style={{ animationDelay: `${i * 30}ms` }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-mono font-bold px-1 rounded
+                      ${h.method === 'GET' ? 'text-success' : h.method === 'POST' ? 'text-warning' :
+                        h.method === 'DELETE' ? 'text-danger' : 'text-accent-light'}`}>
+                      {h.method}
+                    </span>
+                    <span className={`text-[10px] font-mono font-bold ml-auto
+                      ${h.status && h.status < 300 ? 'text-success' : h.status && h.status < 400 ? 'text-warning' : 'text-danger'}`}>
+                      {h.status || 'ERR'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted truncate mt-0.5">{h.url}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] text-muted">{h.time}</span>
+                    {h.duration != null && <span className="text-[10px] text-muted">{h.duration}ms</span>}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
         </aside>
       </div>
 
