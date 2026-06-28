@@ -396,17 +396,33 @@ function registerIpcHandlers(): void {
     if (runningProc) { runningProc.kill(); runningProc = null }
     return new Promise<{ ok: boolean; output: string }>((resolve) => {
       const { dirname } = require('path')
+      const { readFileSync } = require('fs')
       const pythonPath = getPythonPath()
       const scriptsDir = getScriptsDir()
       const fullScriptPath = join(dirname(scriptsDir), scriptPath)
-      // 注入变量到 Python 全局作用域，并将 env 作为命令行参数传递
       const envArg = vars?.env || vars?.current_env || ''
+
+      // 读取原始脚本，将用户填写变量的值替换掉脚本中的默认值
+      let scriptContent = readFileSync(fullScriptPath, 'utf-8')
+      if (vars) {
+        for (const [k, v] of Object.entries(vars)) {
+          if (k === 'env' || k === 'current_env') continue
+          const userVal = v != null ? String(v) : ''
+          // 替换脚本中的赋值语句：var = 'xxx' 或 var = "xxx"，后面可能有 # 注释
+          const re = new RegExp(
+            `(^|\\n)(\\s*)${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=\\s*(["']).*?\\3(\\s*#.*)?(\\r?\\n|$)`,
+            'gm'
+          )
+          scriptContent = scriptContent.replace(re, `$1$2${k} = ${JSON.stringify(userVal)}$4$5`)
+        }
+      }
+
       const varLines = vars ? Object.entries(vars)
-        .filter(([k]) => k !== 'env')
+        .filter(([k]) => k !== 'env' && k !== 'current_env' && !new RegExp(`(^|\\n)\\s*${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=`).test(scriptContent))
         .map(([k, v]) => `${k} = ${JSON.stringify(v != null ? v : '')}`)
         .join('\n') + '\n' : ''
       const argvLine = envArg ? `sys.argv = ['${fullScriptPath.replace(/\\/g, '\\\\')}', '${envArg}']\n` : ''
-      const preamble = `import sys\nsys.path.insert(0, r"${scriptsDir}")\n__file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"\n${argvLine}${varLines}exec(open(r"${fullScriptPath}", encoding="utf-8").read())`
+      const preamble = `import sys\nsys.path.insert(0, r"${scriptsDir}")\n__file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"\n${argvLine}${varLines}exec(${JSON.stringify(scriptContent)})`
 
       // 将 preamble 写入脚本目录下的临时 .py 文件执行
       const { writeFileSync, unlinkSync } = require('fs')

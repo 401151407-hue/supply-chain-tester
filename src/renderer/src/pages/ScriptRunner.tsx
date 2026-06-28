@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { Play, Loader2, Terminal, FileCode, AlertTriangle, ExternalLink, CheckCircle2, ArrowLeft, Square } from 'lucide-react'
 import { useAppStore } from '../store'
+import { highlightOutput } from '../utils/highlight'
 
 interface ScriptRunnerProps {
   scriptPath: string
@@ -20,8 +21,31 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
   const [pythonHint, setPythonHint] = useState<string>('')
   const [basePath, setBasePath] = useState<string>('')
   const [clearing, setClearing] = useState(false)
+  const [knownKeys, setKnownKeys] = useState<string[]>([])
   const outputRef = useRef('')
   const sep = (window as any).supplyChainTester?.pathSep ?? '\\'
+
+  // 解析当前脚本的可配置变量名，用于输出高亮
+  useEffect(() => {
+    const api = (window as any).supplyChainTester
+    if (api?.parseScriptVars) {
+      api.parseScriptVars(scriptPath).then((parsed: any[]) => {
+        if (Array.isArray(parsed)) {
+          const keys = parsed
+            .filter((v: any) => v.key && v.key !== 'current_env')
+            .map((v: any) => v.key as string)
+          setKnownKeys(keys)
+        }
+      }).catch(() => {})
+    }
+  }, [scriptPath])
+
+  // 对输出做高亮处理
+  const varValues = Object.entries(vars || {})
+    .filter(([k]) => k !== 'env' && k !== 'current_env')
+    .map(([, v]) => v)
+    .filter(Boolean) as string[]
+  const highlightedHtml = output ? highlightOutput(output, knownKeys, varValues) : ''
 
   useEffect(() => {
     checkPython()
@@ -304,9 +328,12 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
                 清空
               </button>
             </div>
-            <pre className={`flex-1 overflow-y-auto p-4 text-sm font-mono text-foreground whitespace-pre-wrap break-all overflow-x-auto ${clearing ? 'animate-particle-out' : ''}`}>
-              {output || (isRunning ? '等待输出...' : '')}
-            </pre>
+            <pre
+              className={`flex-1 overflow-y-auto p-4 text-sm font-mono text-foreground whitespace-pre-wrap break-all overflow-x-auto ${clearing ? 'animate-particle-out' : ''}`}
+              dangerouslySetInnerHTML={{
+                __html: highlightedHtml || (isRunning ? '<span style="color:rgba(255,255,255,0.4)">等待输出...</span>' : '')
+              }}
+            />
           </div>
         )}
       </div>

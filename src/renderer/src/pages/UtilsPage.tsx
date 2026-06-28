@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
 import { useAppStore } from '../store'
 import { Wrench, Loader2, Play, Square, Terminal, Trash2, Search, Database, Eraser, Download, HelpCircle } from 'lucide-react'
+import { highlightOutput } from '../utils/highlight'
 
 interface ScriptItem {
   name: string
@@ -29,6 +30,14 @@ export function UtilsPage() {
 
   // 清空动画
   const [clearingOutput, setClearingOutput] = useState(false)
+
+  // 输出高亮
+  const highlightedHtml = useMemo(() => {
+    if (!output) return ''
+    // 收集工具页用户可能填的变量值
+    const vals = [projectId, certNo, amount, multiFunc, ...Object.values(globalVars)].filter(v => v && v.length >= 2)
+    return highlightOutput(output, [], vals)
+  }, [output, projectId, certNo, amount, multiFunc, globalVars])
 
   // 发起方式弹窗
   const [showSubmitterDialog, setShowSubmitterDialog] = useState(false)
@@ -456,9 +465,13 @@ export function UtilsPage() {
                 </button>
               </div>
             </div>
-            <div ref={outputContainerRef} className={`flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all text-muted ${clearingOutput ? 'animate-particle-out' : ''}`}>
-              {output || (isRunning ? '等待输出...' : '无输出')}
-            </div>
+            <div
+              ref={outputContainerRef}
+              className={`flex-1 overflow-y-auto p-4 font-mono text-xs text-foreground leading-relaxed whitespace-pre-wrap break-all ${clearingOutput ? 'animate-particle-out' : ''}`}
+              dangerouslySetInnerHTML={{
+                __html: highlightedHtml || (isRunning ? '<span style="color:rgba(255,255,255,0.4)">等待输出...</span>' : '<span style="color:rgba(255,255,255,0.4)">无输出</span>')
+              }}
+            />
           </div>
       </div>
 

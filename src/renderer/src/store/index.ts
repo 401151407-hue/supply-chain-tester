@@ -27,6 +27,11 @@ interface AppState {
   scriptParams: { product: string; subProduct: string; scriptName: string; scriptPath: string; vars: Record<string, string> } | null
   openScript: (product: string, subProduct: string, scriptName: string, scriptPath: string, vars?: Record<string, string>) => void
 
+  // 产品页变量值持久化（key: "product:subProduct" 或 "product:"）
+  productVarValues: Record<string, Record<string, string>>
+  setProductVarValues: (pageKey: string, values: Record<string, string>) => void
+  clearProductVarValues: (pageKey?: string) => void
+
   // 脚本运行状态（key 为 scriptPath，跨 tab 持久化）
   scriptRunStates: Record<string, { output: string; isRunning: boolean; hasRun: boolean }>
   setScriptRunState: (scriptPath: string, state: Partial<{ output: string; isRunning: boolean; hasRun: boolean }>) => void
@@ -100,6 +105,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   openScript: (product, subProduct, scriptName, scriptPath, vars = {}) => set({
     activeTab: 'script',
     scriptParams: { product, subProduct, scriptName, scriptPath, vars },
+  }),
+
+  // 产品页变量值持久化
+  productVarValues: {},
+  setProductVarValues: (pageKey, values) => set(s => ({
+    productVarValues: { ...s.productVarValues, [pageKey]: { ...values } },
+  })),
+  clearProductVarValues: (pageKey) => set(s => {
+    if (pageKey) {
+      const { [pageKey]: _, ...rest } = s.productVarValues
+      return { productVarValues: rest }
+    }
+    return { productVarValues: {} }
   }),
 
   // 脚本运行状态（跨 tab 持久化，key 为 scriptPath）

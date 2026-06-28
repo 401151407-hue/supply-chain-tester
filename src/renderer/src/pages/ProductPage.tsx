@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useAppStore } from '../store'
 import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2, X } from 'lucide-react'
 
@@ -30,7 +30,8 @@ interface ProductPageProps {
 }
 
 export function ProductPage({ product, subProduct }: ProductPageProps) {
-  const { openScript, env } = useAppStore()
+  const { openScript, env, productVarValues, setProductVarValues } = useAppStore()
+  const pageKey = `${product}:${subProduct || ''}`
 
   // 动态扫描数据
   const [scannedScripts, setScannedScripts] = useState<Record<string, { subProduct: string; scripts: { name: string; path: string }[] }[]> | null>(null)
@@ -55,12 +56,13 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
   const [varValues, setVarValues] = useState<Record<string, string>>({})
   const [clearing, setClearing] = useState(false)
   const [deletingVar, setDeletingVar] = useState<string | null>(null)
+  // 标记变量是否已从 store 恢复过（避免覆盖用户正在编辑的值）
+  const restoredRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
     async function loadVars() {
-      console.log('[ProductPage] useEffect triggered, subProduct:', subProduct, 'product:', product)
-      const subs = scripts // 使用所有子产品
+      const subs = scripts
       if (subs.length === 0) {
         setScriptVars([])
         return
@@ -68,7 +70,6 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
 
       const api = (window as any).supplyChainTester
       if (!api || typeof api.parseScriptVars !== 'function') {
-        console.warn('[ProductPage] parseScriptVars API not available')
         setScriptVars([{ key: 'test_key', value: 'test_value', comment: 'API未就绪' }])
         return
       }
@@ -94,15 +95,40 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
       }
       if (cancelled) return
 
-      console.log('[ProductPage] Merged vars from', subs.reduce((s, sub) => s + sub.scripts.length, 0), 'scripts:', allVars.map(v => v.key))
       setScriptVars(allVars)
-      const initial: Record<string, string> = {}
-      for (const v of allVars) initial[v.key] = v.value
-      setVarValues(initial)
+
+      // 优先从 store 恢复用户之前填写的值，否则用脚本默认值
+      if (!restoredRef.current) {
+        const saved = productVarValues[pageKey]
+        if (saved && Object.keys(saved).length > 0) {
+          const restored: Record<string, string> = {}
+          for (const v of allVars) {
+            restored[v.key] = saved[v.key] ?? v.value
+          }
+          setVarValues(restored)
+        } else {
+          const initial: Record<string, string> = {}
+          for (const v of allVars) initial[v.key] = v.value
+          setVarValues(initial)
+        }
+        restoredRef.current = true
+      }
     }
     loadVars()
     return () => { cancelled = true }
   }, [subProduct, product, scannedScripts])
+
+  // varValues 变化时同步到 store
+  useEffect(() => {
+    if (restoredRef.current && Object.keys(varValues).length > 0) {
+      setProductVarValues(pageKey, varValues)
+    }
+  }, [varValues, pageKey])
+
+  // 页面 key 变化时重置恢复标记
+  useEffect(() => {
+    restoredRef.current = false
+  }, [pageKey])
 
   function handleDeleteVar(key: string) {
     setDeletingVar(key)
@@ -216,7 +242,10 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
                       const empty: Record<string, string> = {}
                       for (const v of scriptVars) empty[v.key] = ''
                       setTimeout(() => setVarValues(empty), 100)
-                      setTimeout(() => setClearing(false), 220)
+                      setTimeout(() => {
+                        setClearing(false)
+                        setProductVarValues(pageKey, empty)
+                      }, 220)
                     }}
                     className="text-[10px] text-muted hover:text-foreground transition-colors flex items-center gap-1"
                     title="清空所有变量，恢复默认值"
@@ -246,17 +275,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
                         (clearing ? ' animate-swipe-out' : '')
                       }
                     >
-                      <div className="flex items-center justify-between mb-0.5">
-                        <label className="text-[10px] text-muted block">{label}</label>
-                        <button
-                          onClick={() => handleDeleteVar(v.key)}
-                          className="opacity-0 group-hover/var:opacity-100 text-muted hover:text-danger
-                                     transition-all p-0.5 rounded hover:bg-danger/10"
-                          title={`删除变量 ${label}`}
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
+                      <label className="text-[10px] text-muted block mb-0.5">{label}</label>
                       <input
                         type="text"
                         value={varValues[v.key] || ''}
