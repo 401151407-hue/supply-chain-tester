@@ -209,6 +209,8 @@ print(f'客户名称: {name}')         # 全白色
 - 支持 ASCII `!!` 和中文全角 `！！`
 - 高亮仅在用户填入的变量值与输出匹配时生效
 - `# 可配置项` 中定义的变量**不会自动高亮**，只有 `!!` 标记才触发
+- **`!!` 行会正常显示在输出区**（不再被隐藏），仅做高亮不做变量注入
+- `!!-` 前缀的行会被完全隐藏（`highlightOutput` 中 `continue`），仅用于兼容旧脚本
 - 实现文件：`src/renderer/src/utils/highlight.ts`
 
 **系统自动高亮**（无需 `!!`）：
@@ -218,68 +220,88 @@ print(f'客户名称: {name}')         # 全白色
 | `❌ 错误信息` | `❌`/`⏹` 前缀 | 红色加粗 |
 | `────────` | 分隔线 | 淡化 |
 
-### 8. 脚本变量注入 (`!!key: value` 语法)
+### 8. 脚本变量注入（stderr 方式）
 
-脚本中使用 `!!key: value` 格式输出，执行完成后该值**自动注入到 APP 全局变量**，后续脚本可直接引用。
+脚本中通过 **stderr** 输出 `key:value` 或 `key=value` 格式，执行过程中**实时注入到 APP 全局变量**，后续脚本可直接引用。**不再使用 `print()` 方式注入。**
 
 **语法**：
 
 ```python
-# 注入单个变量
-print(f'!!projectId: {row[0]}')       # APP 中 projectId = row[0] 的值
-print(f'!!projectName: {row[1]}')     # APP 中 projectName = row[1] 的值
+# ✅ 应用已预导入 sys，无需 import
+sys.stderr.write(f'projectId:{row[0]}\n')
+sys.stderr.write(f'projectName:{row[1]}\n')
 
-# 中英文感叹号、冒号都支持
-print(f'！！客户名称：{name}')         # APP 中 客户名称 = name 的值
+# ✅ 等号分隔也可以
+sys.stderr.write(f'amount={money}\n')
+
+# ✅ 中文冒号也支持
+sys.stderr.write(f'客户名称：{name}\n')
+
+# ❌ 错误：用 print 不会注入变量（print 走 stdout，仅用于显示）
+print(f'projectId: {row[0]}')     # 只显示，不注入！
+
+# ⚠️ 如果脚本需要单独测试（不通过 APP 运行），请加上 import sys
 ```
-
-**命名建议**：统一使用英文驼峰命名（camelCase），如 `projectId`、`partnerPlatformName`，便于后续脚本变量面板自动识别。
 
 **工作原理**：
 
-1. 脚本输出 `!!projectId: P001`
-2. ScriptRunner 自动解析，存入 store 的 `scpExtractedVars`
-3. 打开下一个脚本时，`scpExtractedVars` 自动合并到变量面板的默认值中
-4. 用户在后续脚本中即可通过 `{{projectId}}` 引用该值
+```
+Python 脚本
+  ├─ stdout ──→ print() ──→ 显示在输出区（!! 前缀用于高亮）
+  └─ stderr ──→ sys.stderr.write('key:value\n') ──→ 实时注入到全局变量
+```
+
+1. 主进程监听 stderr，按行解析 `key:value` 或 `key=value` 模式
+2. 匹配成功 → 发送 `script:vars` IPC 事件 → 渲染进程合并到 `scpExtractedVars` / `globalVars`
+3. 匹配失败（如 Python 异常）→ 转发到输出区，带 `[stderr]` 前缀，确保错误可见
+4. 打开下一个脚本时，注入的变量自动合并到变量面板的默认值中
+5. 用户在后续脚本中即可通过 `{{projectId}}` 引用该值
 
 **示例** — 查询项目信息后自动填充到下一个脚本：
 
 ```python
 # 查询项目信息.py（先执行）
-print(f'!!projectId: {row[0]}')
-print(f'!!projectName: {row[1]}')
+row = db.query("SELECT ...")
+sys.stderr.write(f'projectId:{row[0]}\n')
+sys.stderr.write(f'projectName:{row[1]}\n')
+sys.stderr.write(f'certNo={row[2]}\n')
 
-# 企业发起授信.py（后执行，变量面板自动出现 projectId 和 projectName）
+# 企业发起授信.py（后执行，变量面板自动出现 projectId、projectName、certNo）
 # projectId: P001          ← 自动填充
 # projectName: 测试项目     ← 自动填充
+# certNo: 91110000XXXXXX   ← 自动填充
 ```
 
 **规则**：
 
-| 格式要求 | 说明 |
+| 要求 | 说明 |
 |---|---|
-| `!!` 或 `！！` | 2个感叹号（中英文均可），**必须行首** |
-| 变量名 | 英文驼峰推荐，**不可含空格** |
-| `:` 或 `：` | 一个冒号（中英文均可） |
-| 值 | 要注入的内容 |
+| 输出通道 | **必须是 stderr**，`sys.stderr.write()` |
+| import | **不需要** `import sys`，应用已预导入 |
+| 格式 | `key:value` 或 `key=value`（冒号中英文均可） |
+| 变量名 | 英文驼峰推荐，只含字母数字下划线 |
+| 换行 | 每条变量单独一行，末尾需要 `\n` |
+| 时机 | **实时注入**，不等脚本执行完 |
+| 非变量 stderr | Python 异常等非 key:value 行会显示在输出区（带 `[stderr]` 前缀） |
+
+**命名建议**：统一使用英文驼峰命名（camelCase），如 `projectId`、`partnerPlatformName`，便于后续脚本变量面板自动识别。
 
 **正确示例**：
 ```python
-print(f'!!amount: {ppp}')        # ✅ amount = ppp的值
-print(f'!! 金额：{ppp}')         # ✅ 金额 = ppp的值
-print(f'！！客户名称:{name}')     # ✅ 客户名称 = name的值
+sys.stderr.write(f'amount:{ppp}\n')           # ✅ amount = ppp的值
+sys.stderr.write(f'certNo={cert}\n')          # ✅ certNo = cert的值
+sys.stderr.write(f'客户名称：{name}\n')        # ✅ 客户名称 = name的值
 ```
 
 **错误示例**：
 ```python
-print(f'!!amount {ppp}')         # ❌ 少了冒号
-print(f'!amount: {ppp}')         # ❌ 只有一个感叹号
-print(f'!!{ppp}')                # ❌ 没变量名，只高亮不注入
+print(f'projectId: {pid}')                    # ❌ print 走 stdout，不会注入！
+sys.stderr.write(f'projectId {pid}\n')        # ❌ 少了冒号或等号
+sys.stderr.write(f'projectId:{pid}')          # ❌ 末尾少 \n，可能不解析
 ```
 
-- `!!` 必须在行首，变量名和值之间用 `:` 或 `：` 分隔
 - 用户手动填写的值优先级高于自动注入的值
-- 实现：`src/renderer/src/pages/ScriptRunner.tsx`（提取）+ `src/renderer/src/store/index.ts`（存储）+ `src/renderer/src/pages/UtilsPage.tsx`（UtilsPage 提取）
+- 实现：`src/main/index.ts`（stderr 解析 + `script:vars` IPC）+ `src/preload/index.ts`（`onScriptVars` 监听）+ `src/renderer/src/pages/ScriptRunner.tsx`（变量合并）+ `src/renderer/src/pages/UtilsPage.tsx`（工具页变量合并）
 
 ## 常见问题
 

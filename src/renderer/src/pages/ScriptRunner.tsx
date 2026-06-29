@@ -4,19 +4,6 @@ import { Play, Loader2, Terminal, FileCode, AlertTriangle, ExternalLink, CheckCi
 import { useAppStore } from '../store'
 import { highlightOutput } from '../utils/highlight'
 
-/** 从脚本输出中提取 !!key: value 和 !!-key: value 格式的变量 */
-function extractScpVars(output: string): Record<string, string> {
-  const vars: Record<string, string> = {}
-  const lines = output.split('\n')
-  for (const line of lines) {
-    const m = line.match(/^[!！]{2}-?\s*([^\s:：]+)\s*[：:]\s*(.+)$/)
-    if (m) {
-      vars[m[1].trim()] = m[2].trim()
-    }
-  }
-  return vars
-}
-
 interface ScriptRunnerProps {
   scriptPath: string
   scriptName: string
@@ -154,27 +141,28 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
     setScriptRunState(scriptPath, { isRunning: true, output: output ? output + '\n' + '─'.repeat(60) + '\n' : '', hasRun: true })
     outputRef.current = output ? output + '\n' + '─'.repeat(60) + '\n' : ''
 
-    // 注册流式输出监听
+    // 注册流式输出监听（!! 行不再过滤，交给 highlightOutput 做高亮）
     const unsubOutput = api.onScriptOutput?.((chunk: string) => {
       outputRef.current += chunk
-      const displayText = outputRef.current.split('\n').filter(l => !l.match(/^[!！]{2}/)).join('\n')
       flushSync(() => {
-        setScriptRunState(scriptPath, { output: displayText })
+        setScriptRunState(scriptPath, { output: outputRef.current })
       })
+    })
+    // 注册 stderr 变量注入监听
+    const unsubVars = api.onScriptVars?.((vars: Record<string, string>) => {
+      if (Object.keys(vars).length > 0) {
+        useAppStore.getState().mergeScpExtractedVars(vars)
+      }
     })
     const unsubDone = api.onScriptDone?.((result: { ok: boolean }) => {
       if (!result.ok) {
         outputRef.current += '\n❌ 脚本执行失败'
         setScriptRunState(scriptPath, { output: outputRef.current, isRunning: false })
       } else {
-        // 从输出中提取 !!key: value 变量
-        const extracted = extractScpVars(outputRef.current)
-        if (Object.keys(extracted).length > 0) {
-          useAppStore.getState().mergeScpExtractedVars(extracted)
-        }
         setScriptRunState(scriptPath, { isRunning: false })
       }
       unsubOutput?.()
+      unsubVars?.()
       unsubDone?.()
     })
 
@@ -184,6 +172,7 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
       outputRef.current += `\n❌ 执行出错: ${err.message || err}`
       setScriptRunState(scriptPath, { output: outputRef.current, isRunning: false })
       unsubOutput?.()
+      unsubVars?.()
       unsubDone?.()
     }
   }

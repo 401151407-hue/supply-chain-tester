@@ -175,8 +175,7 @@ export function UtilsPage() {
     setIsRunning(true)
     const separator = `\n${'─'.repeat(40)}\n  ▶ ${label}  ${new Date().toLocaleTimeString()}\n${'─'.repeat(40)}\n`
     outputRef.current += separator
-    const displayText = outputRef.current.split('\n').filter(l => !l.match(/^[!！]{2}/)).join('\n')
-    setOutput(displayText)
+    setOutput(outputRef.current)
 
     const api = (window as any).supplyChainTester
     if (!api) { setOutput('后端未连接'); setIsRunning(false); return }
@@ -185,9 +184,14 @@ export function UtilsPage() {
       unsubRef.current?.()
       unsubRef.current = api.onScriptOutput((chunk: string) => {
         outputRef.current += chunk
-        // 过滤 !! 行后显示（原始文本保留给变量解析用）
-        const displayText = outputRef.current.split('\n').filter(l => !l.match(/^[!！]{2}/)).join('\n')
-        setOutput(displayText)
+        setOutput(outputRef.current)
+      })
+    }
+    // 监听 stderr 变量注入
+    let unsubVars: (() => void) | null = null
+    if (api.onScriptVars) {
+      unsubVars = api.onScriptVars((vars: Record<string, string>) => {
+        setGlobalVars(prev => ({ ...prev, ...vars }))
       })
     }
 
@@ -215,6 +219,8 @@ export function UtilsPage() {
       setOutput(outputRef.current)
     } finally {
       setIsRunning(false)
+      unsubVars?.()
+      unsubRef.current?.()
     }
   }
 

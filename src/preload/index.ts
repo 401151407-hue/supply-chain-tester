@@ -119,6 +119,13 @@ const api = {
     return () => ipcRenderer.removeListener('script:done', handler)
   },
 
+  /** 监听脚本 stderr 变量注入（实时 key:value） */
+  onScriptVars: (callback: (vars: Record<string, string>) => void) => {
+    const handler = (_event: any, vars: Record<string, string>) => callback(vars)
+    ipcRenderer.on('script:vars', handler)
+    return () => ipcRenderer.removeListener('script:vars', handler)
+  },
+
   /** 检查 Python 是否可用 */
   checkPython: (): Promise<{ available: boolean; version?: string; hint?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.CHECK_PYTHON),

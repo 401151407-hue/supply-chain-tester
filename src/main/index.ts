@@ -440,12 +440,40 @@ function registerIpcHandlers(): void {
         event.sender.send('script:output', chunk)
       }
       proc.stdout.on('data', (data: Buffer) => emit(data.toString('utf-8')))
-      proc.stderr.on('data', (data: Buffer) => emit(data.toString('utf-8')))
+      // stderr 用于变量注入（key:value / key=value 行），非变量行也转发到输出
+      let stderrBuf = ''
+      proc.stderr.on('data', (data: Buffer) => {
+        stderrBuf += data.toString('utf-8')
+        const lines = stderrBuf.split('\n')
+        stderrBuf = lines.pop() || ''
+        for (const line of lines) {
+          const trimmed = line.trim()
+          const m = trimmed.match(/^(\w+)\s*[:=]\s*(.+)$/)
+          if (m) {
+            event.sender.send('script:vars', { [m[1].trim()]: m[2].trim() })
+          } else if (trimmed) {
+            // 非变量行（如 Python 异常）转发到输出，带 stderr 标记
+            event.sender.send('script:output', `[stderr] ${line}\n`)
+          }
+        }
+      })
+      const flushStderr = () => {
+        if (stderrBuf.trim()) {
+          const m = stderrBuf.trim().match(/^(\w+)\s*[:=]\s*(.+)$/)
+          if (m) {
+            event.sender.send('script:vars', { [m[1].trim()]: m[2].trim() })
+          } else {
+            event.sender.send('script:output', `[stderr] ${stderrBuf.trim()}\n`)
+          }
+        }
+        stderrBuf = ''
+      }
       const cleanup = () => {
         runningProc = null
         try { unlinkSync(tempPyFile) } catch {}
       }
       proc.on('close', (code) => {
+        flushStderr()
         cleanup()
         event.sender.send('script:done', { ok: code === 0 })
         resolve({ ok: code === 0, output })
