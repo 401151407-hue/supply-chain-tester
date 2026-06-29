@@ -51,6 +51,7 @@ export function highlightOutput(text: string, _knownVarKeys: string[] = [], know
           `${esc(kv2[1])}${esc(kv2[2])} <span style="${S.valGold}">${esc(kv2[3])}</span>`
         )
       } else if (valueSet.size > 0) {
+        // 高亮匹配到的具体变量值
         let html = esc(rest)
         for (const v of valueSet) {
           const ev = esc(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -58,7 +59,8 @@ export function highlightOutput(text: string, _knownVarKeys: string[] = [], know
         }
         out.push(html)
       } else {
-        out.push(`<span style="${S.valGold}">${esc(rest)}</span>`)
+        // 没有已知变量值时，正常显示，不高亮整行
+        out.push(esc(rest))
       }
       continue
     }
