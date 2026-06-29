@@ -36,6 +36,12 @@ interface AppState {
   scriptRunStates: Record<string, { output: string; isRunning: boolean; hasRun: boolean }>
   setScriptRunState: (scriptPath: string, state: Partial<{ output: string; isRunning: boolean; hasRun: boolean }>) => void
   clearScriptRunState: (scriptPath: string) => void
+  clearAllScriptRunStates: () => void
+
+  // 脚本输出 !!key:value 提取的变量（跨脚本共享）
+  scpExtractedVars: Record<string, string>
+  setScpExtractedVars: (vars: Record<string, string>) => void
+  mergeScpExtractedVars: (vars: Record<string, string>) => void
 
   // 测试用例
   testCases: TestCase[]
@@ -139,6 +145,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     return { scriptRunStates: rest }
   }),
   clearAllScriptRunStates: () => set({ scriptRunStates: {} }),
+
+  // 脚本输出 !!key:value 提取的变量
+  scpExtractedVars: {},
+  setScpExtractedVars: (vars) => set({ scpExtractedVars: vars }),
+  mergeScpExtractedVars: (vars) => set(s => ({ scpExtractedVars: { ...s.scpExtractedVars, ...vars } })),
 
   // 测试用例
   testCases: [],

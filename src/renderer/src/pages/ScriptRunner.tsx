@@ -4,6 +4,19 @@ import { Play, Loader2, Terminal, FileCode, AlertTriangle, ExternalLink, CheckCi
 import { useAppStore } from '../store'
 import { highlightOutput } from '../utils/highlight'
 
+/** 从脚本输出中提取 !!key: value 格式的变量 */
+function extractScpVars(output: string): Record<string, string> {
+  const vars: Record<string, string> = {}
+  const lines = output.split('\n')
+  for (const line of lines) {
+    const m = line.match(/^[!！]{2}\s*([^\s:：]+)\s*[：:]\s*(.+)$/)
+    if (m) {
+      vars[m[1].trim()] = m[2].trim()
+    }
+  }
+  return vars
+}
+
 interface ScriptRunnerProps {
   scriptPath: string
   scriptName: string
@@ -153,6 +166,11 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
         outputRef.current += '\n❌ 脚本执行失败'
         setScriptRunState(scriptPath, { output: outputRef.current, isRunning: false })
       } else {
+        // 从输出中提取 !!key: value 变量
+        const extracted = extractScpVars(outputRef.current)
+        if (Object.keys(extracted).length > 0) {
+          useAppStore.getState().mergeScpExtractedVars(extracted)
+        }
         setScriptRunState(scriptPath, { isRunning: false })
       }
       unsubOutput?.()

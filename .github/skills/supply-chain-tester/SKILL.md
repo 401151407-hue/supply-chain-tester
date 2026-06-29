@@ -218,6 +218,48 @@ print(f'客户名称: {name}')         # 全白色
 | `❌ 错误信息` | `❌`/`⏹` 前缀 | 红色加粗 |
 | `────────` | 分隔线 | 淡化 |
 
+### 8. 脚本变量注入 (`!!key: value` 语法)
+
+脚本中使用 `!!key: value` 格式输出，执行完成后该值**自动注入到 APP 全局变量**，后续脚本可直接引用。
+
+**语法**：
+
+```python
+# 注入单个变量
+print(f'!!projectId: {row[0]}')       # APP 中 projectId = row[0] 的值
+print(f'!!projectName: {row[1]}')     # APP 中 projectName = row[1] 的值
+
+# 中英文感叹号、冒号都支持
+print(f'！！客户名称：{name}')         # APP 中 客户名称 = name 的值
+```
+
+**命名建议**：统一使用英文驼峰命名（camelCase），如 `projectId`、`partnerPlatformName`，便于后续脚本变量面板自动识别。
+
+**工作原理**：
+
+1. 脚本输出 `!!projectId: P001`
+2. ScriptRunner 自动解析，存入 store 的 `scpExtractedVars`
+3. 打开下一个脚本时，`scpExtractedVars` 自动合并到变量面板的默认值中
+4. 用户在后续脚本中即可通过 `{{projectId}}` 引用该值
+
+**示例** — 查询项目信息后自动填充到下一个脚本：
+
+```python
+# 查询项目信息.py（先执行）
+print(f'!!projectId: {row[0]}')
+print(f'!!projectName: {row[1]}')
+
+# 企业发起授信.py（后执行，变量面板自动出现 projectId 和 projectName）
+# projectId: P001          ← 自动填充
+# projectName: 测试项目     ← 自动填充
+```
+
+**规则**：
+- `!!` 必须在行首，变量名和值之间用 `:` 或 `：` 分隔
+- 变量名建议不含空格（含空格时只会取空格前的部分）
+- 用户手动填写的值优先级高于自动注入的值
+- 实现：`src/renderer/src/pages/ScriptRunner.tsx`（提取）+ `src/renderer/src/store/index.ts`（存储）
+
 ## 常见问题
 
 | 问题 | 原因 | 解决 |

@@ -30,7 +30,7 @@ interface ProductPageProps {
 }
 
 export function ProductPage({ product, subProduct }: ProductPageProps) {
-  const { openScript, env, productVarValues, setProductVarValues } = useAppStore()
+  const { openScript, env, productVarValues, setProductVarValues, scpExtractedVars } = useAppStore()
   const pageKey = `${product}:${subProduct || ''}`
 
   // 动态扫描数据
@@ -163,7 +163,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
         }
       } catch { /* fallback */ }
     }
-    openScript(product, subProduct || '', scriptName, scriptPath, { ...scriptVals, env })
+    openScript(product, subProduct || '', scriptName, scriptPath, { ...scpExtractedVars, ...scriptVals, env })
   }
 
   return (
