@@ -255,10 +255,31 @@ print(f'!!projectName: {row[1]}')
 ```
 
 **规则**：
+
+| 格式要求 | 说明 |
+|---|---|
+| `!!` 或 `！！` | 2个感叹号（中英文均可），**必须行首** |
+| 变量名 | 英文驼峰推荐，**不可含空格** |
+| `:` 或 `：` | 一个冒号（中英文均可） |
+| 值 | 要注入的内容 |
+
+**正确示例**：
+```python
+print(f'!!amount: {ppp}')        # ✅ amount = ppp的值
+print(f'!! 金额：{ppp}')         # ✅ 金额 = ppp的值
+print(f'！！客户名称:{name}')     # ✅ 客户名称 = name的值
+```
+
+**错误示例**：
+```python
+print(f'!!amount {ppp}')         # ❌ 少了冒号
+print(f'!amount: {ppp}')         # ❌ 只有一个感叹号
+print(f'!!{ppp}')                # ❌ 没变量名，只高亮不注入
+```
+
 - `!!` 必须在行首，变量名和值之间用 `:` 或 `：` 分隔
-- 变量名建议不含空格（含空格时只会取空格前的部分）
 - 用户手动填写的值优先级高于自动注入的值
-- 实现：`src/renderer/src/pages/ScriptRunner.tsx`（提取）+ `src/renderer/src/store/index.ts`（存储）
+- 实现：`src/renderer/src/pages/ScriptRunner.tsx`（提取）+ `src/renderer/src/store/index.ts`（存储）+ `src/renderer/src/pages/UtilsPage.tsx`（UtilsPage 提取）
 
 ## 常见问题
 

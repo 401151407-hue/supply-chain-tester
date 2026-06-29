@@ -4,12 +4,12 @@ import { Play, Loader2, Terminal, FileCode, AlertTriangle, ExternalLink, CheckCi
 import { useAppStore } from '../store'
 import { highlightOutput } from '../utils/highlight'
 
-/** 从脚本输出中提取 !!key: value 格式的变量 */
+/** 从脚本输出中提取 !!key: value 和 !!-key: value 格式的变量 */
 function extractScpVars(output: string): Record<string, string> {
   const vars: Record<string, string> = {}
   const lines = output.split('\n')
   for (const line of lines) {
-    const m = line.match(/^[!！]{2}\s*([^\s:：]+)\s*[：:]\s*(.+)$/)
+    const m = line.match(/^[!！]{2}-?\s*([^\s:：]+)\s*[：:]\s*(.+)$/)
     if (m) {
       vars[m[1].trim()] = m[2].trim()
     }
@@ -157,8 +157,9 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
     // 注册流式输出监听
     const unsubOutput = api.onScriptOutput?.((chunk: string) => {
       outputRef.current += chunk
+      const displayText = outputRef.current.split('\n').filter(l => !l.match(/^[!！]{2}/)).join('\n')
       flushSync(() => {
-        setScriptRunState(scriptPath, { output: outputRef.current })
+        setScriptRunState(scriptPath, { output: displayText })
       })
     })
     const unsubDone = api.onScriptDone?.((result: { ok: boolean }) => {

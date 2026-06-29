@@ -175,7 +175,8 @@ export function UtilsPage() {
     setIsRunning(true)
     const separator = `\n${'─'.repeat(40)}\n  ▶ ${label}  ${new Date().toLocaleTimeString()}\n${'─'.repeat(40)}\n`
     outputRef.current += separator
-    setOutput(outputRef.current)
+    const displayText = outputRef.current.split('\n').filter(l => !l.match(/^[!！]{2}/)).join('\n')
+    setOutput(displayText)
 
     const api = (window as any).supplyChainTester
     if (!api) { setOutput('后端未连接'); setIsRunning(false); return }
@@ -184,21 +185,23 @@ export function UtilsPage() {
       unsubRef.current?.()
       unsubRef.current = api.onScriptOutput((chunk: string) => {
         outputRef.current += chunk
-        setOutput(outputRef.current)
+        // 过滤 !! 行后显示（原始文本保留给变量解析用）
+        const displayText = outputRef.current.split('\n').filter(l => !l.match(/^[!！]{2}/)).join('\n')
+        setOutput(displayText)
       })
     }
 
     try {
       // 查询脚本用输入框的值，其他脚本只用查询结果（全局变量）
       const isQuery = label.includes('查询项目信息') || label.includes('查询客户信息')
-      const resolvedMultiFunc = multiFunc || globalVars.platform_id || globalVars.multi_func || ''
+      const resolvedMultiFunc = multiFunc || globalVars.platformId || globalVars.multiFunc || ''
       const vars: Record<string, string> = {
         env,
         ...globalVars,
-        project_id: isQuery ? (projectId || globalVars.project_id || '') : (globalVars.project_id || ''),
-        cert_no: isQuery ? (certNo || globalVars.cert_no || '') : (globalVars.cert_no || ''),
+        projectId: isQuery ? (projectId || globalVars.projectId || '') : (globalVars.projectId || ''),
+        certNo: isQuery ? (certNo || globalVars.certNo || '') : (globalVars.certNo || ''),
         amount: amount || globalVars.amount || '',
-        multi_func: resolvedMultiFunc,
+        multiFunc: resolvedMultiFunc,
       }
       if (submitterType) {
         vars.submitter_type = submitterType
@@ -225,18 +228,18 @@ export function UtilsPage() {
     const skipValues = ['未输入', '默认300万', 'default', '无']
 
     const fieldMap: Record<string, string> = {
-      '项目ID': 'project_id',
-      '项目名称': 'project_name',
-      '平台ID': 'platform_id',
-      '平台名称': 'platform_name',
-      '产品类型': 'product_type',
-      '融资比例': 'financing_percent',
-      '企业名称': 'enterprise_name',
-      '企业证件号': 'cert_no',
-      '证件号': 'cert_no',
+      '项目ID': 'projectId',
+      '项目名称': 'projectName',
+      '平台ID': 'partnerPlatformId',
+      '平台名称': 'partnerPlatformName',
+      '产品类型': 'productType',
+      '融资比例': 'financingPercent',
+      '企业名称': 'enterpriseName',
+      '企业证件号': 'certNo',
+      '证件号': 'certNo',
       '手机号': 'phone',
-      '法人姓名': 'legal_person_name',
-      '法人证件号': 'legal_person_id',
+      '法人姓名': 'legalPersonName',
+      '法人证件号': 'legalPersonId',
     }
 
     for (const [label, key] of Object.entries(fieldMap)) {
@@ -252,10 +255,21 @@ export function UtilsPage() {
       }
     }
 
+    // 同时解析 !!key: value 和 !!-key: value 格式（脚本注入的变量）
+    const bangRegex = /^[!！]{2}-?\s*(\w+)\s*[：:]\s*(.+)$/gm
+    let bangMatch: RegExpExecArray | null
+    while ((bangMatch = bangRegex.exec(text)) !== null) {
+      const k = bangMatch[1]
+      const v = bangMatch[2].trim()
+      if (v && !skipValues.includes(v)) {
+        newVars[k] = v
+      }
+    }
+
     if (Object.keys(newVars).length > 0) {
       setGlobalVars(prev => ({ ...prev, ...newVars }))
-      if (newVars.project_id) setProjectId(newVars.project_id)
-      if (newVars.cert_no) setCertNo(newVars.cert_no)
+      if (newVars.projectId) setProjectId(newVars.projectId)
+      if (newVars.certNo) setCertNo(newVars.certNo)
     }
   }
 

@@ -44,6 +44,8 @@ export function highlightOutput(text: string, _knownVarKeys: string[] = [], know
 
     // 4. !! 或 ！！强制高亮标记
     if (line.startsWith('!!') || line.startsWith('！！')) {
+      // !!- 前缀：注入但不显示
+      if (line.match(/^[!！]{2}-/)) continue
       const rest = line.replace(/^\s*[!！]{2}\s*/, '')
       const kv2 = rest.match(/^([^:：\n]+)([：:])\s*(.+)$/)
       if (kv2) {
