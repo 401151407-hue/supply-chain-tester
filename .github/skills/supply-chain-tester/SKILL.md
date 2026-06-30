@@ -130,21 +130,20 @@ electron-builder.config.cjs  # 打包配置
 | 命令 | 作用 |
 |---|---|
 | `npm run build` | 仅编译 TypeScript → `out/` |
-| `npm run dist` | 编译 + 打包安装包到 `dist/`（不上传） |
-| `npm run release` | 编译 + 打包 + 上传到 GitHub Release |
-| `npx electron-builder --config electron-builder.config.cjs --publish always` | 仅上传 `dist/` 已有文件（不重新编译） |
-| `npx electron-builder --mac --x64 --publish always` | 仅构建 Mac Intel 并发布 |
-| `npx electron-builder --mac --arm64 --publish always` | 仅构建 Mac M系列 并发布 |
+| `npm run dist` | 编译 + 打包安装包到 `dist/`（不上传，仅本地验证） |
+| `npm version patch && git push && git push --tags` | 升版本 + 打 tag → **CI 自动构建 Mac + Windows 并发布** |
 
-**完整发布流程**：
+**🚫 禁止本地构建发布**：除非用户明确要求，否则**不执行** `npm run release`。所有平台的安装包由 GitHub Actions 在 tag 推送后自动构建。
+
+**完整发布流程**（全平台 CI 自动）：
 ```bash
-# 本地 Mac 构建+发布 Mac 包（需要先设置环境变量）
-# export GH_OWNER="your-username"  # 已在 ~/.zshrc 中配置
-# export GH_REPO="your-repo"       # 已在 ~/.zshrc 中配置
-git add -A && git commit -m "描述" && npm version patch && git push && git push --tags && npm run release
+# 1. 提交代码
+git add -A && git commit -m "描述" && git push
+
+# 2. 触发 CI 构建发布（Mac + Windows 一键）
+npm version patch && git push && git push --tags
 ```
-- `npm version patch` 创建新 tag（如 v0.1.18）
-- CI 由 tag 触发，自动构建 Windows .exe 并上传到同一 Release
+- CI 自动构建 Mac x64/arm64 DMG + Windows x64 exe
 - Release 页面：https://github.com/401151407-hue/supply-chain-tester/releases
 
 ### 4. 脚本扫描 (src/main/index.ts)
