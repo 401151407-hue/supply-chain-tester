@@ -212,7 +212,7 @@ export function UtilsPage() {
       }
       await api.runScript(scriptPath, vars)
 
-      // 解析输出，存入全局变量 + 自动填入输入框
+      // 解析输出，存入全局变量
       parseAndStoreQueryResult()
     } catch (err: any) {
       outputRef.current += `\n错误: ${err.message || String(err)}`
@@ -224,7 +224,7 @@ export function UtilsPage() {
     }
   }
 
-  /** 从输出中解析查询结果，存入全局变量并自动填充输入框 */
+  /** 从输出中解析查询结果，存入全局变量（不自动回填输入框） */
   function parseAndStoreQueryResult() {
     // 只搜索最后一段输出（分隔线之后），避免旧查询结果干扰
     const fullText = outputRef.current
@@ -274,8 +274,6 @@ export function UtilsPage() {
 
     if (Object.keys(newVars).length > 0) {
       setGlobalVars(prev => ({ ...prev, ...newVars }))
-      if (newVars.projectId) setProjectId(newVars.projectId)
-      if (newVars.certNo) setCertNo(newVars.certNo)
     }
   }
 
@@ -290,30 +288,58 @@ export function UtilsPage() {
         <div className="flex items-center justify-center gap-3 px-4 pb-3 flex-wrap">
           <div className="flex items-center gap-2 bg-surface border border-border/5 rounded-xl px-3 py-2">
             <label className="text-[11px] font-semibold text-accent-light whitespace-nowrap">项目ID</label>
-            <input
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              placeholder="请输入项目ID"
-              className="w-36 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
-            />
+            <div className="relative">
+              <input
+                value={projectId}
+                onChange={e => setProjectId(e.target.value)}
+                placeholder="请输入项目ID"
+                className="w-36 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
+                <HelpCircle size={13} className="text-muted cursor-help" />
+                <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '200px' }}>
+                  项目ID = projectId<br />                  
+                  下游脚本可通过 projectId 引用
+                </span>
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2 bg-surface border border-border/5 rounded-xl px-3 py-2">
             <label className="text-[11px] font-semibold text-accent-light whitespace-nowrap">证件号</label>
-            <input
-              value={certNo}
-              onChange={e => setCertNo(e.target.value)}
-              placeholder="请输入证件号"
-              className="w-44 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
-            />
+            <div className="relative">
+              <input
+                value={certNo}
+                onChange={e => setCertNo(e.target.value)}
+                placeholder="请输入证件号"
+                className="w-44 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
+                <HelpCircle size={13} className="text-muted cursor-help" />
+                <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '200px' }}>
+                  证件号 = certNo<br />
+                  下游脚本可通过 certNo 引用
+                </span>
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2 bg-surface border border-border/5 rounded-xl px-3 py-2">
             <label className="text-[11px] font-semibold text-accent-light whitespace-nowrap">金额</label>
-            <input
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder="请输入金额"
-              className="w-32 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
-            />
+            <div className="relative">
+              <input
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                placeholder="请输入金额"
+                className="w-32 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
+                <HelpCircle size={13} className="text-muted cursor-help" />
+                <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '200px' }}>
+                  金额(分) = amount<br />
+                  给钱包充值时单位则为(元)
+                  下游脚本可通过 amount 引用
+                </span>
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2 bg-surface border border-border/5 rounded-xl px-3 py-2">
             <label className="text-[11px] font-semibold text-accent-light whitespace-nowrap">多功能</label>
@@ -327,19 +353,8 @@ export function UtilsPage() {
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
                 <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '220px' }}>
-                  多功能测试输出<br />
+                  多功能 = multi_func<br />
                   多功能输入框变量名是multi_func 供下游脚本使用<br />
-                  <br />
-                  例如输入：platform_01<br />
-                  脚本中即可直接使用：<br />
-                  print(multi_func)<br />
-                  输出：platform_01<br />
-                  <br />
-                  支持任意自定义参数<br />
-                  查询结果不会自动覆盖此处<br />
-                  查询结果不会自动覆盖此处<br />
-                  查询结果不会自动覆盖此处<br />
-                  手动填写的内容优先
                 </span>
               </span>
             </div>
