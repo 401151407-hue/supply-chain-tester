@@ -421,13 +421,35 @@ function registerIpcHandlers(): void {
         .filter(([k]) => k !== 'env' && k !== 'current_env' && !new RegExp(`(^|\\n)\\s*${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=`).test(scriptContent))
         .map(([k, v]) => `${k} = ${JSON.stringify(v != null ? v : '')}`)
         .join('\n') + '\n' : ''
-      const argvLine = envArg ? `sys.argv = ['${fullScriptPath.replace(/\\/g, '\\\\')}', '${envArg}']\n` : ''
-      const preamble = `import sys\nsys.path.insert(0, r"${scriptsDir}")\n__file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"\n${argvLine}${varLines}exec(${JSON.stringify(scriptContent)})`
+      const argvPart = envArg ? `sys.argv = ['${fullScriptPath.replace(/\\/g, '\\\\')}', '${envArg}']` : ''
+      const varPart = varLines.trim().split('\n').filter(Boolean).join('; ')
+      const injectLine = `import sys; sys.path.insert(0, r"${scriptsDir}"); ${argvPart}${varPart ? '; ' + varPart : ''}; __file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"`
+      // 注入代码拼到脚本第一行，保持报错行号和原脚本完全一致
+      const firstNewline = scriptContent.indexOf('\n')
+      let insertPos = firstNewline
+      // 处理 CRLF：在 \r 之前取第一行内容
+      if (insertPos > 0 && scriptContent[insertPos - 1] === '\r') {
+        insertPos--
+      }
+      const firstLine = insertPos > 0 ? scriptContent.slice(0, insertPos) : (insertPos === 0 ? '' : scriptContent)
+      const trimmedFirst = firstLine.trimStart()
+      if (trimmedFirst.startsWith('#')) {
+        // 第一行是注释（如 # -*- coding: utf-8 -*-），注入代码必须放在 # 前面，否则会被注释掉
+        const hashIdx = firstLine.indexOf('#')
+        const newFirstLine = firstLine.slice(0, hashIdx) + injectLine + '; ' + firstLine.slice(hashIdx)
+        scriptContent = newFirstLine + (firstNewline >= 0 ? scriptContent.slice(firstNewline) : '\n')
+      } else if (insertPos > 0) {
+        // 正常情况：注入代码加到第一行末尾
+        scriptContent = scriptContent.slice(0, insertPos) + '; ' + injectLine + scriptContent.slice(firstNewline)
+      } else {
+        // 脚本为空或只有一行：注入代码放在最前面
+        scriptContent = injectLine + '\n' + scriptContent
+      }
 
       // 将 preamble 写入脚本目录下的临时 .py 文件执行
       const { writeFileSync, unlinkSync } = require('fs')
       const tempPyFile = join(scriptsDir, `_sct_${Date.now()}.py`)
-      writeFileSync(tempPyFile, preamble, 'utf-8')
+      writeFileSync(tempPyFile, scriptContent, 'utf-8')
 
       const proc = spawn(pythonPath, ['-u', tempPyFile], {
         cwd: scriptsDir,

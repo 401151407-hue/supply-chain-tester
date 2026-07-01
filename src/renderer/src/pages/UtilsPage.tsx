@@ -212,13 +212,14 @@ export function UtilsPage() {
     }
 
     try {
-      // 输入框的值直接传给脚本，不自动合并全局变量（全局变量由 stderr 注入）
+      // 全局变量（stderr注入） + 输入框值，输入框优先
       const vars: Record<string, string> = {
+        ...globalVars,
         env,
-        projectId: projectId || '',
-        certNo: certNo || '',
-        amount: amount || '',
-        multiFunc: multiFunc || '',
+        projectId: projectId || globalVars.projectId || '',
+        certNo: certNo || globalVars.certNo || '',
+        amount: amount || globalVars.amount || '',
+        multiFunc: multiFunc || globalVars.multiFunc || '',
       }
       if (submitterType) {
         vars.submitter_type = submitterType
