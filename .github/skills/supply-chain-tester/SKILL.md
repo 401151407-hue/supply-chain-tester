@@ -183,6 +183,23 @@ npm version patch && git push && git push --tags
 - 报 `Executable doesn't exist at ...\ms-playwright\chromium-xxx\chrome.exe` → 点「一键安装」重新下载浏览器
 - 版本不匹配（如 Playwright 期待 chromium-1223 但本地是 chromium-1208）→ 同样点「一键安装」即可自动匹配
 
+### 6.1 通用工具页变量输入框 + 问号提示 (UtilsPage.tsx)
+
+`src/renderer/src/pages/UtilsPage.tsx` 顶部有 4 个变量输入框，每个右侧有一个 `?` 图标（`HelpCircle`），hover 时显示变量使用说明。
+
+**修改问号提示内容**：直接编辑 `UtilsPage.tsx`，搜索 `<HelpCircle` 即可定位到 4 处提示：
+
+| 输入框 | 行号（约） | 变量名 | 提示内容示例 |
+|--------|-----------|--------|-------------|
+| 项目ID | ~302 | `projectId` | `项目ID = projectId\n下游脚本可通过 projectId 引用` |
+| 证件号 | ~320 | `certNo` | `证件号 = certNo\n下游脚本可通过 certNo 引用` |
+| 金额 | ~338 | `amount` | `金额(分) = amount\n给钱包充值时单位则为(元)\n下游脚本可通过 amount 引用` |
+| 多功能 | ~358 | `multi_func` | `多功能 = multi_func\n多功能输入框变量名是multi_func 供下游脚本使用` |
+
+**提示内容格式**：内联 JSX `<span>`，直接写文本，`<br />` 换行。
+
+**清空按钮**：点击清空时，4 个输入框内容会有粒子消散动画（`animate-particle-out`，0.35s），动画结束后变量值被清空。
+
 ### 7. 输出变量高亮 (`!!` 标记语法)
 
 Python 脚本中在 `print()` 内容最前面加 `!!`（两个 ASCII 感叹号）或 `！！`（两个中文全角感叹号），输出中的变量值会自动**金色加粗+金色背景**高亮。

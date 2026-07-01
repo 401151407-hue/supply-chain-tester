@@ -30,6 +30,10 @@ export function UtilsPage() {
 
   // 清空动画
   const [clearingOutput, setClearingOutput] = useState(false)
+  const [clearingVars, setClearingVars] = useState(false)
+
+  // 清空注入变量提示横幅
+  const [showClearedToast, setShowClearedToast] = useState(false)
 
   // 输出高亮
   const highlightedHtml = useMemo(() => {
@@ -162,11 +166,23 @@ export function UtilsPage() {
     }, 220)
   }
 
-  function handleClearVars() {
-    setProjectId('')
-    setCertNo('')
-    setAmount('')
-    setMultiFunc('')
+  function handleClearVars(e?: React.MouseEvent) {
+    // Ctrl+点击：仅清空已注入的全局变量
+    if (e?.ctrlKey || e?.metaKey) {
+      setGlobalVars({})
+      setShowClearedToast(true)
+      setTimeout(() => setShowClearedToast(false), 2500)
+      return
+    }
+    // 普通点击：清空输入框
+    setClearingVars(true)
+    setTimeout(() => {
+      setProjectId('')
+      setCertNo('')
+      setAmount('')
+      setMultiFunc('')
+      setClearingVars(false)
+    }, 350)
   }
 
   async function runUtilityScript(scriptPath: string, label: string, submitterType?: string) {
@@ -279,6 +295,14 @@ export function UtilsPage() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* 清空注入变量提示横幅 — 页面中间从左向右快速划过 */}
+      {showClearedToast && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+          <div className="px-10 py-5 rounded-2xl bg-accent/90 text-white text-xl font-bold shadow-2xl animate-slide-right-fast whitespace-nowrap italic -rotate-3">
+            ✅ APP 已注入变量已被清空
+          </div>
+        </div>
+      )}
       {/* 头部 + 变量栏 */}
       <div className="shrink-0 border-b border-border/5 bg-surface-light/50">
         <div className="flex items-center gap-3 px-4 h-12">
@@ -293,13 +317,18 @@ export function UtilsPage() {
                 value={projectId}
                 onChange={e => setProjectId(e.target.value)}
                 placeholder="请输入项目ID"
-                className="w-36 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+                className={`w-36 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30 ${clearingVars ? 'animate-particle-out' : ''}`}
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
                 <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '200px' }}>
-                  项目ID = projectId<br />                  
-                  下游脚本可通过 projectId 引用
+                  查询之后注入APP的变量：<br />
+                  projectId = 项目ID<br />
+                  projectName = 项目名称<br />
+                  partnerPlatformId = 平台ID<br />
+                  partnerPlatformName = 平台名称<br />
+                  financingPercent = 融资比例<br />
+                  productType = 产品类型<br />                  
                 </span>
               </span>
             </div>
@@ -311,13 +340,27 @@ export function UtilsPage() {
                 value={certNo}
                 onChange={e => setCertNo(e.target.value)}
                 placeholder="请输入证件号"
-                className="w-44 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+                className={`w-44 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30 ${clearingVars ? 'animate-particle-out' : ''}`}
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
-                <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '200px' }}>
-                  证件号 = certNo<br />
-                  下游脚本可通过 certNo 引用
+                <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '200px' }}>                  
+                  企业客户注入APP变量:<br />
+                  projectId = 项目ID<br />
+                  projectName = 项目名称<br />
+                  partnerPlatformId = 平台ID<br />
+                  enterpriseName = 平台名称<br />
+                  enterpriseName = 企业名称<br />
+                  socialCreditCode = 企业证件号<br />
+                  legalPersonName = 法人名称<br />
+                  legalPersonIdCard = 法人证件号<br />
+                  registerPhone = 法人手机号<br /><br />
+                  个人客户注入APP变量:<br />
+                  projectId = 项目ID<br />
+                  userName = 个人姓名<br />
+                  idCardNo = 个人证件号码<br />
+                  phoneNo = 手机号<br />
+                  borrowerId = 借款人关联ID<br />
                 </span>
               </span>
             </div>
@@ -329,13 +372,13 @@ export function UtilsPage() {
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
                 placeholder="请输入金额"
-                className="w-32 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+                className={`w-32 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30 ${clearingVars ? 'animate-particle-out' : ''}`}
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
                 <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '200px' }}>
                   金额(分) = amount<br />
-                  给钱包充值时单位则为(元)
+                  给钱包充值时单位则为(元)<br />
                   下游脚本可通过 amount 引用
                 </span>
               </span>
@@ -348,7 +391,7 @@ export function UtilsPage() {
                 value={multiFunc}
                 onChange={e => setMultiFunc(e.target.value)}
                 placeholder="多功能参数"
-                className="w-32 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30"
+                className={`w-32 rounded-lg px-3 py-2 pr-7 text-sm font-mono outline-none bg-transparent placeholder:text-muted/30 ${clearingVars ? 'animate-particle-out' : ''}`}
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
@@ -378,7 +421,8 @@ export function UtilsPage() {
             查询客户信息
           </button>
           <button onClick={handleClearVars}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-hover/5 hover:bg-hover/10 text-muted hover:text-foreground border border-border/10 transition-all active:scale-95">
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-hover/5 hover:bg-hover/10 text-muted hover:text-foreground border border-border/10 transition-all active:scale-95"
+            title="清空输入框 · Ctrl+点击清空已注入变量">
             <Eraser size={15} />
             清空
           </button>
