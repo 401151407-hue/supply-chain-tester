@@ -442,39 +442,72 @@ function registerIpcHandlers(): void {
       proc.stdout.on('data', (data: Buffer) => emit(data.toString('utf-8')))
       // stderr 用于变量注入（key:value / key=value 行），非变量行也转发到输出
       let stderrBuf = ''
+      // Python 异常类名黑名单，防止错误信息被误当变量注入
+      const PYTHON_EXCEPTIONS = new Set([
+        'NameError', 'TypeError', 'ValueError', 'KeyError', 'IndexError',
+        'AttributeError', 'ImportError', 'ModuleNotFoundError', 'SyntaxError',
+        'OSError', 'FileNotFoundError', 'RuntimeError', 'ConnectionError',
+        'ZeroDivisionError', 'StopIteration', 'AssertionError', 'Exception',
+        'BaseException', 'SystemExit', 'KeyboardInterrupt'
+      ])
       proc.stderr.on('data', (data: Buffer) => {
         stderrBuf += data.toString('utf-8')
         const lines = stderrBuf.split('\n')
         stderrBuf = lines.pop() || ''
         for (const line of lines) {
           const trimmed = line.trim()
+          // 跳过 Python traceback / 异常行
+          if (/^\s*(Traceback|File\s+")/.test(trimmed)) {
+            event.sender.send('script:output', `[stderr] ${line}\n`)
+            continue
+          }
           const m = trimmed.match(/^(\w+)\s*[:=]\s*(.+)$/)
           if (m) {
-            event.sender.send('script:vars', { [m[1].trim()]: m[2].trim() })
+            const key = m[1].trim()
+            // 过滤掉 Python 异常名和内置类型
+            if (PYTHON_EXCEPTIONS.has(key) || key.startsWith('__')) {
+              event.sender.send('script:output', `[stderr] ${line}\n`)
+            } else {
+              event.sender.send('script:vars', { [key]: m[2].trim() })
+            }
           } else if (trimmed) {
-            // 非变量行（如 Python 异常）转发到输出，带 stderr 标记
             event.sender.send('script:output', `[stderr] ${line}\n`)
           }
         }
       })
       const flushStderr = () => {
         if (stderrBuf.trim()) {
-          const m = stderrBuf.trim().match(/^(\w+)\s*[:=]\s*(.+)$/)
-          if (m) {
-            event.sender.send('script:vars', { [m[1].trim()]: m[2].trim() })
+          const trimmed = stderrBuf.trim()
+          if (/^\s*(Traceback|File\s+")/.test(trimmed)) {
+            event.sender.send('script:output', `[stderr] ${trimmed}\n`)
           } else {
-            event.sender.send('script:output', `[stderr] ${stderrBuf.trim()}\n`)
+            const m = trimmed.match(/^(\w+)\s*[:=]\s*(.+)$/)
+            if (m) {
+              const key = m[1].trim()
+              if (PYTHON_EXCEPTIONS.has(key) || key.startsWith('__')) {
+                event.sender.send('script:output', `[stderr] ${trimmed}\n`)
+              } else {
+                event.sender.send('script:vars', { [key]: m[2].trim() })
+              }
+            } else {
+              event.sender.send('script:output', `[stderr] ${trimmed}\n`)
+            }
           }
         }
         stderrBuf = ''
       }
-      const cleanup = () => {
+      const cleanup = (keepFile = false) => {
         runningProc = null
-        try { unlinkSync(tempPyFile) } catch {}
+        if (!keepFile) { try { unlinkSync(tempPyFile) } catch {} }
       }
       proc.on('close', (code) => {
         flushStderr()
-        cleanup()
+        if (code !== 0) {
+          event.sender.send('script:output', `[stderr] 脚本异常退出(code=${code})，临时文件: ${tempPyFile}\n`)
+          cleanup(true)  // 保留临时文件方便排查
+        } else {
+          cleanup()
+        }
         event.sender.send('script:done', { ok: code === 0 })
         resolve({ ok: code === 0, output })
       })

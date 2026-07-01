@@ -212,24 +212,21 @@ export function UtilsPage() {
     }
 
     try {
-      // 查询脚本用输入框的值，其他脚本只用查询结果（全局变量）
-      const isQuery = label.includes('查询项目信息') || label.includes('查询客户信息')
-      const resolvedMultiFunc = multiFunc || globalVars.platformId || globalVars.multiFunc || ''
+      // 输入框的值直接传给脚本，不自动合并全局变量（全局变量由 stderr 注入）
       const vars: Record<string, string> = {
         env,
-        ...globalVars,
-        projectId: isQuery ? (projectId || globalVars.projectId || '') : (globalVars.projectId || ''),
-        certNo: isQuery ? (certNo || globalVars.certNo || '') : (globalVars.certNo || ''),
-        amount: amount || globalVars.amount || '',
-        multiFunc: resolvedMultiFunc,
+        projectId: projectId || '',
+        certNo: certNo || '',
+        amount: amount || '',
+        multiFunc: multiFunc || '',
       }
       if (submitterType) {
         vars.submitter_type = submitterType
       }
       await api.runScript(scriptPath, vars)
 
-      // 解析输出，存入全局变量
-      parseAndStoreQueryResult()
+      // 不再自动解析输出注入变量，由脚本 stderr 控制
+      // parseAndStoreQueryResult()
     } catch (err: any) {
       outputRef.current += `\n错误: ${err.message || String(err)}`
       setOutput(outputRef.current)
@@ -396,8 +393,8 @@ export function UtilsPage() {
               <span className="absolute right-2 top-1/2 -translate-y-1/2 group">
                 <HelpCircle size={13} className="text-muted cursor-help" />
                 <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '220px' }}>
-                  多功能 = multi_func<br />
-                  多功能输入框变量名是multi_func 供下游脚本使用<br />
+                  多功能 = multiFunc<br />
+                  多功能输入框变量名是multiFunc 供下游脚本使用<br />
                 </span>
               </span>
             </div>
@@ -522,6 +519,20 @@ export function UtilsPage() {
             </div>
           )}
         </div>
+
+        {/* 已注入变量展示 */}
+        {Object.keys(globalVars).length > 0 && (
+          <div className="shrink-0 px-4 py-2 border-b border-border/5 bg-surface-light/10 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] text-muted shrink-0">已注入:</span>
+            {Object.entries(globalVars).map(([k, v]) => (
+              <span key={k} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20 text-[10px]">
+                <span className="text-accent font-mono">{k}</span>
+                <span className="text-muted">=</span>
+                <span className="text-foreground font-mono max-w-[120px] truncate" title={v}>{v || '(空)'}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="border-t border-border/5 bg-surface-light/10 flex flex-col shrink-0" style={{ height: '45%' }}>
             <div className="flex items-center gap-2 px-4 py-2 border-b border-border/5 bg-surface-light/20 shrink-0">
