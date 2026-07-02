@@ -418,7 +418,7 @@ function registerIpcHandlers(): void {
       }
 
       const varLines = vars ? Object.entries(vars)
-        .filter(([k]) => k !== 'env' && k !== 'current_env' && !new RegExp(`(^|\\n)\\s*${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=`).test(scriptContent))
+        .filter(([k]) => k !== 'env' && k !== 'current_env' && !new RegExp(`(^|\\n)${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=`).test(scriptContent))
         .map(([k, v]) => `${k} = ${JSON.stringify(v != null ? v : '')}`)
         .join('\n') + '\n' : ''
       const argvPart = envArg ? `sys.argv = ['${fullScriptPath.replace(/\\/g, '\\\\')}', '${envArg}']` : ''
@@ -525,8 +525,8 @@ function registerIpcHandlers(): void {
       proc.on('close', (code) => {
         flushStderr()
         if (code !== 0) {
-          event.sender.send('script:output', `[stderr] 脚本异常退出(code=${code})，临时文件: ${tempPyFile}\n`)
-          cleanup(true)  // 保留临时文件方便排查
+          event.sender.send('script:output', `[stderr] 脚本异常退出(code=${code})\n`)
+          cleanup()
         } else {
           cleanup()
         }

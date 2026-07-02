@@ -347,7 +347,7 @@ export function UtilsPage() {
                   projectId = 项目ID<br />
                   projectName = 项目名称<br />
                   partnerPlatformId = 平台ID<br />
-                  enterpriseName = 平台名称<br />
+                  partnerPlatformName = 平台名称<br />
                   enterpriseName = 企业名称<br />
                   socialCreditCode = 企业证件号<br />
                   legalPersonName = 法人名称<br />
@@ -395,7 +395,9 @@ export function UtilsPage() {
                 <HelpCircle size={13} className="text-muted cursor-help" />
                 <span className="pointer-events-none absolute top-full right-0 mt-2 px-3 py-2 bg-foreground text-surface rounded-lg text-[10px] leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg" style={{ width: '220px' }}>
                   多功能 = multiFunc<br />
-                  多功能输入框变量名是multiFunc 供下游脚本使用<br />
+                  指定利率 = 本次添加预授信白名单指定标识为是<br />
+                  资料采集、停 = 发起企业授信时流程会停止在资料采集环节<br />
+                  非无锡 = 发起授信时新建的企业mock地址非无锡，否则就是无锡<br />
                 </span>
               </span>
             </div>
