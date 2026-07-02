@@ -43,8 +43,9 @@ npm run dev
 # 仅提交代码（不构建不发布）
 git add -A && git commit -m "描述" && git push
 
-# 完整发布（仅用户明确要求时才执行）
-git add -A && git commit -m "描述" && npm version patch && git push && git push --tags && npm run release
+# 发布新版本（通过 CI 流水线构建全平台安装包）
+npm version patch && git push && git push --tags
+# ↑ 推送 tag 后 GitHub Actions 自动构建 Mac(x64+arm64) + Windows(x64) 并发布 Release
 ```
 ```
 
