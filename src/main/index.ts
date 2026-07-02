@@ -1107,6 +1107,8 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
     for (let i = startLine + 1; i < endLine; i++) {
       const line = lines[i].trim()
       if (line === '' || line.startsWith('#') || line.startsWith('===')) continue
+      // 跳过控制流语句（if/elif/else/for/while/try/except/with/def/class）
+      if (/^(if|elif|else|for|while|try|except|finally|with|def|class|return|break|continue|pass|import|from)\b/.test(line)) continue
 
       // 解析注释（# 后面的内容）
       const commentIdx = line.indexOf('#')
