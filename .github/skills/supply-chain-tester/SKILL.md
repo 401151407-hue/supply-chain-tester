@@ -53,6 +53,27 @@ git add -A && git commit -m "描述" && git push-all
 # 发布新版本（通过 CI 流水线构建全平台安装包）
 npm version patch && git push-all && git push-all --tags
 # ↑ 推送 tag 后 GitHub Actions 自动构建 Mac(x64+arm64) + Windows(x64) 并发布 Release
+
+## CI/CD 构建与发布
+
+推送 `v*` tag 后 GitHub Actions 自动触发，流程如下：
+
+```
+git push --tags
+  → build-windows (Windows runner) → .exe
+  → build-mac-x64  (macOS runner)  → .dmg (Intel)
+  → build-mac-arm64 (macOS runner) → .dmg (Apple Silicon)
+  → publish-github → GitHub Release
+  → publish-gitee  → Gitee Release (通过 GITEE_TOKEN API)
+```
+
+| 仓库 | 用途 |
+|------|------|
+| GitHub Release | 官方发布 + 自动更新检测 |
+| Gitee Release | 国内镜像下载（解决 GitHub 访问问题） |
+
+> ⚠️ 需要在 GitHub Secrets 中配置 `GITEE_TOKEN`（Gitee 私人令牌，勾选 projects 权限）
+
 ```
 ```
 
