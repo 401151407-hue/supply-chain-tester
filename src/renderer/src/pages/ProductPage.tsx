@@ -60,12 +60,16 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
   const [deletingVar, setDeletingVar] = useState<string | null>(null)
   // 标记变量是否已从 store 恢复过（避免覆盖用户正在编辑的值）
   const restoredRef = useRef(false)
-  // 记录上次恢复时的 env，env 变化时强制用默认值而非 store 缓存
-  const lastEnvRef = useRef(env)
+  // 记录上一次 effect 执行时的 env，用于检测环境变化
+  const prevEnvRef = useRef(env)
   // 跟踪动画定时器，避免快速切换导致动画卡住
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    // 在当前 effect 中同步检测 env 变化（即使上次被取消也能正确检测）
+    const envChanged = prevEnvRef.current !== env
+    prevEnvRef.current = env
+
     let cancelled = false
     async function loadVars() {
       const subs = scripts
@@ -80,10 +84,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
         return
       }
 
-      // env 变了 → 强制用默认值，不从 store 恢复旧环境的缓存
-      const envChanged = lastEnvRef.current !== env
       if (envChanged) {
-        lastEnvRef.current = env
         restoredRef.current = true
         // 清除上一次还没跑完的动画定时器，重置动画状态
         if (animTimerRef.current) {
@@ -275,14 +276,21 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => {
-                        setRestoring(true)
+                        // 清除旧的动画定时器
+                        if (animTimerRef.current) {
+                          clearTimeout(animTimerRef.current)
+                          animTimerRef.current = null
+                        }
                         const defaults: Record<string, string> = {}
                         for (const v of scriptVars) defaults[v.key] = v.value || ''
-                        setTimeout(() => setVarValues(defaults), 100)
-                        setTimeout(() => {
-                          setRestoring(false)
-                          setProductVarValues(pageKey, defaults)
-                        }, 220)
+                        setVarValues(defaults)
+                        setEnvSwitchingIn(true)
+                        const staggerIn = (scriptVars.length - 1) * 40 + 250
+                        animTimerRef.current = setTimeout(() => {
+                          setEnvSwitchingIn(false)
+                          animTimerRef.current = null
+                        }, staggerIn)
+                        setProductVarValues(pageKey, defaults)
                       }}
                       className="text-[10px] text-muted hover:text-foreground transition-colors flex items-center gap-1"
                       title="恢复为脚本中的默认值"
@@ -332,15 +340,29 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
                       style={envSwitchingIn ? { animationDelay: `${idx * 40}ms` } : undefined}
                     >
                       <label className="text-[10px] text-muted block mb-0.5">{label}</label>
-                      <input
-                        type="text"
-                        value={varValues[v.key] || ''}
-                        onChange={e => setVarValues(prev => ({ ...prev, [v.key]: e.target.value }))}
-                        placeholder={placeholder || `请输入${v.key}的值`}
-                        className="w-full bg-surface rounded-lg px-2 py-1.5 text-xs font-mono outline-none
-                                   border border-border/5 focus:border-accent/50 transition-colors
-                                   placeholder:text-muted/30"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={varValues[v.key] || ''}
+                          onChange={e => setVarValues(prev => ({ ...prev, [v.key]: e.target.value }))}
+                          placeholder={placeholder || `请输入${v.key}的值`}
+                          className="w-full bg-surface rounded-lg px-2 py-1.5 pr-6 text-xs font-mono outline-none
+                                     border border-border/5 focus:border-accent/50 transition-colors
+                                     placeholder:text-muted/30"
+                        />
+                        <button
+                          onClick={() => {
+                            setDeletingVar(v.key)
+                            setVarValues(prev => ({ ...prev, [v.key]: '' }))
+                            setTimeout(() => setDeletingVar(null), 250)
+                          }}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted/40 hover:text-muted
+                                     transition-colors opacity-0 group-hover/var:opacity-100"
+                          title="清空此变量"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
                     </div>
                     )
                   })}
