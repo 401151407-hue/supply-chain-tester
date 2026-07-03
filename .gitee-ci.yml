@@ -1,0 +1,45 @@
+# Gitee Go 流水线配置
+# 在 Linux 上交叉编译 Windows 安装包，推 tag (v*) 时自动触发
+#
+# ⚠️ 需要在 Gitee 网页端配置 CI：
+#    https://gitee.com/liaochenglu/supply-chain-tester/ci
+#    添加密钥 GITEE_TOKEN（私人令牌，勾选 projects 权限）
+#
+# 构建命令（Linux 上可以用 electron-builder 交叉编译 Windows exe）：
+#   npx electron-builder --win --publish never
+
+version: '1.0'
+name: build-windows
+
+triggers:
+  push:
+    tags:
+      - 'v*'
+
+stages:
+  - name: build
+    displayName: 构建 Windows 安装包
+    steps:
+      - name: checkout
+        uses: git-checkout
+
+      - name: setup-node
+        uses: setup-node
+        with:
+          node-version: '22'
+
+      - name: install
+        run: |
+          npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: build-exe
+        run: |
+          npx electron-builder --win --publish never
+
+      - name: release
+        uses: gitee-release
+        with:
+          files: dist/*.exe
+          token: ${{ secrets.GITEE_TOKEN }}

@@ -1,4 +1,4 @@
-name: Build Installers
+name: Build macOS Installers
 
 on:
   push:
@@ -10,7 +10,6 @@ permissions:
   contents: write
 
 jobs:
-  # 先创建 Release，避免两个 build job 同时上传产生竞争
   create-release:
     runs-on: ubuntu-latest
     outputs:
@@ -24,36 +23,23 @@ jobs:
           body: |
             ## 📦 安装包
 
-            | 平台 | 文件 |
-            |------|------|
-            | Windows | `SupplyChainTester-${{ github.ref_name }}-Windows.exe` |
-            | Mac Intel | `SupplyChainTester-${{ github.ref_name }}-Mac-x64.dmg` |
-            | Mac M系列 | `SupplyChainTester-${{ github.ref_name }}-Mac-arm64.dmg` |
-          make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            | 平台 | 来源 | 文件 |
+            |------|------|------|
+            | Windows | Gitee | `SupplyChainTester-${{ github.ref_name }}-Windows.exe` |
+            | Mac Intel | GitHub | `SupplyChainTester-${{ github.ref_name }}-Mac-x64.dmg` |
+            | Mac M系列 | GitHub | `SupplyChainTester-${{ github.ref_name }}-Mac-arm64.dmg` |
 
-  build-windows:
-    needs: create-release
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: npm ci
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: npm run dist
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.exe
+            > Windows 安装包由 Gitee Go 构建，[点击前往 Gitee Release](https://gitee.com/liaochenglu/supply-chain-tester/releases)
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-mac:
     needs: create-release
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,9 +48,9 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: npm run dist
+      - run: npm run dist -- --${{ matrix.arch }}
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*-Mac-x64.dmg,dist/*-Mac-arm64.dmg
+          files: dist/*-Mac-${{ matrix.arch }}.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
