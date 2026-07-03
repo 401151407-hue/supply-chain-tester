@@ -1156,8 +1156,16 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
       }
     }
 
-    console.log('[parseScriptVars] Found', vars.length, 'vars:', vars.map(v => v.key))
-    return vars
+    // 去重：同名变量只保留第一个（if/elif 分支中的重复定义）
+    const seen = new Set<string>()
+    const deduped = vars.filter(v => {
+      if (seen.has(v.key)) return false
+      seen.add(v.key)
+      return true
+    })
+
+    console.log('[parseScriptVars] Found', deduped.length, 'vars:', deduped.map(v => v.key))
+    return deduped
   } catch (err) {
     console.error('[parseScriptVars] Error:', err)
     return []

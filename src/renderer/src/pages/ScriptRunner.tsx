@@ -22,6 +22,7 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
   const [basePath, setBasePath] = useState<string>('')
   const [clearing, setClearing] = useState(false)
   const [knownKeys, setKnownKeys] = useState<string[]>([])
+  const [parsedVars, setParsedVars] = useState<{ key: string; value: string; comment: string }[]>([])
   const outputRef = useRef('')
   const sep = (window as any).supplyChainTester?.pathSep ?? '\\'
 
@@ -35,6 +36,7 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
             .filter((v: any) => v.key && v.key !== 'current_env')
             .map((v: any) => v.key as string)
           setKnownKeys(keys)
+          setParsedVars(parsed.filter((v: any) => v.key && v.key !== 'current_env'))
         }
       }).catch(() => {})
     }
@@ -300,6 +302,36 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
                 重新检测
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 变量信息 */}
+      {parsedVars.length > 0 && (
+        <div className="px-4 pb-2">
+          <h3 className="text-[10px] text-muted uppercase tracking-wider mb-1.5">变量列表</h3>
+          <div className="bg-surface rounded-xl border border-border/5 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/10 bg-surface-light/50">
+                  <th className="text-left px-3 py-2 font-semibold text-foreground text-[11px] w-[140px]">变量名</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground text-[11px]">变量值</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground text-[11px]">说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parsedVars.map(v => {
+                  const val = vars?.[v.key] || v.value || ''
+                  return (
+                    <tr key={v.key} className="border-b border-border/5 last:border-0">
+                      <td className="px-3 py-1.5 font-mono font-semibold text-foreground align-top">{v.key}</td>
+                      <td className="px-3 py-1.5 font-mono text-muted align-top break-all">{val || '(空)'}</td>
+                      <td className="px-3 py-1.5 text-muted align-top">{v.comment?.trim() || '-'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
