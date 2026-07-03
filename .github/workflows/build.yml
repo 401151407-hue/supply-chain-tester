@@ -1,4 +1,4 @@
-name: Build macOS Installers
+name: Build & Publish
 
 on:
   push:
@@ -10,32 +10,23 @@ permissions:
   contents: write
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.release.outputs.upload_url }}
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - id: release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/setup-node@v4
         with:
-          name: ${{ github.ref_name }}
-          body: |
-            ## 📦 安装包
-
-            | 平台 | 来源 | 文件 |
-            |------|------|------|
-            | Windows | Gitee | `SupplyChainTester-${{ github.ref_name }}-Windows.exe` |
-            | Mac Intel | GitHub | `SupplyChainTester-${{ github.ref_name }}-Mac-x64.dmg` |
-            | Mac M系列 | GitHub | `SupplyChainTester-${{ github.ref_name }}-Mac-arm64.dmg` |
-
-            > Windows 安装包由 Gitee Go 构建，[点击前往 Gitee Release](https://gitee.com/liaochenglu/supply-chain-tester/releases)
-          make_latest: true
+          node-version: '22'
+      - run: npm ci
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/*.exe
 
   build-mac:
-    needs: create-release
     runs-on: macos-latest
     strategy:
       matrix:
@@ -49,8 +40,70 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm run dist -- --${{ matrix.arch }}
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: dist/*-Mac-${{ matrix.arch }}.dmg
+          name: mac-${{ matrix.arch }}-dmg
+          path: dist/*-Mac-${{ matrix.arch }}.dmg
+
+  publish-github:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            ## 📦 安装包
+
+            | 平台 | 文件 | 国内下载 |
+            |------|------|----------|
+            | Windows | `SupplyChainTester-${{ github.ref_name }}-Windows.exe` | [Gitee Release](https://gitee.com/liaochenglu/supply-chain-tester/releases) |
+            | Mac Intel | `SupplyChainTester-${{ github.ref_name }}-Mac-x64.dmg` | [Gitee Release](https://gitee.com/liaochenglu/supply-chain-tester/releases) |
+            | Mac M系列 | `SupplyChainTester-${{ github.ref_name }}-Mac-arm64.dmg` | [Gitee Release](https://gitee.com/liaochenglu/supply-chain-tester/releases) |
+          files: |
+            windows-exe/*.exe
+            mac-x64-dmg/*.dmg
+            mac-arm64-dmg/*.dmg
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-gitee:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Create Gitee Release & Upload
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # 列出所有构建产物
+          echo "=== Windows ==="
+          ls windows-exe/
+          echo "=== Mac x64 ==="
+          ls mac-x64-dmg/
+          echo "=== Mac arm64 ==="
+          ls mac-arm64-dmg/
+
+          # 创建 Gitee Release
+          RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/liaochenglu/supply-chain-tester/releases" \
+            -H "Authorization: bearer $GITEE_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"body\":\"构建于 GitHub Actions\",\"target_commitish\":\"master\"}")
+
+          RELEASE_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "Gitee Release ID: $RELEASE_ID"
+
+          # 上传所有安装包
+          for f in windows-exe/*.exe mac-x64-dmg/*.dmg mac-arm64-dmg/*.dmg; do
+            echo "Uploading: $f"
+            curl -s -X POST "https://gitee.com/api/v5/repos/liaochenglu/supply-chain-tester/releases/$RELEASE_ID/attach_files" \
+              -H "Authorization: bearer $GITEE_TOKEN" \
+              -F "file=@$f"
+          done
+
+          echo "✅ Gitee Release 发布完成"
