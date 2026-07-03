@@ -755,8 +755,9 @@ print(f"CHROMIUM_OK={has_chromium}")
   })
 
   // 解析脚本中的可配置变量
-  ipcMain.handle(IPC_CHANNELS.PARSE_SCRIPT_VARS, async (_event, scriptPath: string) => {
-    return parseScriptVars(scriptPath)
+  ipcMain.handle(IPC_CHANNELS.PARSE_SCRIPT_VARS, async (_event, scriptPath: string, env?: string) => {
+    console.log('[parseScriptVars] IPC called with env:', env, 'script:', scriptPath.split('/').pop())
+    return parseScriptVars(scriptPath, env)
   })
 
   // API 调试：发送 HTTP 请求
@@ -1074,7 +1075,7 @@ function scanScriptsDirectory(): Record<string, { subProduct: string; scripts: {
 }
 
 /** 解析 Python 脚本中可配置项区域的变量 */
-function parseScriptVars(scriptPath: string): { key: string; value: string; comment: string }[] {
+function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string; value: string; comment: string }[] {
   try {
     const { dirname } = require('path')
     const fullPath = join(dirname(getScriptsDir()), scriptPath)
@@ -1105,11 +1106,60 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
 
     const vars: { key: string; value: string; comment: string }[] = []
 
+    let skipBranch = false       // 当前分支是否跳过
+    let branchMatched = false    // 是否已有 if/elif 匹配
+    let ifEnvIndent = -1         // if/elif/else 块的缩进级别
+
     for (let i = startLine + 1; i < endLine; i++) {
-      const line = lines[i].trim()
+      const rawLine = lines[i]
+      const line = rawLine.trim()
+      const indent = rawLine.length - rawLine.trimStart().length
       if (line === '' || line.startsWith('#') || line.startsWith('===')) continue
-      // 跳过控制流语句（if/elif/else/for/while/try/except/with/def/class）
-      if (/^(if|elif|else|for|while|try|except|finally|with|def|class|return|break|continue|pass|import|from)\b/.test(line)) continue
+
+      // 退出 if/elif/else 块（缩进回到同级或更浅）
+      if (ifEnvIndent >= 0 && indent <= ifEnvIndent && line !== '' && !/^(elif|else)\b/.test(line)) {
+        ifEnvIndent = -1
+        skipBranch = false
+        branchMatched = false
+      }
+
+      // 检测 if env == 'X': 分支
+      const ifMatch = line.match(/^if\s+env\s*==\s*['"]([^'"]+)['"]/)
+      if (ifMatch) {
+        ifEnvIndent = indent
+        if (currentEnv) {
+          skipBranch = ifMatch[1] !== currentEnv
+          if (!skipBranch) branchMatched = true
+        }
+        continue
+      }
+      // 检测 elif env == 'X': 分支
+      const elifMatch = line.match(/^elif\s+env\s*==\s*['"]([^'"]+)['"]/)
+      if (elifMatch) {
+        if (currentEnv && !branchMatched) {
+          skipBranch = elifMatch[1] !== currentEnv
+          if (!skipBranch) branchMatched = true
+        } else {
+          skipBranch = true  // 已匹配过，后续 elif 跳过
+        }
+        continue
+      }
+      // 检测 else: 分支
+      if (/^else\s*:/.test(line)) {
+        if (currentEnv && !branchMatched) {
+          skipBranch = false
+          branchMatched = true
+        } else if (currentEnv) {
+          skipBranch = true
+        }
+        continue
+      }
+
+      // 跳过不匹配的 env 分支
+      if (skipBranch && currentEnv) continue
+
+      // 跳过其他控制流语句
+      if (/^(for|while|try|except|finally|with|def|class|return|break|continue|pass|import|from)\b/.test(line)) continue
 
       // 解析注释（# 后面的内容）
       const commentIdx = line.indexOf('#')
@@ -1165,7 +1215,7 @@ function parseScriptVars(scriptPath: string): { key: string; value: string; comm
       return true
     })
 
-    console.log('[parseScriptVars] Found', deduped.length, 'vars:', deduped.map(v => v.key))
+    console.log('[parseScriptVars] Found', deduped.length, 'vars:', deduped.map(v => `${v.key}=${v.value}`))
     return deduped
   } catch (err) {
     console.error('[parseScriptVars] Error:', err)

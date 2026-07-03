@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useAppStore } from '../store'
-import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2, X } from 'lucide-react'
+import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2, X, RotateCcw } from 'lucide-react'
 
 interface ScriptVar {
   key: string
@@ -55,9 +55,13 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
   const [scriptVars, setScriptVars] = useState<ScriptVar[]>([])
   const [varValues, setVarValues] = useState<Record<string, string>>({})
   const [clearing, setClearing] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [envSwitchingIn, setEnvSwitchingIn] = useState(false)
   const [deletingVar, setDeletingVar] = useState<string | null>(null)
   // 标记变量是否已从 store 恢复过（避免覆盖用户正在编辑的值）
   const restoredRef = useRef(false)
+  // 记录上次恢复时的 env，env 变化时强制用默认值而非 store 缓存
+  const lastEnvRef = useRef(env)
 
   useEffect(() => {
     let cancelled = false
@@ -74,6 +78,13 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
         return
       }
 
+      // env 变了 → 强制用默认值，不从 store 恢复旧环境的缓存
+      const envChanged = lastEnvRef.current !== env
+      if (envChanged) {
+        lastEnvRef.current = env
+        restoredRef.current = true
+      }
+
       // 解析所有子产品下的所有脚本，合并变量（同名只保留第一个）
       const allVars: ScriptVar[] = []
       const seenKeys = new Set<string>()
@@ -81,7 +92,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
         for (const script of sub.scripts) {
         if (cancelled) return
         try {
-          const vars: any[] = await api.parseScriptVars(script.path)
+          const vars: any[] = await api.parseScriptVars(script.path, env)
           if (Array.isArray(vars)) {
             for (const v of vars) {
               if (v.key === 'current_env') continue
@@ -95,10 +106,9 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
       }
       if (cancelled) return
 
-      setScriptVars(allVars)
-
       // 优先从 store 恢复用户之前填写的值，否则用脚本默认值
       if (!restoredRef.current) {
+        setScriptVars(allVars)
         const saved = productVarValues[pageKey]
         if (saved && Object.keys(saved).length > 0) {
           const restored: Record<string, string> = {}
@@ -112,11 +122,20 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
           setVarValues(initial)
         }
         restoredRef.current = true
+      } else if (envChanged) {
+        // 环境切换：新内容从右推入
+        const initial: Record<string, string> = {}
+        for (const v of allVars) initial[v.key] = v.value
+        setScriptVars(allVars)
+        setVarValues(initial)
+        setEnvSwitchingIn(true)
+        const staggerIn = (allVars.length - 1) * 40 + 250
+        setTimeout(() => setEnvSwitchingIn(false), staggerIn)
       }
     }
     loadVars()
     return () => { cancelled = true }
-  }, [subProduct, product, scannedScripts])
+  }, [subProduct, product, scannedScripts, env])
 
   // varValues 变化时同步到 store
   useEffect(() => {
@@ -148,7 +167,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
     const api = (window as any).supplyChainTester
     if (api?.parseScriptVars) {
       try {
-        const parsed = await api.parseScriptVars(scriptPath)
+        const parsed = await api.parseScriptVars(scriptPath, env)
         if (Array.isArray(parsed)) {
           const keys = new Set(parsed.map((v: any) => v.key))
           const filtered: Record<string, string> = {}
@@ -236,25 +255,43 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
               <aside className="w-64 border-l border-border/5 bg-surface-light/30 p-4 overflow-y-auto shrink-0">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-medium text-muted uppercase tracking-wider">变量配置</h3>
-                  <button
-                    onClick={() => {
-                      setClearing(true)
-                      const empty: Record<string, string> = {}
-                      for (const v of scriptVars) empty[v.key] = ''
-                      setTimeout(() => setVarValues(empty), 100)
-                      setTimeout(() => {
-                        setClearing(false)
-                        setProductVarValues(pageKey, empty)
-                      }, 220)
-                    }}
-                    className="text-[10px] text-muted hover:text-foreground transition-colors flex items-center gap-1"
-                    title="清空所有变量，恢复默认值"
-                  >
-                    <Trash2 size={12} /> 清空
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        setRestoring(true)
+                        const defaults: Record<string, string> = {}
+                        for (const v of scriptVars) defaults[v.key] = v.value || ''
+                        setTimeout(() => setVarValues(defaults), 100)
+                        setTimeout(() => {
+                          setRestoring(false)
+                          setProductVarValues(pageKey, defaults)
+                        }, 220)
+                      }}
+                      className="text-[10px] text-muted hover:text-foreground transition-colors flex items-center gap-1"
+                      title="恢复为脚本中的默认值"
+                    >
+                      <RotateCcw size={12} /> 默认
+                    </button>
+                    <button
+                      onClick={() => {
+                        setClearing(true)
+                        const empty: Record<string, string> = {}
+                        for (const v of scriptVars) empty[v.key] = ''
+                        setTimeout(() => setVarValues(empty), 100)
+                        setTimeout(() => {
+                          setClearing(false)
+                          setProductVarValues(pageKey, empty)
+                        }, 220)
+                      }}
+                      className="text-[10px] text-muted hover:text-foreground transition-colors flex items-center gap-1"
+                      title="清空所有变量"
+                    >
+                      <Trash2 size={12} /> 清空
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-3">
-                  {scriptVars.map(v => {
+                  {scriptVars.map((v, idx) => {
                     // 取注释中第一个逗号（中文或英文）前后部分
                     const cnIdx = v.comment ? v.comment.indexOf('，') : -1
                     const enIdx = v.comment ? v.comment.indexOf(',') : -1
@@ -272,8 +309,10 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
                       className={
                         'group/var relative ' +
                         (deletingVar === v.key ? 'animate-swipe-out' : '') +
-                        (clearing ? ' animate-swipe-out' : '')
+                        (clearing || restoring ? ' animate-swipe-out' : '') +
+                        (envSwitchingIn ? ' animate-curtain-in' : '')
                       }
+                      style={envSwitchingIn ? { animationDelay: `${idx * 40}ms` } : undefined}
                     >
                       <label className="text-[10px] text-muted block mb-0.5">{label}</label>
                       <input
@@ -282,7 +321,8 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
                         onChange={e => setVarValues(prev => ({ ...prev, [v.key]: e.target.value }))}
                         placeholder={placeholder || `请输入${v.key}的值`}
                         className="w-full bg-surface rounded-lg px-2 py-1.5 text-xs font-mono outline-none
-                                   border border-border/5 focus:border-accent/50 transition-colors"
+                                   border border-border/5 focus:border-accent/50 transition-colors
+                                   placeholder:text-muted/30"
                       />
                     </div>
                     )

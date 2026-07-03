@@ -182,6 +182,23 @@ body {
   animation: swipeOut 0.2s ease-in forwards;
 }
 
+/* 拉窗帘效果：旧内容向左滑出 */
+@keyframes curtainOut {
+  0%   { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-30px); }
+}
+.animate-curtain-out {
+  animation: curtainOut 0.2s ease-in forwards;
+}
+/* 拉窗帘效果：新内容从右推入 */
+@keyframes curtainIn {
+  0%   { opacity: 0; transform: translateX(40px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.animate-curtain-in {
+  animation: curtainIn 0.25s ease-out forwards;
+}
+
 @keyframes slideOutLeft {
   0%   { opacity: 1; transform: translateX(0); }
   60%  { opacity: 0.3; transform: translateX(-60px); }

@@ -30,7 +30,7 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
   useEffect(() => {
     const api = (window as any).supplyChainTester
     if (api?.parseScriptVars) {
-      api.parseScriptVars(scriptPath).then((parsed: any[]) => {
+      api.parseScriptVars(scriptPath, env).then((parsed: any[]) => {
         if (Array.isArray(parsed)) {
           const keys = parsed
             .filter((v: any) => v.key && v.key !== 'current_env')
@@ -106,7 +106,7 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
     const varComments: Record<string, string> = {}
     if (api.parseScriptVars) {
       try {
-        const parsed = await api.parseScriptVars(scriptPath)
+        const parsed = await api.parseScriptVars(scriptPath, env)
         if (Array.isArray(parsed)) {
           for (const v of parsed) {
             if (v.key === 'current_env') continue

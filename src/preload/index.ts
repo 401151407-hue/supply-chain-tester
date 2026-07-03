@@ -139,8 +139,8 @@ const api = {
     ipcRenderer.invoke('app:check-playwright'),
 
   /** 解析脚本可配置变量 */
-  parseScriptVars: (scriptPath: string): Promise<{ key: string; value: string; comment: string }[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.PARSE_SCRIPT_VARS, scriptPath),
+  parseScriptVars: (scriptPath: string, env?: string): Promise<{ key: string; value: string; comment: string }[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PARSE_SCRIPT_VARS, scriptPath, env),
 
   /** 扫描 scripts 目录，返回产品线脚本树 */
   scanScripts: () => ipcRenderer.invoke(IPC_CHANNELS.SCAN_SCRIPTS),
