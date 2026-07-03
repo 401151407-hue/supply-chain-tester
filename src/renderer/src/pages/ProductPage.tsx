@@ -62,6 +62,8 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
   const restoredRef = useRef(false)
   // 记录上次恢复时的 env，env 变化时强制用默认值而非 store 缓存
   const lastEnvRef = useRef(env)
+  // 跟踪动画定时器，避免快速切换导致动画卡住
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -83,6 +85,12 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
       if (envChanged) {
         lastEnvRef.current = env
         restoredRef.current = true
+        // 清除上一次还没跑完的动画定时器，重置动画状态
+        if (animTimerRef.current) {
+          clearTimeout(animTimerRef.current)
+          animTimerRef.current = null
+        }
+        setEnvSwitchingIn(false)
       }
 
       // 解析所有子产品下的所有脚本，合并变量（同名只保留第一个）
@@ -130,11 +138,20 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
         setVarValues(initial)
         setEnvSwitchingIn(true)
         const staggerIn = (allVars.length - 1) * 40 + 250
-        setTimeout(() => setEnvSwitchingIn(false), staggerIn)
+        animTimerRef.current = setTimeout(() => {
+          setEnvSwitchingIn(false)
+          animTimerRef.current = null
+        }, staggerIn)
       }
     }
     loadVars()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (animTimerRef.current) {
+        clearTimeout(animTimerRef.current)
+        animTimerRef.current = null
+      }
+    }
   }, [subProduct, product, scannedScripts, env])
 
   // varValues 变化时同步到 store
