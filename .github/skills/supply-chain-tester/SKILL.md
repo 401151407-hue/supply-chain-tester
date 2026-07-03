@@ -24,6 +24,12 @@ argument-hint: '[开发|打包|发布|变量|脚本|产品线]'
 | 更新 | GitHub Release + LAN P2P |
 | CI/CD | GitHub Actions (`.github/workflows/build.yml`) |
 
+## Git 仓库
+
+- **GitHub**: `ssh://git@github.com/401151407-hue/supply-chain-tester.git` (origin)
+- **Gitee**: `git@gitee.com:liaochenglu/supply-chain-tester.git` (gitee)
+- **推送规则**: 每次代码提交必须同时推送到两边，使用 `git push-all` 别名
+
 ## 环境配置
 
 ```bash
@@ -41,10 +47,11 @@ cd /Users/liaochenglu/Desktop/supply-chain-tester
 npm run dev
 
 # 仅提交代码（不构建不发布）
-git add -A && git commit -m "描述" && git push
+git add -A && git commit -m "描述" && git push-all
+# ↑ git push-all 同时推送到 GitHub (origin) + Gitee (gitee)
 
 # 发布新版本（通过 CI 流水线构建全平台安装包）
-npm version patch && git push && git push --tags
+npm version patch && git push-all && git push-all --tags
 # ↑ 推送 tag 后 GitHub Actions 自动构建 Mac(x64+arm64) + Windows(x64) 并发布 Release
 ```
 ```
