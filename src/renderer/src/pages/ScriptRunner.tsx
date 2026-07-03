@@ -205,18 +205,6 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
         </span>
       </header>
 
-      {/* 变量信息 */}
-      {vars && Object.keys(vars).length > 0 && (
-        <div className="px-4 py-2 border-b border-border/5 bg-surface-light/10 flex flex-wrap gap-x-4 gap-y-1">
-          {Object.entries({ ...vars, current_env: env }).filter(([k]) => k !== 'env').map(([k, v]) => (
-            <span key={k} className="text-xs">
-              <span className="text-muted">{k === 'env' || k === 'current_env' ? '当前环境' : k}: </span>
-              <span className="text-foreground font-mono">{k === 'current_env' ? env : v}</span>
-            </span>
-          ))}
-        </div>
-      )}
-
       {/* 操作栏 */}
       <div className="px-4 py-3 border-b border-border/5 bg-surface-light/20 flex items-center gap-3">
         <button

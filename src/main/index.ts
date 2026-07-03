@@ -292,6 +292,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 640,
     title: '供应链测试工具 - Supply Chain Tester',
+    autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#1a1a2e',
