@@ -440,8 +440,8 @@ function registerIpcHandlers(): void {
         const newFirstLine = firstLine.slice(0, hashIdx) + injectLine + '; ' + firstLine.slice(hashIdx)
         scriptContent = newFirstLine + (firstNewline >= 0 ? scriptContent.slice(firstNewline) : '\n')
       } else if (insertPos > 0) {
-        // 正常情况：注入代码加到第一行末尾
-        scriptContent = scriptContent.slice(0, insertPos) + '; ' + injectLine + scriptContent.slice(firstNewline)
+        // 变量赋值必须放在脚本原始代码之前，否则脚本第一行的 print(f'{var}') 会报 NameError
+        scriptContent = injectLine + '; ' + scriptContent
       } else {
         // 脚本为空或只有一行：注入代码放在最前面
         scriptContent = injectLine + '\n' + scriptContent

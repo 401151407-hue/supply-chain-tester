@@ -292,7 +292,8 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
           </span>
         </button>
         {/* 环境切换 */}
-        <div className="relative flex items-center w-full h-8 rounded-lg bg-hover/5 p-0.5">
+        <div className={`relative flex items-center w-full h-8 rounded-lg bg-hover/5 p-0.5
+                         ${activeTab === 'script' ? 'opacity-40 pointer-events-none' : ''}`}>
           <span
             className={`absolute top-0.5 h-7 w-[calc(33.33%-3px)] rounded-md
                        bg-accent shadow-sm transition-transform duration-300 ease-out
