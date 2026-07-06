@@ -43,9 +43,11 @@ export function UtilsPage() {
     return highlightOutput(output, [], vals)
   }, [output, projectId, certNo, amount, multiFunc, globalVars])
 
-  // 发起方式弹窗
-  const [showSubmitterDialog, setShowSubmitterDialog] = useState(false)
-  const [pendingScript, setPendingScript] = useState<ScriptItem | null>(null)
+  // 发起方式弹窗 → 改为通用的脚本变量选择弹窗
+  const [showVarDialog, setShowVarDialog] = useState(false)
+  const [pendingRun, setPendingRun] = useState<{ script: ScriptItem; vars: { key: string; value: string; comment: string; options?: { label: string; value: string }[] | null }[] } | null>(null)
+  // 弹窗中用户选中的值
+  const [dialogValues, setDialogValues] = useState<Record<string, string>>({})
 
   // Playwright 安装状态
   const [installingPW, setInstallingPW] = useState(false)
@@ -87,22 +89,35 @@ export function UtilsPage() {
     }
   }
 
-  function handleRunScript(script: ScriptItem) {
-    // 授信回捞/特殊提额类脚本需要选择发起方式
-    if (script.name.includes('授信回捞') || script.name.includes('特殊提额')) {
-      setPendingScript(script)
-      setShowSubmitterDialog(true)
-      return
-    }
+  async function handleRunScript(script: ScriptItem) {
+    const api = (window as any).supplyChainTester
+    try {
+      const parsed = await api?.parseScriptVars?.(script.path, env)
+      console.log('[handleRunScript] parsed:', parsed)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const choiceVars = parsed.filter((v: any) => v.options && v.options.length > 0)
+        console.log('[handleRunScript] choiceVars:', choiceVars)
+        if (choiceVars.length > 0) {
+          const defaults: Record<string, string> = {}
+          for (const v of choiceVars) {
+            defaults[v.key] = v.value
+          }
+          setDialogValues(defaults)
+          setPendingRun({ script, vars: parsed })
+          setShowVarDialog(true)
+          return
+        }
+      }
+    } catch (e) { console.error('[handleRunScript] error:', e) }
     runUtilityScript(script.path, script.name)
   }
 
-  async function handleRunWithSubmitterType(submitterType: string) {
-    setShowSubmitterDialog(false)
-    const script = pendingScript
-    if (!script) return
-    setPendingScript(null)
-    runUtilityScript(script.path, script.name, submitterType)
+  function handleVarDialogConfirm() {
+    setShowVarDialog(false)
+    if (!pendingRun) return
+    const { script } = pendingRun
+    runUtilityScript(script.path, script.name, dialogValues)
+    setPendingRun(null)
   }
 
   async function checkPlaywright() {
@@ -185,7 +200,7 @@ export function UtilsPage() {
     }, 350)
   }
 
-  async function runUtilityScript(scriptPath: string, label: string, submitterType?: string) {
+  async function runUtilityScript(scriptPath: string, label: string, extraVars?: Record<string, string>) {
     if (isRunning) return
     setActiveScript({ name: label, path: scriptPath })
     setIsRunning(true)
@@ -221,8 +236,8 @@ export function UtilsPage() {
         amount: amount || globalVars.amount || '',
         multiFunc: multiFunc || globalVars.multiFunc || '',
       }
-      if (submitterType) {
-        vars.submitter_type = submitterType
+      if (extraVars) {
+        Object.assign(vars, extraVars)
       }
       await api.runScript(scriptPath, vars)
 
@@ -568,41 +583,43 @@ export function UtilsPage() {
           </div>
       </div>
 
-      {/* 发起方式选择弹窗 */}
-      {showSubmitterDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowSubmitterDialog(false)}>
+      {/* 脚本变量选择弹窗 */}
+      {showVarDialog && pendingRun && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowVarDialog(false)}>
           <div className="bg-surface border border-border/10 rounded-2xl p-6 w-80 shadow-2xl animate-zoom-in" onClick={e => e.stopPropagation()}>
-            <h3 className="text-base font-semibold text-foreground mb-1">选择发起方式</h3>
-            <p className="text-xs text-muted mb-5">{pendingScript?.name}</p>
+            <p className="text-sm font-semibold text-foreground mb-4">{pendingRun.script.name}</p>
             <div className="flex flex-col gap-3">
+              {pendingRun.vars
+                .filter((v: any) => v.options && v.options.length > 0)
+                .map((v: any) => (
+                <div key={v.key} className="flex gap-2">
+                  {v.options.map((opt: any) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setDialogValues(prev => ({ ...prev, [v.key]: opt.value }))}
+                      className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-medium border transition-all
+                        ${dialogValues[v.key] === opt.value
+                          ? 'bg-accent/20 border-accent/40 text-foreground'
+                          : 'bg-surface-light border-border/10 text-muted hover:border-border/30 hover:text-foreground'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-5">
               <button
-                onClick={() => handleRunWithSubmitterType('02')}
-                className="flex items-center gap-3 p-4 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/20 hover:border-accent/40 transition-all text-left">
-                <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">客户经理发起</p>
-                  <p className="text-[11px] text-muted">submitterType = 02</p>
-                </div>
+                onClick={() => setShowVarDialog(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm text-muted hover:text-foreground hover:bg-hover/5 transition-colors">
+                取消
               </button>
               <button
-                onClick={() => handleRunWithSubmitterType('01')}
-                className="flex items-center gap-3 p-4 rounded-xl bg-green-500/5 hover:bg-green-500/15 border border-green-500/15 hover:border-green-500/30 transition-all text-left">
-                <div className="w-10 h-10 rounded-lg bg-green-500/15 flex items-center justify-center">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">客户自主发起</p>
-                  <p className="text-[11px] text-muted">submitterType = 01</p>
-                </div>
+                onClick={handleVarDialogConfirm}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-accent hover:bg-accent/90 text-foreground transition-all">
+                确认运行
               </button>
             </div>
-            <button
-              onClick={() => setShowSubmitterDialog(false)}
-              className="w-full mt-4 py-2.5 rounded-xl text-sm text-muted hover:text-foreground hover:bg-hover/5 transition-colors">
-              取消
-            </button>
           </div>
         </div>
       )}

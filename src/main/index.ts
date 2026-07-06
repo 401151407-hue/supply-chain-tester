@@ -1075,7 +1075,7 @@ function scanScriptsDirectory(): Record<string, { subProduct: string; scripts: {
 }
 
 /** 解析 Python 脚本中可配置项区域的变量 */
-function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string; value: string; comment: string }[] {
+function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string; value: string; comment: string; options?: { label: string; value: string }[] | null }[] {
   try {
     const { dirname } = require('path')
     const fullPath = join(dirname(getScriptsDir()), scriptPath)
@@ -1104,7 +1104,7 @@ function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string
       return []
     }
 
-    const vars: { key: string; value: string; comment: string }[] = []
+    const vars: { key: string; value: string; comment: string; options?: { label: string; value: string }[] | null }[] = []
 
     let skipBranch = false       // 当前分支是否跳过
     let branchMatched = false    // 是否已有 if/elif 匹配
@@ -1161,12 +1161,28 @@ function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string
       // 跳过其他控制流语句
       if (/^(for|while|try|except|finally|with|def|class|return|break|continue|pass|import|from)\b/.test(line)) continue
 
-      // 解析注释（# 后面的内容）
+      // 解析注释（# 后面的内容），提取选项标记
       const commentIdx = line.indexOf('#')
       let comment = ''
       let code = line
+      let options: { label: string; value: string }[] | null = null
       if (commentIdx !== -1) {
-        comment = line.substring(commentIdx + 1).trim()
+        const rawComment = line.substring(commentIdx + 1).trim()
+        // 检测「选项:02=客户经理,01=客户自主」格式（允许前面有其他文字）
+        const optMatch = rawComment.match(/选项:\s*(.+)$/)
+        if (optMatch) {
+          comment = ''
+          const pairs = optMatch[1].split(',')
+          options = []
+          for (const p of pairs) {
+            const eq = p.indexOf('=')
+            if (eq !== -1) {
+              options.push({ value: p.substring(0, eq).trim(), label: p.substring(eq + 1).trim() })
+            }
+          }
+        } else {
+          comment = rawComment
+        }
         code = line.substring(0, commentIdx)
       }
 
@@ -1203,7 +1219,7 @@ function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string
       }
 
       if (key && key !== 'CONFIG') {
-        vars.push({ key, value, comment })
+        vars.push({ key, value, comment, options })
       }
     }
 
