@@ -607,16 +607,30 @@ export function UtilsPage() {
                   ))}
                 </div>
               ))}
+              {/* 无选项的变量 → 文本输入框 */}
+              {pendingRun.vars
+                .filter((v: any) => !v.options || v.options.length === 0)
+                .map((v: any) => (
+                <div key={v.key} className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-accent-light">{v.comment || v.key}</label>
+                  <input
+                    value={dialogValues[v.key] ?? v.value}
+                    onChange={e => setDialogValues(prev => ({ ...prev, [v.key]: e.target.value }))}
+                    placeholder={v.comment || v.key}
+                    className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none bg-surface border border-border/5 focus:border-accent/50"
+                  />
+                </div>
+              ))}
             </div>
             <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setShowVarDialog(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm text-muted hover:text-foreground hover:bg-hover/5 transition-colors">
+                className="flex-1 py-1 rounded-lg text-xs text-muted hover:text-foreground hover:bg-hover/5 transition-colors">
                 取消
               </button>
               <button
                 onClick={handleVarDialogConfirm}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-accent hover:bg-accent/90 text-foreground transition-all">
+                className="flex-1 py-1 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/90 text-foreground transition-all">
                 确认运行
               </button>
             </div>
