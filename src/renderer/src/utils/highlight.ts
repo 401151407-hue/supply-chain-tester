@@ -67,8 +67,13 @@ export function highlightOutput(text: string, _knownVarKeys: string[] = [], know
       continue
     }
 
-    // 5. 普通行
-    out.push(esc(line))
+    // 5. 普通行：高亮行中 !!...!! 包裹的内容
+    let processed = esc(line)
+    processed = processed.replace(
+      /[!！]{2}(.+?)[!！]{2}/g,
+      `<span style="${S.valGold}">$1</span>`
+    )
+    out.push(processed)
   }
 
   return out.join('\n')
