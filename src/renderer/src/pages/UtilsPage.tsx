@@ -95,18 +95,15 @@ export function UtilsPage() {
       const parsed = await api?.parseScriptVars?.(script.path, env)
       console.log('[handleRunScript] parsed:', parsed)
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const choiceVars = parsed.filter((v: any) => v.options && v.options.length > 0)
-        console.log('[handleRunScript] choiceVars:', choiceVars)
-        if (choiceVars.length > 0) {
-          const defaults: Record<string, string> = {}
-          for (const v of choiceVars) {
-            defaults[v.key] = v.value
-          }
-          setDialogValues(defaults)
-          setPendingRun({ script, vars: parsed })
-          setShowVarDialog(true)
-          return
+        // 只要有可配置变量就弹窗（不论是否有选项）
+        const defaults: Record<string, string> = {}
+        for (const v of parsed) {
+          defaults[v.key] = v.value
         }
+        setDialogValues(defaults)
+        setPendingRun({ script, vars: parsed })
+        setShowVarDialog(true)
+        return
       }
     } catch (e) { console.error('[handleRunScript] error:', e) }
     runUtilityScript(script.path, script.name)
