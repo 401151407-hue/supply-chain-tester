@@ -21,33 +21,23 @@ export function ScriptRunner({ scriptPath, scriptName, vars }: ScriptRunnerProps
   const [pythonHint, setPythonHint] = useState<string>('')
   const [basePath, setBasePath] = useState<string>('')
   const [clearing, setClearing] = useState(false)
-  const [knownKeys, setKnownKeys] = useState<string[]>([])
   const [parsedVars, setParsedVars] = useState<{ key: string; value: string; comment: string }[]>([])
   const outputRef = useRef('')
   const sep = (window as any).supplyChainTester?.pathSep ?? '\\'
 
-  // 解析当前脚本的可配置变量名，用于输出高亮
+  // 解析当前脚本的可配置变量名
   useEffect(() => {
     const api = (window as any).supplyChainTester
     if (api?.parseScriptVars) {
       api.parseScriptVars(scriptPath, env).then((parsed: any[]) => {
         if (Array.isArray(parsed)) {
-          const keys = parsed
-            .filter((v: any) => v.key && v.key !== 'current_env')
-            .map((v: any) => v.key as string)
-          setKnownKeys(keys)
           setParsedVars(parsed.filter((v: any) => v.key && v.key !== 'current_env'))
         }
       }).catch(() => {})
     }
   }, [scriptPath])
 
-  // 对输出做高亮处理
-  const varValues = Object.entries(vars || {})
-    .filter(([k]) => k !== 'env' && k !== 'current_env')
-    .map(([, v]) => v)
-    .filter(Boolean) as string[]
-  const highlightedHtml = output ? highlightOutput(output, knownKeys, varValues) : ''
+  const highlightedHtml = output ? highlightOutput(output) : ''
 
   useEffect(() => {
     checkPython()

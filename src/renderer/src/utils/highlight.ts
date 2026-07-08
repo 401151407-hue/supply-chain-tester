@@ -16,11 +16,9 @@ const S = {
   valGold: 'color:#fbbf24;font-weight:700;background:rgba(251,191,36,0.15);padding:1px 3px;border-radius:3px',
 }
 
-export function highlightOutput(text: string, _knownVarKeys: string[] = [], knownVarValues: string[] = []): string {
+export function highlightOutput(text: string): string {
   const lines = text.split('\n')
   const out: string[] = []
-
-  const valueSet = new Set(knownVarValues.filter(v => v && v.length >= 2))
 
   for (const line of lines) {
     // 1. 错误行
@@ -42,32 +40,10 @@ export function highlightOutput(text: string, _knownVarKeys: string[] = [], know
       continue
     }
 
-    // 4. !! 或 ！！强制高亮标记
-    if (line.startsWith('!!') || line.startsWith('！！')) {
-      // !!- 前缀：注入但不显示
-      if (line.match(/^[!！]{2}-/)) continue
-      const rest = line.replace(/^\s*[!！]{2}\s*/, '')
-      const kv2 = rest.match(/^([^:：\n]+)([：:])\s*(.+)$/)
-      if (kv2) {
-        out.push(
-          `${esc(kv2[1])}${esc(kv2[2])} <span style="${S.valGold}">${esc(kv2[3])}</span>`
-        )
-      } else if (valueSet.size > 0) {
-        // 高亮匹配到的具体变量值
-        let html = esc(rest)
-        for (const v of valueSet) {
-          const ev = esc(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          html = html.replace(new RegExp(ev, 'g'), `<span style="${S.valGold}">${esc(v)}</span>`)
-        }
-        out.push(html)
-      } else {
-        // 没有已知变量值时，正常显示，不高亮整行
-        out.push(esc(rest))
-      }
-      continue
-    }
+    // 4. !!- 前缀：注入但不显示（兼容旧脚本）
+    if (line.match(/^[!！]{2}-/)) continue
 
-    // 5. 普通行：高亮行中 !!...!! 包裹的内容
+    // 5. 高亮行中 !!...!! 包裹的内容
     let processed = esc(line)
     processed = processed.replace(
       /[!！]{2}(.+?)[!！]{2}/g,

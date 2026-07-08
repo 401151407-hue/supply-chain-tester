@@ -40,7 +40,7 @@ export function UtilsPage() {
     if (!output) return ''
     // 收集工具页用户可能填的变量值
     const vals = [projectId, certNo, amount, multiFunc, ...Object.values(globalVars)].filter(v => v && v.length >= 2)
-    return highlightOutput(output, [], vals)
+    return highlightOutput(output)
   }, [output, projectId, certNo, amount, multiFunc, globalVars])
 
   // 发起方式弹窗 → 改为通用的脚本变量选择弹窗
