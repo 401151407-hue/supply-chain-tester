@@ -212,6 +212,21 @@ npm version patch && git push && git push --tags
 - 报 `Executable doesn't exist at ...\ms-playwright\chromium-xxx\chrome.exe` → 点「一键安装」重新下载浏览器
 - 版本不匹配（如 Playwright 期待 chromium-1223 但本地是 chromium-1208）→ 同样点「一键安装」即可自动匹配
 
+### 6.2 脚本完成状态标记 (`# WIP`)
+
+在脚本**第一行**加上 `# WIP`（Work In Progress），APP 会自动将其图标变为**黄色三角**，表示该脚本尚未写完。写完删除该行即恢复绿色。
+
+```python
+# WIP
+# 这是还没写完的脚本，APP 中显示黄色图标
+import sys
+...
+```
+
+**实现**：
+- 主进程扫描脚本时读取第一行，检测 `# WIP` 前缀（`src/main/index.ts` → `isWipScript()`）
+- 渲染进程根据 `wip` 字段切换绿色/黄色（`src/renderer/src/pages/UtilsPage.tsx`）
+
 ### 6.1 通用工具页变量输入框 + 问号提示 (UtilsPage.tsx)
 
 `src/renderer/src/pages/UtilsPage.tsx` 顶部有 4 个变量输入框，每个右侧有一个 `?` 图标（`HelpCircle`），hover 时显示变量使用说明。
