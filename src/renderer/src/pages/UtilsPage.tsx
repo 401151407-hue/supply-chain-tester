@@ -615,17 +615,30 @@ export function UtilsPage() {
               {/* 无选项的变量 → 文本输入框 */}
               {pendingRun.vars
                 .filter((v: any) => !v.options || v.options.length === 0)
-                .map((v: any) => (
+                .map((v: any) => {
+                  // 按产品线规则解析注释：逗号前=标签，逗号后=placeholder
+                  const cnIdx = v.comment ? v.comment.indexOf('，') : -1
+                  const enIdx = v.comment ? v.comment.indexOf(',') : -1
+                  const sepIdx = cnIdx === -1 ? enIdx : (enIdx === -1 ? cnIdx : Math.min(cnIdx, enIdx))
+                  const commentText = v.comment?.trim() || ''
+                  const label = sepIdx !== -1
+                    ? commentText.slice(0, sepIdx).trim()
+                    : (commentText || v.key)
+                  const placeholder = sepIdx !== -1
+                    ? commentText.slice(sepIdx + 1).trim()
+                    : (commentText ? `请输入${commentText}` : undefined)
+                  return (
                 <div key={v.key} className="flex flex-col gap-1">
-                  <label className="text-[11px] font-semibold text-accent-light">{v.comment || v.key}</label>
+                  <label className="text-[11px] font-semibold text-accent-light">{label}</label>
                   <input
                     value={dialogValues[v.key] ?? v.value}
                     onChange={e => setDialogValues(prev => ({ ...prev, [v.key]: e.target.value }))}
-                    placeholder={v.comment || v.key}
+                    placeholder={placeholder || `请输入${v.key}的值`}
                     className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none bg-surface border border-border/5 focus:border-accent/50 placeholder:text-muted/30"
                   />
                 </div>
-              ))}
+                  )
+                })}
             </div>
             <div className="flex gap-2 mt-5">
               <button
