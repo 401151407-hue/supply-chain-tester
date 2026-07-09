@@ -6,6 +6,7 @@ import { highlightOutput } from '../utils/highlight'
 interface ScriptItem {
   name: string
   path: string
+  wip?: boolean
 }
 
 export function UtilsPage() {
@@ -72,16 +73,21 @@ export function UtilsPage() {
     setLoading(true)
     try {
       const api = (window as any).supplyChainTester
-      if (api?.listDir) {
-        const res = await api.listDir('test-suites/common')
-        if (res.ok && res.items) {
-          const pyFiles = res.items
-            .filter((item: any) => !item.isDir && item.name.endsWith('.py') && !['查询项目信息.py', '查询客户信息.py'].includes(item.name))
-            .map((item: any) => ({
-              name: item.name.replace(/\.py$/, ''),
-              path: `test-suites/common/${item.name}`,
-            }))
-          setScripts(pyFiles)
+      if (api?.scanScripts) {
+        const data = await api.scanScripts()
+        if (data?.common && Array.isArray(data.common)) {
+          // 从 scanScripts 结果中提取 common 组的所有脚本
+          const allScripts: ScriptItem[] = []
+          for (const group of data.common) {
+            if (group.scripts && Array.isArray(group.scripts)) {
+              for (const s of group.scripts) {
+                if (!['查询项目信息', '查询客户信息'].includes(s.name)) {
+                  allScripts.push(s)
+                }
+              }
+            }
+          }
+          setScripts(allScripts)
         }
       }
     } catch {} finally {
@@ -517,12 +523,14 @@ export function UtilsPage() {
                   title="点击运行 · Ctrl+点击打开文件"
                 >
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors
-                                ${activeScript?.path === script.path && isRunning
-                                  ? 'bg-green-500/20' : 'bg-green-500/10 group-hover:bg-green-500/20'}`}>
+                                ${script.wip
+                                  ? 'bg-amber-500/10 group-hover:bg-amber-500/20'
+                                  : activeScript?.path === script.path && isRunning
+                                    ? 'bg-green-500/20' : 'bg-green-500/10 group-hover:bg-green-500/20'}`}>
                     {activeScript?.path === script.path && isRunning ? (
-                      <Loader2 size={20} className="text-green-400 animate-spin" />
+                      <Loader2 size={20} className={script.wip ? 'text-amber-400 animate-spin' : 'text-green-400 animate-spin'} />
                     ) : (
-                      <Play size={20} className="text-green-400" />
+                      <Play size={20} className={script.wip ? 'text-amber-400' : 'text-green-400'} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -614,7 +622,7 @@ export function UtilsPage() {
                     value={dialogValues[v.key] ?? v.value}
                     onChange={e => setDialogValues(prev => ({ ...prev, [v.key]: e.target.value }))}
                     placeholder={v.comment || v.key}
-                    className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none bg-surface border border-border/5 focus:border-accent/50"
+                    className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none bg-surface border border-border/5 focus:border-accent/50 placeholder:text-muted/30"
                   />
                 </div>
               ))}
