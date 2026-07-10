@@ -416,12 +416,12 @@ export function UtilsPage() {
                   socialCreditCode = 企业证件号<br />
                   legalPersonName = 法人名称<br />
                   legalPersonIdCard = 法人证件号<br />
-                  registerPhone = 法人手机号<br /><br />
+                  phone = 法人手机号<br /><br />
                   个人客户注入APP变量:<br />
                   projectId = 项目ID<br />
                   userName = 个人姓名<br />
                   idCardNo = 个人证件号码<br />
-                  phoneNo = 手机号<br />
+                  phone = 手机号<br />
                   borrowerId = 借款人关联ID<br />
                 </span>
               </span>
