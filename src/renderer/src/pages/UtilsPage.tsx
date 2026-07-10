@@ -1,13 +1,30 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react'
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useAppStore } from '../store'
 import { Wrench, Loader2, Play, Square, Terminal, Trash2, Search, Database, Eraser, Download, HelpCircle } from 'lucide-react'
 import { highlightOutput } from '../utils/highlight'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface ScriptItem {
   name: string
   path: string
   wip?: boolean
 }
+
+const ORDER_STORAGE_KEY = 'utils-script-order'
 
 export function UtilsPage() {
   const { env } = useAppStore()
@@ -76,7 +93,6 @@ export function UtilsPage() {
       if (api?.scanScripts) {
         const data = await api.scanScripts()
         if (data?.common && Array.isArray(data.common)) {
-          // 从 scanScripts 结果中提取 common 组的所有脚本
           const allScripts: ScriptItem[] = []
           for (const group of data.common) {
             if (group.scripts && Array.isArray(group.scripts)) {
@@ -87,6 +103,19 @@ export function UtilsPage() {
               }
             }
           }
+          // 读取本地存储的排序
+          try {
+            const saved = localStorage.getItem(ORDER_STORAGE_KEY)
+            if (saved) {
+              const order: string[] = JSON.parse(saved)
+              const orderMap = new Map(order.map((p, i) => [p, i]))
+              allScripts.sort((a, b) => {
+                const ai = orderMap.get(a.path) ?? 9999
+                const bi = orderMap.get(b.path) ?? 9999
+                return ai - bi
+              })
+            }
+          } catch {}
           setScripts(allScripts)
         }
       }
@@ -94,6 +123,23 @@ export function UtilsPage() {
       setLoading(false)
     }
   }
+
+  // 拖拽排序（dnd-kit）
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  )
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      setScripts(prev => {
+        const oldIndex = prev.findIndex(s => s.path === active.id)
+        const newIndex = prev.findIndex(s => s.path === over.id)
+        const next = arrayMove(prev, oldIndex, newIndex)
+        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(next.map(s => s.path)))
+        return next
+      })
+    }
+  }, [])
 
   async function handleRunScript(script: ScriptItem) {
     const api = (window as any).supplyChainTester
@@ -499,47 +545,21 @@ export function UtilsPage() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
-              {scripts.map(script => (
-                <button
-                  key={script.path}
-                  onClick={e => {
-                    if (e.ctrlKey || e.metaKey) return
-                    handleRunScript(script)
-                  }}
-                  onMouseDown={e => {
-                    if (e.ctrlKey || e.metaKey) {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      const api = (window as any).supplyChainTester
-                      api?.openPath?.(script.path)
-                    }
-                  }}
-                  disabled={isRunning}
-                  className={`flex items-center gap-3 p-4 rounded-xl bg-surface border border-border/5
-                             hover:border-accent/30 hover:bg-accent/5 transition-all text-left group cursor-pointer
-                             ${activeScript?.path === script.path ? 'border-accent/50 bg-accent/5' : ''}
-                             disabled:opacity-50 disabled:cursor-not-allowed`}
-                  title="点击运行 · Ctrl+点击打开文件"
-                >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors
-                                ${script.wip
-                                  ? 'bg-amber-500/10 group-hover:bg-amber-500/20'
-                                  : activeScript?.path === script.path && isRunning
-                                    ? 'bg-green-500/20' : 'bg-green-500/10 group-hover:bg-green-500/20'}`}>
-                    {activeScript?.path === script.path && isRunning ? (
-                      <Loader2 size={20} className={script.wip ? 'text-amber-400 animate-spin' : 'text-green-400 animate-spin'} />
-                    ) : (
-                      <Play size={20} className={script.wip ? 'text-amber-400' : 'text-green-400'} />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{script.name}</p>
-                    <p className="text-[11px] text-muted truncate mt-0.5">{script.path}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={scripts.map(s => s.path)} strategy={rectSortingStrategy}>
+                <div className="grid grid-cols-3 gap-3">
+                  {scripts.map(script => (
+                    <SortableScriptCard
+                      key={script.path}
+                      script={script}
+                      isActive={activeScript?.path === script.path}
+                      isRunning={isRunning}
+                      onRun={handleRunScript}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
 
@@ -648,7 +668,11 @@ export function UtilsPage() {
               </button>
               <button
                 onClick={handleVarDialogConfirm}
-                className="flex-1 py-1 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/90 text-foreground transition-all">
+                disabled={pendingRun.vars.some((v: any) =>
+                  (!v.options || v.options.length === 0) && !(dialogValues[v.key] ?? v.value)?.trim()
+                )}
+                className="flex-1 py-1 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/90 text-foreground transition-all
+                           disabled:opacity-40 disabled:cursor-not-allowed">
                 确认运行
               </button>
             </div>
@@ -656,5 +680,73 @@ export function UtilsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+/** 可拖拽排序的脚本卡片 */
+function SortableScriptCard({ script, isActive, isRunning, onRun }: {
+  script: ScriptItem
+  isActive: boolean
+  isRunning: boolean
+  onRun: (s: ScriptItem) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: script.path })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? 'none' : transition,
+    opacity: isDragging ? 0.85 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  }
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={e => {
+        if (e.ctrlKey || e.metaKey) return
+        onRun(script)
+      }}
+      onMouseDown={e => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault()
+          e.stopPropagation()
+          const api = (window as any).supplyChainTester
+          api?.openPath?.(script.path)
+        }
+      }}
+      disabled={isRunning}
+      className={`flex items-center gap-3 p-4 rounded-xl bg-surface border border-border/5
+                 hover:border-accent/30 hover:bg-accent/5 transition-all text-left group cursor-grab active:cursor-grabbing
+                 ${isDragging ? 'shadow-xl border-accent/30' : ''}
+                 ${isActive ? 'border-accent/50 bg-accent/5' : ''}
+                 disabled:opacity-50 disabled:cursor-not-allowed`}
+      title="点击运行 · Ctrl+点击打开文件 · 拖拽排序"
+    >
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors
+                    ${script.wip
+                      ? 'bg-amber-500/10 group-hover:bg-amber-500/20'
+                      : isActive && isRunning
+                        ? 'bg-green-500/20' : 'bg-green-500/10 group-hover:bg-green-500/20'}`}>
+        {isActive && isRunning ? (
+          <Loader2 size={20} className={script.wip ? 'text-amber-400 animate-spin' : 'text-green-400 animate-spin'} />
+        ) : (
+          <Play size={20} className={script.wip ? 'text-amber-400' : 'text-green-400'} />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">{script.name}</p>
+        <p className="text-[11px] text-muted truncate mt-0.5">{script.path}</p>
+      </div>
+    </button>
   )
 }
