@@ -206,10 +206,18 @@ type RecordEventCallback = (step: {
   value?: string
   url?: string
   description: string
+  // API 捕获字段
+  apiMethod?: string
+  apiUrl?: string
+  apiHeaders?: Record<string, string>
+  apiBody?: string
+  apiStatus?: number
+  apiResponse?: string
 }) => void
 
 let recordCallback: RecordEventCallback | null = null
 let isRecording = false
+let capturedApiUrls = new Set<string>()  // 去重
 
 /** 生成元素的可读描述标签 */
 function buildSelectorLabel(el: any): string {
@@ -328,22 +336,67 @@ async function injectRecordingScript(): Promise<void> {
   })
 }
 
-/** 开始录制：启动浏览器并注入监听 */
+/** 开始录制：启动浏览器，注入 UI 监听 + 网络拦截 */
 export async function startRecording(
   startUrl: string,
   onStep: RecordEventCallback,
+  apiOnly = false,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const p = await getPage()
     isRecording = true
     recordCallback = onStep
+    capturedApiUrls = new Set()
+
+    // 网络请求拦截 - 捕获 XHR/Fetch API 调用（UI 和 API 模式都开启）
+    p.on('response', async (response) => {
+      if (!isRecording) return
+      const req = response.request()
+      const resType = req.resourceType()
+      if (resType !== 'xhr' && resType !== 'fetch') return
+
+      const url = response.url()
+      const dedupKey = `${req.method()}:${url}`
+      if (capturedApiUrls.has(dedupKey)) return
+      capturedApiUrls.add(dedupKey)
+
+      try {
+        const reqHeaders = req.headers()
+        delete reqHeaders['cookie']
+        delete reqHeaders['authorization']
+
+        let reqBody = req.postData() || ''
+        if (reqBody.length > 2000) reqBody = reqBody.slice(0, 2000) + '…(截断)'
+
+        let resBody = ''
+        try {
+          const body = await response.text()
+          resBody = body.length > 2000 ? body.slice(0, 2000) + '…(截断)' : body
+        } catch {}
+
+        const shortUrl = url.replace(/^https?:\/\/[^\/]+/, '')
+        onStep({
+          type: 'api',
+          description: `${req.method()} ${shortUrl}`,
+          apiMethod: req.method(),
+          apiUrl: url,
+          apiHeaders: reqHeaders as Record<string, string>,
+          apiBody: reqBody,
+          apiStatus: response.status(),
+          apiResponse: resBody,
+        })
+      } catch {}
+    })
 
     // 如果不在目标URL，先导航
     if (!p.url().startsWith(startUrl) && startUrl) {
       await p.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
     }
 
-    await injectRecordingScript()
+    // API-only 模式：只注入网络拦截，不注入 UI 事件监听
+    if (!apiOnly) {
+      await injectRecordingScript()
+    }
 
     // 录制初始导航步骤
     if (startUrl) {

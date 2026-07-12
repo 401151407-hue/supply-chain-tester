@@ -3,6 +3,7 @@ import {
   Play, Square, Video, Trash2, Save, FolderOpen,
   ChevronUp, ChevronDown, Globe, MousePointer, Type,
   Clock, Camera, ArrowDown, Hand, List, Download, X,
+  Wifi,
 } from 'lucide-react'
 
 interface RecordStep {
@@ -14,6 +15,13 @@ interface RecordStep {
   url?: string
   description: string
   timestamp: number
+  // API 捕获
+  apiMethod?: string
+  apiUrl?: string
+  apiHeaders?: Record<string, string>
+  apiBody?: string
+  apiStatus?: number
+  apiResponse?: string
 }
 
 interface RecordSession {
@@ -33,6 +41,7 @@ const STEP_TYPE_ICONS: Record<string, React.ReactNode> = {
   screenshot: <Camera size={14} />,
   scroll: <ArrowDown size={14} />,
   hover: <Hand size={14} />,
+  api: <Wifi size={14} />,
 }
 
 const STEP_TYPE_LABELS: Record<string, string> = {
@@ -44,6 +53,12 @@ const STEP_TYPE_LABELS: Record<string, string> = {
   screenshot: '截图',
   scroll: '滚动',
   hover: '悬停',
+  api: 'API',
+}
+
+const HTTP_METHOD_COLORS: Record<string, string> = {
+  GET: 'text-green-400', POST: 'text-amber-400', PUT: 'text-blue-400',
+  DELETE: 'text-red-400', PATCH: 'text-purple-400',
 }
 
 let stepIdCounter = 0
@@ -285,48 +300,101 @@ export function VisualRecorder() {
 
   // 生成 Python 脚本代码
   function generatePythonCode(): string {
+    const hasApiSteps = steps.some(s => s.type === 'api')
+    const hasBrowserSteps = steps.some(s => s.type !== 'api')
+
     let code = '# -*- coding: utf-8 -*-\n'
     code += `# ${exportFilename || '录制的业务场景'}\n`
     code += `# 录制时间: ${new Date().toLocaleString('zh-CN')}\n`
-    code += `# 步骤数: ${steps.length}\n`
-    code += 'from playwright.sync_api import sync_playwright\n\n'
-    code += 'with sync_playwright() as p:\n'
-    code += '    browser = p.chromium.launch(headless=False)\n'
-    code += '    page = browser.new_page()\n'
-    code += '    page.set_viewport_size({"width": 1440, "height": 900})\n\n'
+    code += `# 步骤数: ${steps.length} (UI: ${steps.filter(s => s.type !== 'api').length}, API: ${steps.filter(s => s.type === 'api').length})\n`
+
+    const imports = new Set<string>()
+    if (hasApiSteps) imports.add('import requests')
+    if (hasBrowserSteps) imports.add('from playwright.sync_api import sync_playwright')
+
+    code += [...imports].join('\n') + '\n\n'
+
+    // 浏览器步骤
+    if (hasBrowserSteps) {
+      code += 'with sync_playwright() as p:\n'
+      code += '    browser = p.chromium.launch(headless=False)\n'
+      code += '    page = browser.new_page()\n'
+      code += '    page.set_viewport_size({"width": 1440, "height": 900})\n\n'
+    }
+
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i]
       code += `    # ${i + 1}. ${step.description}\n`
-      switch (step.type) {
-        case 'navigate':
-          code += `    page.goto('${(step.url || '').replace(/'/g, "\\'")}', wait_until='domcontentloaded')\n`
-          break
-        case 'click':
-          code += `    page.click('${(step.selector || '').replace(/'/g, "\\'")}')\n`
-          code += '    page.wait_for_load_state(\'domcontentloaded\')\n'
-          break
-        case 'type':
-          code += `    page.fill('${(step.selector || '').replace(/'/g, "\\'")}', '${(step.value || '').replace(/'/g, "\\'")}')\n`
-          break
-        case 'select':
-          code += `    page.select_option('${(step.selector || '').replace(/'/g, "\\'")}', '${(step.value || '').replace(/'/g, "\\'")}')\n`
-          break
-        case 'wait':
-          code += '    page.wait_for_timeout(1000)\n'
-          break
-        case 'screenshot':
-          code += '    page.screenshot(path=\'screenshot.png\', full_page=True)\n'
-          break
-        case 'scroll':
-          code += `    page.locator('${(step.selector || '').replace(/'/g, "\\'")}').scroll_into_view_if_needed()\n`
-          break
-        case 'hover':
-          code += `    page.hover('${(step.selector || '').replace(/'/g, "\\'")}')\n`
-          break
+
+      if (step.type === 'api') {
+        // 生成 requests 库调用
+        const method = (step.apiMethod || 'GET').toLowerCase()
+        const url = step.apiUrl || ''
+        const headers = step.apiHeaders || {}
+        const body = step.apiBody || ''
+
+        // 构造 headers dict
+        const headerEntries = Object.entries(headers)
+          .filter(([k]) => !['cookie', 'authorization', 'host', 'content-length', 'origin', 'referer'].includes(k.toLowerCase()))
+        const headersStr = headerEntries.length > 0
+          ? '{\n        ' + headerEntries.map(([k, v]) => `'${k}': '${(v || '').replace(/'/g, "\\'")}'`).join(',\n        ') + '\n    }'
+          : '{}'
+
+        if (method === 'get' || method === 'delete') {
+          code += `    resp = requests.${method}('${url.replace(/'/g, "\\'")}', headers=${headersStr})\n`
+        } else {
+          const bodyStr = body
+            ? `json=${JSON.stringify(body).substring(0, 200)}` + (JSON.stringify(body).length > 200 ? '  # ...' : '')
+            : ''
+          // Try to use json parameter if body is valid JSON
+          let jsonParam = ''
+          try {
+            JSON.parse(body)
+            jsonParam = `json=${JSON.stringify(body)}`
+          } catch {
+            jsonParam = body ? `data='''${body.replace(/'/g, "\\'")}'''` : ''
+          }
+          code += `    resp = requests.${method}('${url.replace(/'/g, "\\'")}', headers=${headersStr}, ${jsonParam})\n`
+        }
+        code += `    print(f'${step.apiMethod} {url.replace(/^https?:\/\/[^\/]+/, '')} → {resp.status_code}')\n`
+      } else {
+        // 浏览器步骤
+        switch (step.type) {
+          case 'navigate':
+            code += `    page.goto('${(step.url || '').replace(/'/g, "\\'")}', wait_until='domcontentloaded')\n`
+            break
+          case 'click':
+            code += `    page.click('${(step.selector || '').replace(/'/g, "\\'")}')\n`
+            code += '    page.wait_for_load_state(\'domcontentloaded\')\n'
+            break
+          case 'type':
+            code += `    page.fill('${(step.selector || '').replace(/'/g, "\\'")}', '${(step.value || '').replace(/'/g, "\\'")}')\n`
+            break
+          case 'select':
+            code += `    page.select_option('${(step.selector || '').replace(/'/g, "\\'")}', '${(step.value || '').replace(/'/g, "\\'")}')\n`
+            break
+          case 'wait':
+            code += '    page.wait_for_timeout(1000)\n'
+            break
+          case 'screenshot':
+            code += '    page.screenshot(path=\'screenshot.png\', full_page=True)\n'
+            break
+          case 'scroll':
+            code += `    page.locator('${(step.selector || '').replace(/'/g, "\\'")}').scroll_into_view_if_needed()\n`
+            break
+          case 'hover':
+            code += `    page.hover('${(step.selector || '').replace(/'/g, "\\'")}')\n`
+            break
+        }
       }
     }
-    code += '\n    print(\'✅ 场景执行完成\')\n'
-    code += '    browser.close()\n'
+
+    if (hasBrowserSteps) {
+      code += '\n    print(\'✅ 场景执行完成\')\n'
+      code += '    browser.close()\n'
+    } else {
+      code += '\nprint(\'✅ 场景执行完成\')\n'
+    }
     return code
   }
 
@@ -466,7 +534,13 @@ export function VisualRecorder() {
               >
                 <span className="text-[10px] w-5 text-center opacity-50">{idx + 1}</span>
                 <span className="opacity-60">{STEP_TYPE_ICONS[step.type]}</span>
+                {step.type === 'api' && step.apiMethod ? (
+                  <span className={`text-[10px] font-mono font-bold ${HTTP_METHOD_COLORS[step.apiMethod] || 'text-muted'}`}>{step.apiMethod}</span>
+                ) : null}
                 <span className="flex-1 truncate">{step.description}</span>
+                {step.type === 'api' && step.apiStatus ? (
+                  <span className={`text-[10px] ${step.apiStatus < 400 ? 'text-green-400' : 'text-red-400'}`}>{step.apiStatus}</span>
+                ) : null}
                 <div className="hidden group-hover:flex items-center gap-0.5">
                   <button onClick={e => { e.stopPropagation(); moveStep(step.id, -1) }} disabled={idx === 0}
                     className="p-0.5 hover:text-foreground disabled:opacity-20"><ChevronUp size={12} /></button>
@@ -579,6 +653,34 @@ export function VisualRecorder() {
                     className="w-full px-2 py-1 text-xs bg-background border border-border/20 rounded-md"
                     placeholder="值..."
                   />
+                </div>
+              )}
+              {/* API 步骤详情（只读） */}
+              {selectedStepData.type === 'api' && selectedStepData.apiMethod && (
+                <div className="space-y-1.5 border-t border-border/10 pt-2 mt-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-mono font-bold ${HTTP_METHOD_COLORS[selectedStepData.apiMethod] || ''}`}>
+                      {selectedStepData.apiMethod}
+                    </span>
+                    <span className="text-[10px] text-muted truncate">{selectedStepData.apiUrl || ''}</span>
+                  </div>
+                  {selectedStepData.apiStatus && (
+                    <div className="text-[10px]">
+                      状态: <span className={selectedStepData.apiStatus < 400 ? 'text-green-400' : 'text-red-400'}>{selectedStepData.apiStatus}</span>
+                    </div>
+                  )}
+                  {selectedStepData.apiBody && (
+                    <div>
+                      <label className="text-[10px] text-muted block">请求体</label>
+                      <pre className="text-[10px] bg-background rounded p-1.5 mt-0.5 max-h-24 overflow-y-auto font-mono whitespace-pre-wrap">{selectedStepData.apiBody}</pre>
+                    </div>
+                  )}
+                  {selectedStepData.apiResponse && (
+                    <div>
+                      <label className="text-[10px] text-muted block">响应体</label>
+                      <pre className="text-[10px] bg-background rounded p-1.5 mt-0.5 max-h-32 overflow-y-auto font-mono whitespace-pre-wrap">{selectedStepData.apiResponse}</pre>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

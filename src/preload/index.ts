@@ -122,6 +122,17 @@ const api = {
   recorderDeleteSession: (id: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.RECORDER_DELETE_SESSION, id),
 
+  // ── API 录制（纯网络拦截）──
+  apirecorderStart: (startUrl: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_START, startUrl),
+  apirecorderStop: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_STOP),
+  onApiRecorderEvent: (callback: (step: any) => void) => {
+    const handler = (_event: any, step: any) => callback(step)
+    ipcRenderer.on(IPC_CHANNELS.APIRECORDER_EVENT, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.APIRECORDER_EVENT, handler)
+  },
+
   /** 运行 Python 脚本 */
   runScript: (scriptPath: string, vars?: Record<string, string>): Promise<{ ok: boolean; output: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.RUN_SCRIPT, scriptPath, vars),

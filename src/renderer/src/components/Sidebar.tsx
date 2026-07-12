@@ -23,6 +23,7 @@ import {
   Bot,
   Wrench,
   Video,
+  Wifi,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -199,6 +200,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
       {/* 工具导航 */}
       <nav className="px-3 py-3 space-y-0.5">
         <NavItem icon={<Video size={18} />} label="Playwright" active={activeTab === 'recorder'} onClick={() => navigateTo('recorder')} />
+        <NavItem icon={<Wifi size={18} />} label="API 录制" active={activeTab === 'apirecorder'} onClick={() => navigateTo('apirecorder')} />
         <NavItem icon={<Wrench size={18} />} label="通用" active={activeTab === 'utils'} onClick={() => navigateTo('utils')} />
         <NavItem icon={<Send size={18} />} label="API 调试" active={activeTab === 'apidebug'} onClick={() => navigateTo('apidebug')} />
         <NavItem icon={<FileEdit size={18} />} label="测试用例" active={activeTab === 'editor'} onClick={() => navigateTo('editor')} />

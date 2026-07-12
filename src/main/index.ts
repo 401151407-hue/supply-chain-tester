@@ -1005,7 +1005,18 @@ print(f"CHROMIUM_OK={has_chromium}")
     })
   })
 
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_START, async (event, startUrl: string) => {
+    return startRecording(startUrl, (step) => {
+      event.sender.send(IPC_CHANNELS.APIRECORDER_EVENT, step)
+    }, true)  // apiOnly = true
+  })
+
   ipcMain.handle(IPC_CHANNELS.RECORDER_STOP, async () => {
+    stopRecording()
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_STOP, async () => {
     stopRecording()
     return { ok: true }
   })

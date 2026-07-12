@@ -192,7 +192,7 @@ export interface ApiBatchResult {
 // ============================================================
 
 /** 录制步骤类型 */
-export type RecordStepType = 'navigate' | 'click' | 'type' | 'wait' | 'screenshot' | 'scroll' | 'hover' | 'select' | 'press'
+export type RecordStepType = 'navigate' | 'click' | 'type' | 'wait' | 'screenshot' | 'scroll' | 'hover' | 'select' | 'press' | 'api'
 
 /** 单个录制步骤 */
 export interface RecordStep {
@@ -204,6 +204,13 @@ export interface RecordStep {
   url?: string
   description: string
   timestamp: number
+  // API 捕获字段
+  apiMethod?: string            // GET/POST/PUT/DELETE
+  apiUrl?: string               // 完整的请求 URL
+  apiHeaders?: Record<string, string>
+  apiBody?: string              // 请求体
+  apiStatus?: number            // 响应状态码
+  apiResponse?: string          // 响应体（截断）
 }
 
 /** 录制会话保存格式 */
@@ -267,6 +274,11 @@ export const IPC_CHANNELS = {
   RECORDER_SCREENSHOT: 'recorder:screenshot',
   RECORDER_NAVIGATE: 'recorder:navigate',
   RECORDER_EVENT: 'recorder:event',
+  RECORDER_API_EVENT: 'recorder:api-event',
+  // API 录制（独立）
+  APIRECORDER_START: 'apirecorder:start',
+  APIRECORDER_STOP: 'apirecorder:stop',
+  APIRECORDER_EVENT: 'apirecorder:event',
   RECORDER_SAVE_SESSION: 'recorder:save-session',
   RECORDER_LOAD_SESSIONS: 'recorder:load-sessions',
   RECORDER_DELETE_SESSION: 'recorder:delete-session',

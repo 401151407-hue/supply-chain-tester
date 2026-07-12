@@ -7,6 +7,7 @@ import { ScriptRunner } from './pages/ScriptRunner'
 import { ApiDebugger } from './pages/ApiDebugger'
 import { UtilsPage } from './pages/UtilsPage'
 import { VisualRecorder } from './pages/VisualRecorder'
+import { ApiRecorder } from './pages/ApiRecorder'
 import { AISettingsPanel } from './components/AISettingsPanel'
 import { AIAssistant } from './components/AIAssistant'
 import { useAppStore } from './store'
@@ -71,6 +72,8 @@ export default function App() {
         return <UtilsPage />
       case 'recorder':
         return <VisualRecorder />
+      case 'apirecorder':
+        return <ApiRecorder />
     }
   }
 
