@@ -213,6 +213,10 @@ const api = {
   openDataFolder: (): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('app:open-data-folder'),
 
+  /** 检测运行环境（Python/Chromium/等） */
+  checkEnvironment: (): Promise<Record<string, { ok: boolean; message: string }>> =>
+    ipcRenderer.invoke('app:check-environment'),
+
   /** 用系统默认程序打开文件 */
   openPath: (filePath: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:open-path', filePath),

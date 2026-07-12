@@ -6,6 +6,7 @@ dist/
 .DS_Store
 Thumbs.db
 resources/python-portable/
+resources/ms-playwright/
 __pycache__/
 *.pyc
 test-suites/

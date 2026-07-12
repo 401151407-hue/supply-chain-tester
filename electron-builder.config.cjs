@@ -9,6 +9,10 @@ module.exports = {
   files: [
     'out/**/*',
   ],
+  extraResources: [
+    { from: 'resources/ms-playwright', to: 'resources/ms-playwright' },
+    { from: 'resources/python-portable', to: 'resources/python-portable' },
+  ],
   asarUnpack: [
     '**/node_modules/playwright/**',
   ],

@@ -990,6 +990,39 @@ print(f"CHROMIUM_OK={has_chromium}")
     }
   })
 
+  // ── 运行环境检测 ──
+  ipcMain.handle('app:check-environment', async () => {
+    const result: Record<string, { ok: boolean; message: string }> = {}
+
+    // Python
+    const py = await checkPython()
+    result['python'] = { ok: py.available, message: py.available ? (py.version || 'OK') : '未安装' }
+
+    // Node.js Playwright Chromium
+    result['pwChromium'] = {
+      ok: existsSync(join(getPythonPortableDir(), '..', 'ms-playwright')),
+      message: existsSync(join(getPythonPortableDir(), '..', 'ms-playwright')) ? 'OK' : '未安装'
+    }
+
+    // Python Playwright (for exported scripts)
+    try {
+      const { execSync } = require('child_process')
+      execSync(`"${getPythonPath()}" -c "import playwright"`, { timeout: 5000, windowsHide: true })
+      result['pyPlaywright'] = { ok: true, message: 'OK' }
+    } catch {
+      result['pyPlaywright'] = { ok: false, message: '未安装' }
+    }
+
+    // test-suites
+    const scriptsDir = getScriptsDir()
+    result['testSuites'] = {
+      ok: existsSync(scriptsDir) && readdirSync(scriptsDir).length > 0,
+      message: (existsSync(scriptsDir) && readdirSync(scriptsDir).length > 0) ? `${readdirSync(scriptsDir).length} 个目录` : '无脚本'
+    }
+
+    return result
+  })
+
   // ── 自动更新 ──
   ipcMain.handle(IPC_CHANNELS.UPDATE_GET_STATE, () => getUpdateState())
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, () => doCheckUpdates())

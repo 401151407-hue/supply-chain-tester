@@ -17,10 +17,37 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Setup Portable Python
+        shell: powershell
+        run: |
+          $pythonDir = "resources\python-portable"
+          if (-not (Test-Path $pythonDir)) { New-Item -ItemType Directory -Path $pythonDir -Force | Out-Null }
+          $zipUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
+          $zipPath = "$env:TEMP\python-embed.zip"
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+          Expand-Archive -Path $zipPath -DestinationPath $pythonDir -Force
+          $pthFile = Get-ChildItem -Path $pythonDir -Filter "python*._pth" | Select-Object -First 1
+          if ($pthFile) {
+            $content = Get-Content $pthFile.FullName -Raw
+            $content = $content -replace "#import site", "import site"
+            Set-Content -Path $pthFile.FullName -Value $content -NoNewline
+          }
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "$env:TEMP\get-pip.py" -UseBasicParsing
+          & "$pythonDir\python.exe" "$env:TEMP\get-pip.py" --no-warn-script-location
+          & "$pythonDir\Scripts\pip.exe" install requests openpyxl playwright --no-warn-script-location --quiet
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
         env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: npm run dist
+          PLAYWRIGHT_BROWSERS_PATH: resources\ms-playwright
+
+      - name: Build & Package
+        run: npm run dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows-exe
@@ -36,10 +63,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
         env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: npm run dist -- --${{ matrix.arch }}
+          PLAYWRIGHT_BROWSERS_PATH: resources/ms-playwright
+
+      - name: Build & Package
+        run: npm run dist -- --${{ matrix.arch }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: mac-${{ matrix.arch }}-dmg
