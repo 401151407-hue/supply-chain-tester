@@ -187,6 +187,34 @@ export interface ApiBatchResult {
   items: ApiBatchItem[]
 }
 
+// ============================================================
+// 可视化录制
+// ============================================================
+
+/** 录制步骤类型 */
+export type RecordStepType = 'navigate' | 'click' | 'type' | 'wait' | 'screenshot' | 'scroll' | 'hover' | 'select' | 'press'
+
+/** 单个录制步骤 */
+export interface RecordStep {
+  id: string
+  type: RecordStepType
+  selector?: string
+  selectorLabel?: string        // 用户可读的元素描述
+  value?: string                // 输入值 / URL
+  url?: string
+  description: string
+  timestamp: number
+}
+
+/** 录制会话保存格式 */
+export interface RecordSession {
+  id: string
+  name: string
+  steps: RecordStep[]
+  createdAt: string
+  updatedAt: string
+}
+
 /** IPC 通道定义 */
 export const IPC_CHANNELS = {
   RUN_TEST: 'test:run',
@@ -232,4 +260,14 @@ export const IPC_CHANNELS = {
   BROWSER_TYPE: 'browser:type',
   BROWSER_SCREENSHOT: 'browser:screenshot',
   BROWSER_CLOSE: 'browser:close',
+  // 可视化录制
+  RECORDER_START: 'recorder:start',
+  RECORDER_STOP: 'recorder:stop',
+  RECORDER_PLAY: 'recorder:play',
+  RECORDER_SCREENSHOT: 'recorder:screenshot',
+  RECORDER_NAVIGATE: 'recorder:navigate',
+  RECORDER_EVENT: 'recorder:event',
+  RECORDER_SAVE_SESSION: 'recorder:save-session',
+  RECORDER_LOAD_SESSIONS: 'recorder:load-sessions',
+  RECORDER_DELETE_SESSION: 'recorder:delete-session',
 } as const

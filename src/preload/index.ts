@@ -99,6 +99,29 @@ const api = {
   browserClose: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CLOSE),
 
+  // ── 可视化录制 ──
+  recorderStart: (startUrl: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_START, startUrl),
+  recorderStop: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_STOP),
+  recorderPlay: (steps: any[]): Promise<{ ok: boolean; results: any[] }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_PLAY, steps),
+  recorderScreenshot: (): Promise<{ ok: boolean; dataUrl: string; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_SCREENSHOT),
+  recorderNavigate: (url: string): Promise<{ ok: boolean; title: string; url: string; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_NAVIGATE, url),
+  onRecorderEvent: (callback: (step: any) => void) => {
+    const handler = (_event: any, step: any) => callback(step)
+    ipcRenderer.on(IPC_CHANNELS.RECORDER_EVENT, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.RECORDER_EVENT, handler)
+  },
+  recorderSaveSession: (session: any): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_SAVE_SESSION, session),
+  recorderLoadSessions: (): Promise<any[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_LOAD_SESSIONS),
+  recorderDeleteSession: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORDER_DELETE_SESSION, id),
+
   /** 运行 Python 脚本 */
   runScript: (scriptPath: string, vars?: Record<string, string>): Promise<{ ok: boolean; output: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.RUN_SCRIPT, scriptPath, vars),

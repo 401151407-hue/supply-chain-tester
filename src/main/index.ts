@@ -10,9 +10,9 @@ import { existsSync, readFileSync, readdirSync, statSync, mkdirSync } from 'fs'
 import { TestRunner } from './test-runner'
 import { ReportStore } from './report-store'
 import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
-import { IPC_CHANNELS, type TestCase, type TestSuite, type ApiBatchRequest, type ApiBatchResult, type ApiBatchItem } from '../shared/types'
+import { IPC_CHANNELS, type TestCase, type TestSuite, type ApiBatchRequest, type ApiBatchResult, type ApiBatchItem, type RecordSession } from '../shared/types'
 import { initAutoUpdater, checkForUpdates as doCheckUpdates, downloadUpdate as doDownloadUpdate, quitAndInstall, installLanUpdate, getUpdateState, stopLanServer } from './auto-updater'
-import { browserOpen, browserRead, browserClick, browserType, browserScreenshot, closeBrowser } from './browser-manager'
+import { browserOpen, browserRead, browserClick, browserType, browserScreenshot, closeBrowser, startRecording, stopRecording, replayStep } from './browser-manager'
 
 const isDev = !app.isPackaged
 
@@ -996,6 +996,75 @@ print(f"CHROMIUM_OK={has_chromium}")
   ipcMain.handle(IPC_CHANNELS.UPDATE_DOWNLOAD, () => doDownloadUpdate())
   ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, () => { quitAndInstall() })
   ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL_LAN, () => { installLanUpdate() })
+
+  // ── 可视化录制 ──
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_START, async (event, startUrl: string) => {
+    return startRecording(startUrl, (step) => {
+      event.sender.send(IPC_CHANNELS.RECORDER_EVENT, step)
+    })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_STOP, async () => {
+    stopRecording()
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_PLAY, async (_event, steps: any[]) => {
+    const results: { ok: boolean; message: string; index: number }[] = []
+    for (let i = 0; i < steps.length; i++) {
+      const res = await replayStep(steps[i])
+      results.push({ ...res, index: i })
+      if (!res.ok) break
+    }
+    return { ok: results.every(r => r.ok), results }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_SCREENSHOT, async () => {
+    return browserScreenshot()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_NAVIGATE, async (_event, url: string) => {
+    return browserOpen(url)
+  })
+
+  // 录制会话持久化
+  const sessionsDir = join(app.getPath('userData'), 'recorder-sessions')
+  if (!existsSync(sessionsDir)) mkdirSync(sessionsDir, { recursive: true })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_SAVE_SESSION, async (_event, session: RecordSession) => {
+    try {
+      const { writeFileSync } = require('fs')
+      const filePath = join(sessionsDir, `${session.id}.json`)
+      writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8')
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_LOAD_SESSIONS, async () => {
+    try {
+      if (!existsSync(sessionsDir)) return []
+      const files = readdirSync(sessionsDir).filter(f => f.endsWith('.json'))
+      return files.map(f => {
+        const content = readFileSync(join(sessionsDir, f), 'utf-8')
+        return JSON.parse(content) as RecordSession
+      }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    } catch {
+      return []
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_DELETE_SESSION, async (_event, id: string) => {
+    try {
+      const { unlinkSync } = require('fs')
+      unlinkSync(join(sessionsDir, `${id}.json`))
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  })
 }
 
 /** 检查脚本第一行是否以 # WIP 开头，表示未完成 */

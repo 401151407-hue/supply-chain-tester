@@ -14,7 +14,7 @@ interface AppState {
   setEnv: (env: 'SIT' | 'UAT' | 'DEV') => void
 
   // 导航
-  activeTab: 'xinerong' | 'dingerong' | 'huoerong' | 'zhangerong' | 'piaoerong' | 'editor' | 'reports' | 'apidebug' | 'script' | 'aiassistant' | 'utils'
+  activeTab: 'xinerong' | 'dingerong' | 'huoerong' | 'zhangerong' | 'piaoerong' | 'editor' | 'reports' | 'apidebug' | 'script' | 'aiassistant' | 'utils' | 'recorder'
   setActiveTab: (tab: AppState['activeTab']) => void
   navKey: number  // 每次导航递增，触发页面切换动画
   navigateTo: (tab: AppState['activeTab'], sub?: string | null) => void

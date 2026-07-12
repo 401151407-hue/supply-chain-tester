@@ -194,3 +194,242 @@ export async function browserInfo(): Promise<{ url: string; title: string }> {
     return { url: '', title: '' }
   }
 }
+
+// ============================================================
+// 可视化录制引擎
+// ============================================================
+
+type RecordEventCallback = (step: {
+  type: string
+  selector?: string
+  selectorLabel?: string
+  value?: string
+  url?: string
+  description: string
+}) => void
+
+let recordCallback: RecordEventCallback | null = null
+let isRecording = false
+
+/** 生成元素的可读描述标签 */
+function buildSelectorLabel(el: any): string {
+  const tag = (el.tagName || '').toLowerCase()
+  const text = (el.innerText || '').trim().slice(0, 40)
+  const placeholder = el.placeholder || ''
+  const ariaLabel = el.getAttribute?.('aria-label') || ''
+  const title = el.title || ''
+  const label = placeholder || ariaLabel || title || text || tag
+  return label.length > 30 ? label.slice(0, 30) + '…' : label
+}
+
+/** 生成最佳 CSS 选择器 */
+function buildSelector(el: any): string {
+  if (el.id) return `#${el.id}`
+  if (el.getAttribute?.('data-testid')) return `[data-testid="${el.getAttribute('data-testid')}"]`
+  if (el.name) return `[name="${el.name}"]`
+
+  const tag = (el.tagName || '').toLowerCase()
+  const cls = (el.className || '').toString().trim()
+  if (cls) {
+    const classes = cls.split(/\s+/).filter((c: string) => c && !c.includes(':')).slice(0, 2).join('.')
+    if (classes) return `${tag}.${classes}`
+  }
+
+  // 尝试 nth-child 回退
+  const parent = el.parentElement
+  if (parent) {
+    const siblings = Array.from(parent.children).filter((c: any) => c.tagName === el.tagName)
+    if (siblings.length > 1) {
+      const idx = siblings.indexOf(el) + 1
+      return `${tag}:nth-of-type(${idx})`
+    }
+  }
+  return tag
+}
+
+/** 注入录制脚本到页面 */
+async function injectRecordingScript(): Promise<void> {
+  const p = await getPage()
+
+  await p.evaluate(() => {
+    if ((window as any).__supplyChainRecorder) return
+    ;(window as any).__supplyChainRecorder = true
+
+    let lastClickTime = 0
+
+    function sendEvent(data: any) {
+      ;(window as any).__recordEvent?.(data)
+    }
+
+    document.addEventListener('click', (e) => {
+      const now = Date.now()
+      const el = e.target as HTMLElement
+      if (!el || el === document.body || el === document.documentElement) return
+      // 去重：200ms 内同一元素只记录一次
+      const selector = (window as any).__buildSelector?.(el)
+      if (now - lastClickTime < 200 && (window as any).__lastSelector === selector) return
+      lastClickTime = now
+      ;(window as any).__lastSelector = selector
+      sendEvent({
+        type: 'click',
+        selector,
+        selectorLabel: (window as any).__buildSelectorLabel?.(el),
+        description: `点击 ${(window as any).__buildSelectorLabel?.(el)}`,
+      })
+    }, true)
+
+    document.addEventListener('change', (e) => {
+      const el = e.target as HTMLInputElement
+      if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return
+      const tag = el.tagName.toLowerCase()
+      const type = tag === 'select' ? 'select' : 'type'
+      sendEvent({
+        type,
+        selector: (window as any).__buildSelector?.(el),
+        selectorLabel: (window as any).__buildSelectorLabel?.(el),
+        value: tag === 'select' ? (el as HTMLSelectElement).value : el.value,
+        description: tag === 'select'
+          ? `选择 ${(el as HTMLSelectElement).value}`
+          : `输入 ${el.value}`,
+      })
+    }, true)
+  })
+
+  // 注入辅助函数
+  await p.evaluate(() => {
+    ;(window as any).__buildSelectorLabel = (el: any) => {
+      const tag = (el.tagName || '').toLowerCase()
+      const text = (el.innerText || '').trim().slice(0, 40)
+      const placeholder = el.placeholder || ''
+      const ariaLabel = el.getAttribute?.('aria-label') || ''
+      const title = el.title || ''
+      const label = placeholder || ariaLabel || title || text || tag
+      return label.length > 30 ? label.slice(0, 30) + '…' : label
+    }
+    ;(window as any).__buildSelector = (el: any) => {
+      if (el.id) return `#${el.id}`
+      if (el.getAttribute?.('data-testid')) return `[data-testid="${el.getAttribute('data-testid')}"]`
+      if (el.name) return `[name="${el.name}"]`
+      const tag = (el.tagName || '').toLowerCase()
+      const cls = (el.className || '').toString().trim()
+      if (cls) {
+        const classes = cls.split(/\s+/).filter((c: string) => c && !c.includes(':')).slice(0, 2).join('.')
+        if (classes) return `${tag}.${classes}`
+      }
+      return tag
+    }
+  })
+
+  // 暴露回调函数
+  await p.exposeFunction('__recordEvent', (data: any) => {
+    if (recordCallback && isRecording) {
+      recordCallback(data)
+    }
+  })
+}
+
+/** 开始录制：启动浏览器并注入监听 */
+export async function startRecording(
+  startUrl: string,
+  onStep: RecordEventCallback,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const p = await getPage()
+    isRecording = true
+    recordCallback = onStep
+
+    // 如果不在目标URL，先导航
+    if (!p.url().startsWith(startUrl) && startUrl) {
+      await p.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    }
+
+    await injectRecordingScript()
+
+    // 录制初始导航步骤
+    if (startUrl) {
+      onStep({
+        type: 'navigate',
+        url: startUrl,
+        description: `打开 ${startUrl}`,
+      })
+    }
+
+    return { ok: true }
+  } catch (err: any) {
+    isRecording = false
+    recordCallback = null
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+/** 停止录制 */
+export function stopRecording(): void {
+  isRecording = false
+  recordCallback = null
+}
+
+/** 是否正在录制 */
+export function getIsRecording(): boolean {
+  return isRecording
+}
+
+/** 回放单个步骤 */
+export async function replayStep(step: {
+  type: string
+  selector?: string
+  value?: string
+  url?: string
+}): Promise<{ ok: boolean; message: string }> {
+  const p = await getPage()
+
+  switch (step.type) {
+    case 'navigate':
+      if (step.url) {
+        await p.goto(step.url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+        return { ok: true, message: `已导航至 ${step.url}` }
+      }
+      return { ok: false, message: '缺少 URL' }
+
+    case 'click':
+      if (step.selector) {
+        await p.click(step.selector, { timeout: 10000 })
+        return { ok: true, message: `已点击 ${step.selector}` }
+      }
+      return { ok: false, message: '缺少选择器' }
+
+    case 'type':
+      if (step.selector && step.value !== undefined) {
+        await p.fill(step.selector, step.value, { timeout: 10000 })
+        return { ok: true, message: `已在 ${step.selector} 输入 "${step.value}"` }
+      }
+      return { ok: false, message: '缺少选择器或值' }
+
+    case 'select':
+      if (step.selector && step.value !== undefined) {
+        await p.selectOption(step.selector, step.value, { timeout: 10000 })
+        return { ok: true, message: `已选择 ${step.value}` }
+      }
+      return { ok: false, message: '缺少选择器或值' }
+
+    case 'wait':
+      await p.waitForTimeout(1000)
+      return { ok: true, message: '等待 1s' }
+
+    case 'scroll':
+      if (step.selector) {
+        await p.locator(step.selector).scrollIntoViewIfNeeded({ timeout: 5000 })
+        return { ok: true, message: `已滚动至 ${step.selector}` }
+      }
+      return { ok: false, message: '缺少选择器' }
+
+    case 'hover':
+      if (step.selector) {
+        await p.hover(step.selector, { timeout: 5000 })
+        return { ok: true, message: `已悬停 ${step.selector}` }
+      }
+      return { ok: false, message: '缺少选择器' }
+
+    default:
+      return { ok: false, message: `未知步骤类型: ${step.type}` }
+  }
+}
