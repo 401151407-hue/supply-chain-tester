@@ -280,6 +280,7 @@ export const IPC_CHANNELS = {
   APIRECORDER_STOP: 'apirecorder:stop',
   APIRECORDER_EVENT: 'apirecorder:event',
   APIRECORDER_CLEAR: 'apirecorder:clear',
+  APIRECORDER_SAVE_TRACE: 'apirecorder:save-trace',
   RECORDER_SAVE_SESSION: 'recorder:save-session',
   RECORDER_LOAD_SESSIONS: 'recorder:load-sessions',
   RECORDER_DELETE_SESSION: 'recorder:delete-session',

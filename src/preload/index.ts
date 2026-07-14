@@ -129,6 +129,8 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_STOP),
   apirecorderClear: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_CLEAR),
+  apirecorderSaveTrace: (json: string, defaultName: string): Promise<{ ok: boolean; savedPath?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_SAVE_TRACE, json, defaultName),
   onApiRecorderEvent: (callback: (step: any) => void) => {
     const handler = (_event: any, step: any) => callback(step)
     ipcRenderer.on(IPC_CHANNELS.APIRECORDER_EVENT, handler)

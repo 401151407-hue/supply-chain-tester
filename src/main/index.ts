@@ -1059,6 +1059,24 @@ print(f"CHROMIUM_OK={has_chromium}")
     return { ok: true }
   })
 
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_SAVE_TRACE, async (event, json: string, defaultName: string) => {
+    const { dialog } = require('electron')
+    const { writeFileSync } = require('fs')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(win!, {
+      title: '导出 traceId 清单',
+      defaultPath: defaultName,
+      filters: [{ name: 'JSON 文件', extensions: ['json'] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false, error: '用户取消' }
+    try {
+      writeFileSync(result.filePath, json, 'utf-8')
+      return { ok: true, savedPath: result.filePath }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.RECORDER_PLAY, async (_event, steps: any[]) => {
     const results: { ok: boolean; message: string; index: number }[] = []
     for (let i = 0; i < steps.length; i++) {

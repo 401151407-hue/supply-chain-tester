@@ -475,16 +475,38 @@ export function ApiRecorder() {
           <div className="flex gap-2">
             <button onClick={() => setShowTraceExport(false)} className="flex-1 px-3 py-2 text-xs border border-border/20 rounded-lg hover:bg-hover/5">取消</button>
             <button onClick={async () => {
-              const list = steps.filter(s => s.type === 'api' && s.traceId).map(s => s.traceId!)
-              const json = JSON.stringify({ exportedAt: new Date().toLocaleString('zh-CN'), count: list.length, traceIds: list }, null, 2)
-              try { await navigator.clipboard.writeText(json) } catch {}
+              const apiSteps = steps.filter(s => s.type === 'api' && s.traceId)
+              const list = apiSteps.map(s => s.traceId!)
+
+              // 从 URL 中提取系统名称（路径第一个段）
+              const sysCount: Record<string, number> = {}
+              for (const s of apiSteps) {
+                let pathname = ''
+                try { pathname = new URL(s.apiUrl || '').pathname } catch {}
+                const seg = pathname.split('/').filter(Boolean)[0]
+                if (seg) sysCount[seg] = (sysCount[seg] || 0) + 1
+              }
+              const system = Object.entries(sysCount).sort((a, b) => b[1] - a[1])[0]?.[0] || ''
+
+              const json = JSON.stringify({
+                exportedAt: new Date().toLocaleString('zh-CN'),
+                system: system || undefined,
+                count: list.length,
+                traceIds: list,
+              }, null, 2)
               const api = getApi()
-              if (api?.writeFile) {
-                const now = new Date(); const fn = `trace_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.json`
-                await api.writeFile(`test-suites/common/${fn}`, json)
-                setStatusMsg(`✅ 已保存 common/${fn} (${list.length} 个 traceId)`)
-                if (api?.scanScripts) setTimeout(() => api.scanScripts(), 500)
-              } else { setStatusMsg('已复制到剪贴板') }
+              const now = new Date(); const fn = `trace_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.json`
+              if (api?.apirecorderSaveTrace) {
+                const res = await api.apirecorderSaveTrace(json, fn)
+                if (res.ok) {
+                  setStatusMsg(`✅ 已保存 (${list.length} 个 traceId)`)
+                  if (api?.scanScripts) setTimeout(() => api.scanScripts(), 500)
+                } else if (res.error !== '用户取消') {
+                  setStatusMsg(`❌ 保存失败: ${res.error}`)
+                }
+              } else {
+                try { await navigator.clipboard.writeText(json); setStatusMsg('已复制到剪贴板') } catch {}
+              }
               setShowTraceExport(false)
             }} className="flex-1 px-3 py-2 text-xs bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg font-medium">
               保存 traceId
