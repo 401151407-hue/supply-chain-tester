@@ -1059,22 +1059,112 @@ print(f"CHROMIUM_OK={has_chromium}")
     return { ok: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.APIRECORDER_SAVE_TRACE, async (event, json: string, defaultName: string) => {
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_SAVE_TRACE, async (event, content: string, defaultName: string) => {
     const { dialog } = require('electron')
     const { writeFileSync } = require('fs')
     const win = BrowserWindow.fromWebContents(event.sender)
+    const isPy = defaultName.endsWith('.py')
+    const title = isPy ? '保存 Python 脚本' : '导出 traceId 清单'
     const result = await dialog.showSaveDialog(win!, {
-      title: '导出 traceId 清单',
+      title,
       defaultPath: defaultName,
-      filters: [{ name: 'JSON 文件', extensions: ['json'] }],
+      filters: [{ name: isPy ? 'Python 脚本' : 'JSON 文件', extensions: [isPy ? 'py' : 'json'] }],
     })
     if (result.canceled || !result.filePath) return { ok: false, error: '用户取消' }
     try {
-      writeFileSync(result.filePath, json, 'utf-8')
+      writeFileSync(result.filePath, content, 'utf-8')
       return { ok: true, savedPath: result.filePath }
     } catch (err: any) {
       return { ok: false, error: err.message }
     }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_IMPORT_TRACE, async (event, filePath?: string) => {
+    const { dialog } = require('electron')
+    const { readFileSync, writeFileSync, unlinkSync } = require('fs')
+    const { execFile } = require('child_process')
+    const { join: pathJoin } = require('path')
+    const os = require('os')
+    const win = BrowserWindow.fromWebContents(event.sender)
+
+    // 如果没传 filePath，打开文件对话框
+    if (!filePath) {
+      const result = await dialog.showOpenDialog(win!, {
+        title: '导入 traceId 清单',
+        filters: [{ name: 'JSON 文件', extensions: ['json'] }],
+        properties: ['openFile'],
+      })
+      if (result.canceled || result.filePaths.length === 0) return { ok: false, error: '用户取消' }
+      filePath = result.filePaths[0]
+    }
+
+    let jsonData: any
+    try {
+      jsonData = JSON.parse(readFileSync(filePath, 'utf-8'))
+    } catch (err: any) {
+      return { ok: false, error: `JSON 解析失败: ${err.message}` }
+    }
+    const traceIds: string[] = jsonData.traceIds || []
+    const system = jsonData.system || ''
+    if (traceIds.length === 0) return { ok: false, error: '未找到 traceId' }
+
+    // 构建临时输入文件
+    const tmpDir = os.tmpdir()
+    const tmpIn = pathJoin(tmpDir, `trace_import_${Date.now()}.json`)
+    const tmpOut = pathJoin(tmpDir, `trace_enriched_${Date.now()}.json`)
+    const apis = traceIds.map((tid: string) => ({ traceId: tid }))
+    writeFileSync(tmpIn, JSON.stringify({ system, apis }, null, 2), 'utf-8')
+
+    // 调用 Python log_fetcher.py
+    const scriptsDir = getScriptsDir()
+    const pythonPath = getPythonPath()
+    const fetcherScript = pathJoin(scriptsDir, 'utils', 'log_fetcher.py')
+    if (!existsSync(fetcherScript)) {
+      try { unlinkSync(tmpIn) } catch {}
+      return { ok: false, error: `找不到 log_fetcher.py: ${fetcherScript}` }
+    }
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const proc = execFile(pythonPath, [fetcherScript, tmpIn, '--output', tmpOut], {
+          timeout: 120000,
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        }, (err, stdout, stderr) => {
+          if (err && !existsSync(tmpOut)) { reject(err); return }
+          resolve()
+        })
+      })
+    } catch (err: any) {
+      try { unlinkSync(tmpIn) } catch {}
+      return { ok: false, error: `Python 执行失败: ${err.message}` }
+    }
+
+    // 读取结果
+    let enriched: any
+    try {
+      if (existsSync(tmpOut)) {
+        enriched = JSON.parse(readFileSync(tmpOut, 'utf-8'))
+      }
+    } catch {}
+
+    // 清理临时文件
+    try { unlinkSync(tmpIn) } catch {}
+    try { unlinkSync(tmpOut) } catch {}
+
+    if (!enriched || !enriched.apis) return { ok: false, error: '日志查询无结果' }
+    return { ok: true, data: enriched }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_PICK_FILE, async (event) => {
+    const { dialog } = require('electron')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(win!, {
+      title: '导入 traceId 清单',
+      filters: [{ name: 'JSON 文件', extensions: ['json'] }],
+      properties: ['openFile'],
+    })
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, error: '用户取消' }
+    return { ok: true, filePath: result.filePaths[0] }
   })
 
   ipcMain.handle(IPC_CHANNELS.RECORDER_PLAY, async (_event, steps: any[]) => {

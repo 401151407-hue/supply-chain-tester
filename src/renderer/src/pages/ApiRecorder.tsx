@@ -56,6 +56,7 @@ export function ApiRecorder() {
   const [isClearing, setIsClearing] = useState(false)
   const [isUndoing, setIsUndoing] = useState(false)
   const [canUndo, setCanUndo] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
   const lastClearedRef = useRef<RecordStep[]>([])
   const cleanupRef = useRef<(() => void) | null>(null)
 
@@ -158,6 +159,172 @@ export function ApiRecorder() {
         setStatusMsg('✅ 已撤销清空')
       })
     })
+  }
+
+  /** 从导入的 enriched API 数据生成 Python 测试脚本 */
+  function generateImportPythonCode(apis: any[], system: string): string {
+    const isCmp = system.includes('cmp') || system.includes('CMP')
+
+    let code = '# -*- coding: utf-8 -*-\n'
+    code += `# 从 traceId 导入解析 — ${system || '未知系统'}\n`
+    code += `# 导入时间: ${new Date().toLocaleString('zh-CN')}\n`
+    code += `# 接口数量: ${apis.length}\n\n`
+    code += 'import sys\nimport requests\n'
+    code += 'from utils.environment import get_environment\n'
+    code += 'from utils.line_counter import print_current_line_number\n'
+    if (isCmp) {
+      code += 'from utils.login_helper import get_token\n'
+    }
+    code += '\n'
+    code += 'env = sys.argv[1]\n'
+    code += 'env_config = get_environment(env)\n'
+    code += 'print(f">>> {env}环境")\n\n'
+
+    // CMP 系统需要登录获取 token
+    if (isCmp) {
+      code += '# 登录获取 SSO token\n'
+      code += 'token = get_token(env)\n\n'
+    }
+
+    // 收集所有请求头中需要的变量
+    const headerVars: Record<string, string> = {}
+    for (const item of apis) {
+      const hdrs = item.requestHeaders || item.headers || {}
+      if (hdrs['token']) headerVars['token'] = 'token'
+    }
+    if (Object.keys(headerVars).length > 0) {
+      code += 'headers = {\n'
+      for (const k of Object.keys(headerVars)) {
+        code += `    '${k}': ${k},\n`
+      }
+      code += '}\n\n'
+    }
+
+    code += 'dangqianbushu = 0\n\n'
+
+    for (let i = 0; i < apis.length; i++) {
+      const item = apis[i]
+      const url = item.url || item.requestUri || ''
+      const path = url.replace(/^https?:\/\/[^\/]+/, '')
+      const envKey = inferEnvConfigKey(url)
+      const respBody = item.responseBody || item.response || {}
+      const traceId = item.traceId || respBody.traceId || ''
+
+      // 步骤注释
+      const pathSegs = path.split('/').filter(Boolean)
+      const stepLabel = pathSegs.slice(-2).join('/') || pathSegs[pathSegs.length - 1] || `步骤${i + 1}`
+      code += `# traceId: ${traceId}\n`
+      code += `# ${stepLabel}\n`
+
+      // URL 构造
+      if (envKey) {
+        code += `url = env_config.${envKey} + '${path}'\n`
+      } else {
+        code += `url = '${url}'\n`
+      }
+
+      // 请求体 — 直接写死实际值，token 除外
+      let reqBody: any = item.requestBody
+      if (typeof reqBody === 'string') {
+        try { reqBody = JSON.parse(reqBody) } catch { reqBody = null }
+      }
+      if (reqBody && typeof reqBody === 'object' && Object.keys(reqBody).length > 0) {
+        code += 'json = {\n'
+        for (const [k, v] of Object.entries(reqBody)) {
+          code += `    '${k}': ${formatPythonDict(v, 4)},\n`
+        }
+        code += '}\n'
+      } else {
+        code += 'json = {}\n'
+      }
+
+      // 请求调用
+      code += 'a1 = requests.post(url, headers=headers, json=json)\n'
+      code += 'b1 = a1.json()\n'
+
+      // 结果检查
+      code += "if b1 and b1.get('respCode') == str(10000):\n"
+      code += '    dangqianbushu += 1\n'
+      code += `    print(f"第「{dangqianbushu}」步，${stepLabel}成功\\n")\n`
+      code += 'else:\n'
+      code += `    print('\\n'+'*'*30+'错误提示'+'*'*30)\n`
+      code += '    print_current_line_number()\n'
+      code += '    print(url)\n'
+      code += '    print(b1)\n'
+      code += `    print('*'*100+'\\n')\n`
+      code += '    sys.exit()\n'
+
+      if (i < apis.length - 1) code += '\n'
+    }
+
+    return code
+  }
+
+  async function importTrace() {
+    const api = getApi()
+    if (!api?.apirecorderPickFile || !api?.apirecorderImportTrace) {
+      setStatusMsg('❌ 导入功能不可用，请重启应用'); return
+    }
+    // 第一步：选择文件
+    const pick = await api.apirecorderPickFile()
+    if (!pick.ok) {
+      if (pick.error !== '用户取消') setStatusMsg(`❌ ${pick.error}`)
+      return
+    }
+    // 第二步：显示进度条，SSH 查询
+    setIsImporting(true)
+    setStatusMsg('正在查询服务器日志...')
+    try {
+      const result = await api.apirecorderImportTrace(pick.filePath)
+      if (!result.ok) {
+        setStatusMsg(`导入失败: ${result.error}`)
+        setIsImporting(false)
+        return
+      }
+      const data = result.data
+      const apis = data?.apis || []
+      if (apis.length === 0) { setStatusMsg('⚠️ 未查询到任何结果'); setIsImporting(false); return }
+      const system = data?.system || ''
+
+      // 生成 Python 脚本
+      const pyCode = generateImportPythonCode(apis, system)
+      const now = new Date()
+      const fn = `trace_import_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.py`
+      // 直接保存到 common 目录
+      try {
+        await api.writeFile(`test-suites/common/${fn}`, pyCode)
+        setStatusMsg(`✅ 已生成脚本 common/${fn}`)
+        if (api?.scanScripts) setTimeout(() => api.scanScripts(), 500)
+      } catch (err: any) {
+        setStatusMsg(`❌ 保存脚本失败: ${err.message}`)
+      }
+
+      // 同时加载到列表
+      const newSteps: RecordStep[] = []
+      for (const item of apis) {
+        const respBody = item.responseBody || item.response || {}
+        const traceId = item.traceId || respBody.traceId || ''
+        if (!traceId) continue
+        const url = item.url || item.requestUri || ''
+        const method = item.method || 'POST'
+        newSteps.push({
+          id: genId(),
+          type: 'api',
+          description: `${method} ${url.replace(/^https?:\/\/[^\/]+/, '')}`,
+          timestamp: Date.now(),
+          apiMethod: method,
+          apiUrl: url,
+          apiHeaders: item.requestHeaders || item.headers,
+          apiBody: typeof item.requestBody === 'string' ? item.requestBody : JSON.stringify(item.requestBody || ''),
+          apiStatus: item.status || (respBody.respCode === '10000' ? 200 : 0),
+          apiResponse: typeof respBody === 'string' ? respBody : JSON.stringify(respBody),
+          traceId,
+        })
+      }
+      setSteps(prev => [...prev, ...newSteps])
+      setStatusMsg(`✅ 已导入 ${newSteps.length} 个接口并生成脚本`)
+    } catch (err: any) { setStatusMsg(`导入异常: ${err.message}`) }
+    finally { setIsImporting(false) }
   }
 
   async function saveSession() {
@@ -385,10 +552,14 @@ export function ApiRecorder() {
           )}
         </div>
 
-        <div className="p-2 border-t border-border/10">
+        <div className="p-2 border-t border-border/10 space-y-1">
           <button onClick={() => setShowTraceExport(true)} disabled={steps.filter(s => s.type === 'api' && s.traceId).length === 0}
             className="w-full py-1.5 text-[11px] bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 rounded-md disabled:opacity-30">
             📤 导出traceId
+          </button>
+          <button onClick={importTrace}
+            className="w-full py-1.5 text-[11px] bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-md">
+            📥 导入并解析traceId
           </button>
         </div>
       </div>
@@ -512,6 +683,21 @@ export function ApiRecorder() {
               保存 traceId
             </button>
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* 导入进度遮罩 */}
+    {isImporting && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100]">
+        <div className="bg-surface-light border border-border/20 rounded-2xl p-8 w-96 shadow-2xl text-center">
+          <div className="text-4xl mb-4 animate-bounce">🔍</div>
+          <h3 className="text-sm font-medium mb-2">正在查询服务器日志</h3>
+          <p className="text-xs text-muted mb-4">通过 SSH 逐条 grep traceId，请稍候...</p>
+          <div className="w-full bg-background rounded-full h-2 overflow-hidden">
+            <div className="h-full bg-accent rounded-full animate-pulse w-2/3" />
+          </div>
+          <p className="text-[10px] text-muted mt-3">这可能需要 10~60 秒</p>
         </div>
       </div>
     )}
