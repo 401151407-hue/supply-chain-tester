@@ -161,6 +161,28 @@ export function ApiRecorder() {
     })
   }
 
+  /** 从响应数据中生成变量提取代码 */
+  function generateVarExtraction(data: any, source: string, prefix = ''): string {
+    if (!data || typeof data !== 'object') return ''
+    const lines: string[] = []
+    for (const [k, v] of Object.entries(data)) {
+      const pyName = prefix ? `${prefix}_${k}` : k
+      if (Array.isArray(v)) {
+        // 数组：取第一个元素
+        lines.push(`    ${pyName} = ${source}['${k}'][0] if ${source}.get('${k}') else {}`)
+      } else if (v && typeof v === 'object') {
+        // 对象：递归提取子字段
+        lines.push(`    ${pyName} = ${source}.get('${k}')`)
+        const sub = generateVarExtraction(v, pyName, '')
+        if (sub) lines.push(sub)
+      } else {
+        // 标量：直接取值
+        lines.push(`    ${pyName} = ${source}.get('${k}')`)
+      }
+    }
+    return lines.join('\n') + '\n'
+  }
+
   /** 从导入的 enriched API 数据生成 Python 测试脚本 */
   function generateImportPythonCode(apis: any[], system: string): string {
     const isCmp = system.includes('cmp') || system.includes('CMP')
@@ -246,6 +268,21 @@ export function ApiRecorder() {
       code += "if b1 and b1.get('respCode') == str(10000):\n"
       code += '    dangqianbushu += 1\n'
       code += `    print(f"第「{dangqianbushu}」步，${stepLabel}成功\\n")\n`
+
+      // 从响应中提取变量
+      let bodyData: any = respBody
+      if (typeof bodyData === 'string') {
+        try { bodyData = JSON.parse(bodyData) } catch { bodyData = {} }
+      }
+      const innerBody = bodyData?.body
+      if (innerBody && typeof innerBody === 'object' && !Array.isArray(innerBody)) {
+        const extractVars = generateVarExtraction(innerBody, "b1['body']")
+        if (extractVars) {
+          code += '    # 提取响应变量\n'
+          code += extractVars
+        }
+      }
+
       code += 'else:\n'
       code += `    print('\\n'+'*'*30+'错误提示'+'*'*30)\n`
       code += '    print_current_line_number()\n'
