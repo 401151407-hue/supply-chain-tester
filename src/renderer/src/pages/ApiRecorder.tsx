@@ -51,12 +51,23 @@ export function ApiRecorder() {
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportProduct, setExportProduct] = useState('common')
   const [exportFilename, setExportFilename] = useState('')
+  const [captureMode, setCaptureMode] = useState<'network' | 'console'>('network')
+  const [showTraceExport, setShowTraceExport] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
+  const [isUndoing, setIsUndoing] = useState(false)
+  const [canUndo, setCanUndo] = useState(false)
+  const lastClearedRef = useRef<RecordStep[]>([])
   const cleanupRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const api = getApi()
     if (!api?.onApiRecorderEvent) return
     const unsub = api.onApiRecorderEvent((step: any) => {
+      if (step.type === 'recording_stopped') {
+        setIsCapturing(false)
+        setStatusMsg('浏览器已关闭，捕获已停止')
+        return
+      }
       if (step.type === 'api' && step.apiMethod) {
         const newStep: RecordStep = {
           id: genId(),
@@ -69,6 +80,7 @@ export function ApiRecorder() {
           apiBody: step.apiBody,
           apiStatus: step.apiStatus,
           apiResponse: step.apiResponse,
+          traceId: step.traceId || undefined,
         }
         setSteps(prev => [...prev, newStep])
       } else if (step.type === 'navigate') {
@@ -91,10 +103,10 @@ export function ApiRecorder() {
     if (!api?.apirecorderStart) { setStatusMsg('API 录制不可用，请重启应用'); return }
     setSteps([])
     setStatusMsg('正在启动浏览器...')
-    const result = await api.apirecorderStart(urlInput)
+    const result = await api.apirecorderStart(urlInput, captureMode)
     if (result.ok) {
       setIsCapturing(true)
-      setStatusMsg('🟢 捕获中 — 请在浏览器中操作，API 调用会自动记录')
+      setStatusMsg(`🟢 捕获中 [${captureMode === 'console' ? 'Console' : 'Network'}]`)
     } else {
       setStatusMsg(`启动失败: ${result.error || '未知错误'}`)
     }
@@ -125,8 +137,27 @@ export function ApiRecorder() {
   }
 
   function clearSteps() {
-    if (steps.length > 0 && !confirm('确定清空所有步骤？')) return
-    setSteps([]); setSelectedStep(null)
+    if (steps.length === 0) return
+    lastClearedRef.current = [...steps]
+    setCanUndo(true)
+    setIsClearing(true)
+    setTimeout(() => {
+      setSteps([]); setSelectedStep(null); setIsClearing(false)
+    }, 300)
+  }
+
+  function undoClear() {
+    if (lastClearedRef.current.length === 0) return
+    setSteps(lastClearedRef.current)
+    lastClearedRef.current = []
+    setCanUndo(false)
+    setIsUndoing(true)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsUndoing(false)
+        setStatusMsg('✅ 已撤销清空')
+      })
+    })
   }
 
   async function saveSession() {
@@ -156,51 +187,102 @@ export function ApiRecorder() {
     loadSessions()
   }
 
+  function tryFormatJson(raw: string): string {
+    try { return JSON.stringify(JSON.parse(raw), null, 2) } catch { return raw }
+  }
+
+  function formatPythonDict(obj: any, indent = 0): string {
+    if (obj === null || obj === undefined) return 'None'
+    if (typeof obj === 'string') return `'${obj.replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`
+    if (typeof obj === 'number') return String(obj)
+    if (typeof obj === 'boolean') return obj ? 'True' : 'False'
+    if (Array.isArray(obj)) {
+      if (obj.length === 0) return '[]'
+      return '[\n' + obj.map((item: any) => ' '.repeat(indent + 4) + formatPythonDict(item, indent + 4)).join(',\n') + '\n' + ' '.repeat(indent) + ']'
+    }
+    if (typeof obj === 'object') {
+      const keys = Object.keys(obj)
+      if (keys.length === 0) return '{}'
+      return '{\n' + keys.map(k => ' '.repeat(indent + 4) + `'${k}': ${formatPythonDict(obj[k], indent + 4)}`).join(',\n') + '\n' + ' '.repeat(indent) + '}'
+    }
+    return String(obj)
+  }
+
+  function inferEnvConfigKey(url: string): string | null {
+    let pathname = ''
+    try { pathname = new URL(url).pathname } catch { pathname = url.startsWith('/') ? url.split('?')[0] : '' }
+    if (!pathname) return null
+    const seg = pathname.split('/').filter(Boolean)[0]?.replace(/-/g, '_') || ''
+    const known = ['wxsbank_supplychain_web','wxsbank_scp_small_tool','wxsbank_supplychain_partner','wxsbank_supplychain_cmp','wxsbank_supplychain_adam']
+    return known.includes(seg) ? seg : null
+  }
+
   function generatePythonCode(): string {
-    const apiSteps = steps.filter(s => s.type === 'api')
+    const apiSteps = steps.filter(s => s.type === 'api' && s.apiMethod && !['LOG', 'UNKNOWN'].includes(s.apiMethod))
+    if (apiSteps.length === 0) return '# 无有效 API 步骤\n'
+
     let code = '# -*- coding: utf-8 -*-\n'
     code += `# ${exportFilename || 'API 测试脚本'}\n`
     code += `# 录制时间: ${new Date().toLocaleString('zh-CN')}\n`
     code += `# API 调用数: ${apiSteps.length}\n`
-    code += 'import requests\n\n'
+    code += `# traceId 数量: ${apiSteps.filter(s => s.traceId).length}\n\n`
+    code += 'import sys\nimport time\nimport requests\n'
+    code += 'from utils.environment import get_environment\n\n'
+    code += 'env = sys.argv[1]\n'
+    code += 'print(f\">>> {env}环境\")\n'
+    code += 'env_config = get_environment(env)\n\n'
+    code += 'step = 0\n\n'
 
     for (let i = 0; i < apiSteps.length; i++) {
       const s = apiSteps[i]
-      const method = (s.apiMethod || 'GET').toLowerCase()
-      const shortUrl = (s.apiUrl || '').replace(/^https?:\/\/[^\/]+/, '')
-      code += `# ${i + 1}. ${s.description}\n`
+      const method = (s.apiMethod || 'GET').toUpperCase()
+      if (!['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) continue
+      const path = (s.apiUrl || '').replace(/^https?:\/\/[^\/]+/, '')
+      const envKey = inferEnvConfigKey(s.apiUrl || '')
 
-      // headers
-      const headers = s.apiHeaders || {}
-      const safeHeaders: Record<string, string> = {}
-      for (const [k, v] of Object.entries(headers)) {
-        if (!['cookie', 'authorization', 'host', 'content-length', 'origin', 'referer'].includes(k.toLowerCase())) {
-          safeHeaders[k] = v || ''
-        }
+      code += `# ${path}\n`
+      if (s.traceId) {
+        code += `# traceId: ${s.traceId}\n`
       }
-      const headersStr = '{\n    ' + Object.entries(safeHeaders).map(([k, v]) => `'${k}': '${v.replace(/'/g, "\\'")}'`).join(',\n    ') + '\n}'
 
-      if (method === 'get' || method === 'delete') {
-        code += `resp = requests.${method}('${(s.apiUrl || '').replace(/'/g, "\\'")}', headers=${headersStr})\n`
+      // URL
+      if (envKey) {
+        const prefix = '/' + envKey.replace(/_/g, '-') + '/'
+        const rest = path.startsWith(prefix) ? path.slice(prefix.length - 1) : path
+        code += `url = env_config.${envKey}+'${rest}'\n`
       } else {
-        let jsonParam = ''
-        if (s.apiBody) {
-          try {
-            const parsed = JSON.parse(s.apiBody)
-            jsonParam = `json=${JSON.stringify(parsed)}`
-          } catch {
-            jsonParam = `data='''${(s.apiBody || '').replace(/'/g, "\\'")}'''`
+        code += `url = '${(s.apiUrl || '').replace(/'/g, "\\'")}'\n`
+      }
+
+      // Body
+      if (s.apiBody && method !== 'GET') {
+        try {
+          const parsed = JSON.parse(s.apiBody)
+          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+            code += `json = ${formatPythonDict(parsed)}\n`
           }
-        }
-        code += `resp = requests.${method}('${(s.apiUrl || '').replace(/'/g, "\\'")}', headers=${headersStr}${jsonParam ? ', ' + jsonParam : ''})\n`
+        } catch {}
       }
-      code += `print(f'${method.toUpperCase()} ${shortUrl} -> {resp.status_code}')\n`
-      if (s.apiStatus && s.apiStatus < 400) {
-        code += `assert resp.status_code == ${s.apiStatus}\n`
+
+      // Request
+      const m = method.toLowerCase()
+      code += `a1 = requests.${m}(url,headers=headers`
+      if (s.apiBody && method !== 'GET') {
+        try { JSON.parse(s.apiBody); code += ',json=json' } catch {}
       }
-      code += '\n'
+      code += ')\n'
+      code += 'b1 = a1.json()\n'
+      code += `if b1['respCode'] == str(10000):\n`
+      code += `    step += 1\n`
+      code += `    print(f'[步骤{step}] ${path}成功')\n`
+      code += 'else:\n'
+      code += `    print('\\n'+'*'*100)\n`
+      code += '    print(url)\n'
+      code += '    print(b1)\n'
+      code += `    print('*'*100+'\\n')\n`
+      code += '    sys.exit()\n\n'
     }
-    code += 'print(\'✅ API 测试完成\')\n'
+    code += 'print(\'✅ 全部接口测试完成\')\n'
     return code
   }
 
@@ -227,7 +309,7 @@ export function ApiRecorder() {
   }
 
   const selectedStepData = steps.find(s => s.id === selectedStep)
-  const apiSteps = steps.filter(s => s.type === 'api')
+  const apiSteps = steps.filter(s => s.type === 'api' && s.traceId)
 
   return (
     <div className="flex h-full">
@@ -238,6 +320,17 @@ export function ApiRecorder() {
               placeholder="输入 API 服务地址..."
               className="flex-1 px-2 py-1.5 text-xs bg-background border border-border/20 rounded-md focus:outline-none focus:border-accent/50"
               disabled={isCapturing} />
+          </div>
+          {/* 监听源切换 */}
+          <div className="flex gap-0.5 p-0.5 bg-background rounded-md border border-border/10">
+            <button onClick={() => setCaptureMode('network')} disabled={isCapturing}
+              className={`flex-1 px-2 py-1 text-[11px] rounded transition-colors ${captureMode === 'network' ? 'bg-accent/20 text-accent font-medium' : 'text-muted hover:text-foreground'}`}>
+              🌐 Network
+            </button>
+            <button onClick={() => setCaptureMode('console')} disabled={isCapturing}
+              className={`flex-1 px-2 py-1 text-[11px] rounded transition-colors ${captureMode === 'console' ? 'bg-accent/20 text-accent font-medium' : 'text-muted hover:text-foreground'}`}>
+              🖥 Console
+            </button>
           </div>
           <div className="flex gap-1">
             {!isCapturing ? (
@@ -260,169 +353,146 @@ export function ApiRecorder() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
           <div className="flex items-center justify-between px-2 py-1">
-            <span className="text-[10px] text-muted">API 调用列表</span>
-            <span className="text-[10px] text-muted">{apiSteps.length} 个接口</span>
+            <span className="text-[10px] text-muted">API 调用列表 · {apiSteps.length} 个</span>
+            <div className="flex items-center gap-0.5">
+              <button onClick={undoClear} disabled={!canUndo}
+                className="text-[10px] text-muted hover:text-accent disabled:opacity-30 px-1 py-0.5" title="撤销清空">
+                ↩ 撤销
+              </button>
+              <button onClick={clearSteps} disabled={steps.length === 0}
+                className="text-[10px] text-muted hover:text-red-400 disabled:opacity-30 px-1 py-0.5">
+                🗑 清空
+              </button>
+            </div>
           </div>
           {steps.length === 0 ? (
             <p className="text-xs text-muted text-center py-8">
               {isCapturing ? '等待 API 请求...' : '输入地址 → 开始捕获 → 在浏览器中操作'}
             </p>
           ) : (
-            steps.map((step, idx) => (
-              <div key={step.id} onClick={() => setSelectedStep(step.id)}
-                className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer text-xs transition-colors
-                  ${selectedStep === step.id ? 'bg-accent/20 text-foreground' : 'hover:bg-hover/5 text-muted hover:text-foreground'}`}>
+            <div className={`transition-all duration-300 ${isClearing ? 'opacity-0 -translate-y-2 scale-95 pointer-events-none' : isUndoing ? 'opacity-0 translate-y-2 scale-95' : 'opacity-100 translate-y-0 scale-100'}`}>
+            {steps.filter(s => s.type === 'api' && s.traceId).map((step, idx) => (
+              <div key={step.id}
+                onClick={() => setSelectedStep(selectedStep === step.id ? null : step.id)}
+                className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs cursor-pointer transition-colors ${selectedStep === step.id ? 'bg-accent/10 text-foreground' : 'text-muted hover:bg-hover/5'}`}>
                 <span className="text-[10px] w-5 text-center opacity-50">{idx + 1}</span>
-                {step.type === 'api' ? (
-                  <>
-                    <Wifi size={13} className="opacity-60" />
-                    {step.apiMethod && (
-                      <span className={`text-[10px] font-mono font-bold ${HTTP_METHOD_COLORS[step.apiMethod] || 'text-muted'}`}>{step.apiMethod}</span>
-                    )}
-                    <span className="flex-1 truncate">{step.description}</span>
-                    {step.apiStatus != null && (
-                      <span className={`text-[10px] ${step.apiStatus < 400 ? 'text-green-400' : 'text-red-400'}`}>{step.apiStatus}</span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Globe size={13} className="opacity-60" />
-                    <span className="flex-1 truncate">{step.description}</span>
-                  </>
-                )}
-                <div className="hidden group-hover:flex items-center gap-0.5">
-                  <button onClick={e => { e.stopPropagation(); moveStep(step.id, -1) }} disabled={idx === 0}
-                    className="p-0.5 hover:text-foreground disabled:opacity-20"><ChevronUp size={12} /></button>
-                  <button onClick={e => { e.stopPropagation(); moveStep(step.id, 1) }} disabled={idx === steps.length - 1}
-                    className="p-0.5 hover:text-foreground disabled:opacity-20"><ChevronDown size={12} /></button>
-                  <button onClick={e => { e.stopPropagation(); deleteStep(step.id) }}
-                    className="p-0.5 text-red-400 hover:text-red-300"><Trash2 size={12} /></button>
-                </div>
+                <span className={`text-[10px] font-mono font-bold ${HTTP_METHOD_COLORS[step.apiMethod || ''] || 'text-muted'}`}>{step.apiMethod}</span>
+                <span className="flex-1 truncate">{(step.apiUrl || '').replace(/^https?:\/\/[^\/]+/, '')}</span>
+                <span className="text-[10px] text-accent font-mono select-all cursor-pointer" title={step.traceId}>{step.traceId!.slice(0, 16)}…</span>
               </div>
-            ))
+            ))}
+            </div>
           )}
         </div>
 
-        <div className="p-2 border-t border-border/10 flex gap-1">
-          <button onClick={saveSession} disabled={steps.length === 0 || isSaving}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-accent/20 text-accent hover:bg-accent/30 rounded-md transition-colors disabled:opacity-30">
-            <Save size={13} /> {isSaving ? '...' : '保存'}
-          </button>
-          <button onClick={() => setShowSessions(!showSessions)}
-            className="flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-hover/5 hover:bg-hover/10 text-muted hover:text-foreground rounded-md transition-colors">
-            <FolderOpen size={13} />
-          </button>
-          <button onClick={openExportDialog} disabled={steps.length === 0}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-hover/5 hover:bg-hover/10 text-muted hover:text-foreground rounded-md transition-colors disabled:opacity-30">
-            <Download size={13} /> Py
-          </button>
-          <button onClick={clearSteps}
-            className="flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-hover/5 hover:bg-hover/10 text-muted hover:text-red-400 rounded-md transition-colors">
-            <Trash2 size={13} />
+        <div className="p-2 border-t border-border/10">
+          <button onClick={() => setShowTraceExport(true)} disabled={steps.filter(s => s.type === 'api' && s.traceId).length === 0}
+            className="w-full py-1.5 text-[11px] bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 rounded-md disabled:opacity-30">
+            📤 导出traceId
           </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        {showSessions && (
-          <div className="border-b border-border/10 p-3 max-h-48 overflow-y-auto">
-            <h3 className="text-xs font-medium text-muted mb-2">已保存的会话</h3>
-            {sessions.length === 0 ? <p className="text-xs text-muted">暂无</p> : sessions.map(s => (
-              <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-hover/5 group">
-                <button onClick={() => loadSession(s)} className="flex-1 text-left text-xs truncate text-muted hover:text-foreground">
-                  {s.name} <span className="opacity-40">({s.steps.length} 步)</span>
-                </button>
-                <button onClick={() => deleteSession(s.id)} className="hidden group-hover:block p-0.5 text-red-400 hover:text-red-300"><Trash2 size={12} /></button>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* 右侧：接口详情 */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {selectedStepData ? (
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium">接口详情</h3>
+              <button onClick={() => setSelectedStep(null)}
+                className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground">
+                <X size={16} />
+              </button>
+            </div>
 
-        {selectedStepData?.type === 'api' && selectedStepData.apiMethod && (
-          <div className="border-b border-border/10 p-3">
-            <h3 className="text-xs font-medium text-muted mb-2">API 详情</h3>
+            {/* 基本信息 */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className={`text-sm font-mono font-bold ${HTTP_METHOD_COLORS[selectedStepData.apiMethod] || ''}`}>{selectedStepData.apiMethod}</span>
-                <span className="text-[11px] text-muted truncate">{selectedStepData.apiUrl || ''}</span>
+                <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${selectedStepData.apiMethod === 'POST' ? 'bg-amber-500/10 text-amber-400' : selectedStepData.apiMethod === 'GET' ? 'bg-green-500/10 text-green-400' : 'bg-hover/10 text-muted'}`}>
+                  {selectedStepData.apiMethod || 'UNKNOWN'}
+                </span>
+                <span className="text-xs text-muted break-all">{selectedStepData.apiUrl || '-'}</span>
               </div>
-              {selectedStepData.apiStatus != null && (
-                <div className="text-[11px]">
-                  状态: <span className={selectedStepData.apiStatus < 400 ? 'text-green-400' : 'text-red-400'}>{selectedStepData.apiStatus}</span>
-                </div>
-              )}
-              {selectedStepData.apiHeaders && Object.keys(selectedStepData.apiHeaders).length > 0 && (
-                <div>
-                  <label className="text-[10px] text-muted block">请求头</label>
-                  <pre className="text-[10px] bg-background rounded p-1.5 mt-0.5 max-h-24 overflow-y-auto font-mono whitespace-pre-wrap">
-                    {Object.entries(selectedStepData.apiHeaders).map(([k, v]) => `${k}: ${v}`).join('\n')}
-                  </pre>
-                </div>
-              )}
-              {selectedStepData.apiBody && (
-                <div>
-                  <label className="text-[10px] text-muted block">请求体</label>
-                  <pre className="text-[10px] bg-background rounded p-1.5 mt-0.5 max-h-32 overflow-y-auto font-mono whitespace-pre-wrap">{selectedStepData.apiBody}</pre>
-                </div>
-              )}
-              {selectedStepData.apiResponse && (
-                <div>
-                  <label className="text-[10px] text-muted block">响应体</label>
-                  <pre className="text-[10px] bg-background rounded p-1.5 mt-0.5 max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">{selectedStepData.apiResponse}</pre>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-xs text-muted">
+                <span>traceId:</span>
+                <span className="text-accent font-mono select-all">{selectedStepData.traceId || '-'}</span>
+              </div>
             </div>
+
+            {/* 请求头 */}
+            {selectedStepData.apiHeaders && Object.keys(selectedStepData.apiHeaders).length > 0 && (
+              <details className="space-y-1" open>
+                <summary className="text-xs font-medium text-muted cursor-pointer hover:text-foreground">请求头</summary>
+                <pre className="text-[11px] bg-background border border-border/10 rounded-lg p-3 overflow-x-auto font-mono text-muted leading-relaxed">
+                  {JSON.stringify(selectedStepData.apiHeaders, null, 2)}
+                </pre>
+              </details>
+            )}
+
+            {/* 请求体 */}
+            {selectedStepData.apiBody && (
+              <details className="space-y-1" open>
+                <summary className="text-xs font-medium text-muted cursor-pointer hover:text-foreground">请求体</summary>
+                <pre className="text-[11px] bg-background border border-border/10 rounded-lg p-3 overflow-x-auto font-mono text-muted leading-relaxed max-h-80 overflow-y-auto whitespace-pre-wrap">
+                  {tryFormatJson(selectedStepData.apiBody)}
+                </pre>
+              </details>
+            )}
+
+            {/* 响应状态 */}
+            {selectedStepData.apiStatus !== undefined && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted">状态码:</span>
+                <span className={selectedStepData.apiStatus === 200 ? 'text-green-400' : 'text-red-400'}>
+                  {selectedStepData.apiStatus}
+                </span>
+              </div>
+            )}
+
+            {/* 响应体 */}
+            {selectedStepData.apiResponse && (
+              <details className="space-y-1" open>
+                <summary className="text-xs font-medium text-muted cursor-pointer hover:text-foreground">响应体</summary>
+                <pre className="text-[11px] bg-background border border-border/10 rounded-lg p-3 overflow-x-auto font-mono text-muted leading-relaxed max-h-96 overflow-y-auto whitespace-pre-wrap">
+                  {tryFormatJson(selectedStepData.apiResponse)}
+                </pre>
+              </details>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-xs text-muted">👈 点击左侧接口查看详情</p>
           </div>
         )}
+      </div>
 
-        <div className="flex-1 bg-background flex items-center justify-center p-4 overflow-hidden">
-          <div className="text-center text-muted">
-            <Wifi size={48} className="mx-auto mb-2 opacity-20" />
-            <p className="text-sm">{isCapturing ? '🟢 正在监听 API 请求...' : '开始捕获后在浏览器中操作，API 自动记录'}</p>
+      {/* traceId 导出 */}
+    {showTraceExport && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowTraceExport(false)}>
+        <div className="bg-surface-light border border-border/20 rounded-xl p-5 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h3 className="text-sm font-medium mb-3">📤 导出 traceId 清单</h3>
+          <p className="text-xs text-muted mb-3">将导出 {steps.filter(s => s.type === 'api' && s.traceId).length} 个 traceId</p>
+          <div className="flex gap-2">
+            <button onClick={() => setShowTraceExport(false)} className="flex-1 px-3 py-2 text-xs border border-border/20 rounded-lg hover:bg-hover/5">取消</button>
+            <button onClick={async () => {
+              const list = steps.filter(s => s.type === 'api' && s.traceId).map(s => s.traceId!)
+              const json = JSON.stringify({ exportedAt: new Date().toLocaleString('zh-CN'), count: list.length, traceIds: list }, null, 2)
+              try { await navigator.clipboard.writeText(json) } catch {}
+              const api = getApi()
+              if (api?.writeFile) {
+                const now = new Date(); const fn = `trace_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.json`
+                await api.writeFile(`test-suites/common/${fn}`, json)
+                setStatusMsg(`✅ 已保存 common/${fn} (${list.length} 个 traceId)`)
+                if (api?.scanScripts) setTimeout(() => api.scanScripts(), 500)
+              } else { setStatusMsg('已复制到剪贴板') }
+              setShowTraceExport(false)
+            }} className="flex-1 px-3 py-2 text-xs bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg font-medium">
+              保存 traceId
+            </button>
           </div>
         </div>
       </div>
-
-      {/* 导出对话框 */}
-      {showExportDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowExportDialog(false)}>
-          <div className="bg-surface-light border border-border/20 rounded-xl p-5 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium">导出 API 脚本</h3>
-              <button onClick={() => setShowExportDialog(false)} className="p-1 hover:bg-hover/10 rounded"><X size={16} /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-[11px] text-muted block mb-1">保存到产品线</label>
-                <select value={exportProduct} onChange={e => setExportProduct(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-background border border-border/20 rounded-lg">
-                  <option value="common">common</option>
-                  <option value="信e融">信e融</option>
-                  <option value="订e融">订e融</option>
-                  <option value="货e融">货e融</option>
-                  <option value="账e融">账e融</option>
-                  <option value="票e融">票e融</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] text-muted block mb-1">文件名</label>
-                <div className="flex items-center gap-1">
-                  <input type="text" value={exportFilename} onChange={e => setExportFilename(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs bg-background border border-border/20 rounded-lg" />
-                  <span className="text-xs text-muted">.py</span>
-                </div>
-              </div>
-              <div className="bg-background border border-border/10 rounded-lg p-3 max-h-40 overflow-y-auto">
-                <pre className="text-[10px] text-muted font-mono whitespace-pre-wrap">{generatePythonCode().slice(0, 400)}...</pre>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowExportDialog(false)} className="flex-1 px-3 py-2 text-xs border border-border/20 rounded-lg hover:bg-hover/5">取消</button>
-              <button onClick={exportAndSave} className="flex-1 px-3 py-2 text-xs bg-accent/20 text-accent hover:bg-accent/30 rounded-lg font-medium">保存脚本</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    )}
+  </div>
   )
 }

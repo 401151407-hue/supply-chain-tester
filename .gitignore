@@ -11,3 +11,5 @@ __pycache__/
 *.pyc
 test-suites/
 test-suites.zip 
+server_config.json
+server_config.py

@@ -195,6 +195,29 @@ export async function browserInfo(): Promise<{ url: string; title: string }> {
   }
 }
 
+/** 检测请求/响应体是否为加密数据（应跳过捕获） */
+function isEncryptedPayload(body: string): boolean {
+  if (!body || body.length < 20) return false
+  try {
+    const parsed = JSON.parse(body)
+    // 模式: {"xn": "hex|hex"} — 仅有一个 xn 字段且值为长 hex 字符串
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const keys = Object.keys(parsed)
+      if (keys.length === 1 && keys[0] === 'xn') {
+        const val = parsed.xn
+        if (typeof val === 'string' && val.length > 64 && /^[0-9a-fA-F|]+$/.test(val)) {
+          return true
+        }
+      }
+    }
+  } catch {}
+  // 纯 hex 字符串（加密响应体常见）
+  if (/^[0-9a-fA-F]{64,}$/.test(body.trim())) {
+    return true
+  }
+  return false
+}
+
 // ============================================================
 // 可视化录制引擎
 // ============================================================
@@ -213,11 +236,13 @@ type RecordEventCallback = (step: {
   apiBody?: string
   apiStatus?: number
   apiResponse?: string
+  traceId?: string
 }) => void
 
 let recordCallback: RecordEventCallback | null = null
 let isRecording = false
-let capturedApiUrls = new Set<string>()  // 去重
+let capturedApiUrls = new Set<string>()  // 去重（网络请求）
+let capturedConsoleKeys = new Set<string>()  // 去重（Console 消息）
 
 /** 生成元素的可读描述标签 */
 function buildSelectorLabel(el: any): string {
@@ -336,19 +361,265 @@ async function injectRecordingScript(): Promise<void> {
   })
 }
 
+/**
+ * 尝试从 Console 消息中提取 API 调用数据
+ * 支持常见模式：
+ *   1. JSON 对象含 url/method/status/response 等字段（JSBridge 风格）
+ *   2. JSON 对象含 code/data/msg（业务响应风格）
+ *   3. JSON 字符串包裹的 API 数据
+ */
+function tryToExtractApiFromConsole(text: string, onStep: RecordEventCallback): void {
+  // 尝试多种 JSON 提取方式
+  const candidates: any[] = []
+
+  // 方式1: 直接解析整条消息为 JSON
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      candidates.push(parsed)
+    }
+  } catch {}
+
+  // 方式2: 提取消息中嵌入的 JSON 对象 {...}
+  const jsonBlockRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g
+  let match: RegExpExecArray | null
+  while ((match = jsonBlockRegex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[0])
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        candidates.push(parsed)
+      }
+    } catch {}
+  }
+
+  for (const data of candidates) {
+    // 检测是否是 API 相关数据
+    const apiInfo = detectApiPattern(data)
+    if (!apiInfo) continue
+
+    const dedupKey = `${apiInfo.method || '?'}:${apiInfo.url || apiInfo.apiPath || ''}:${text.length}`
+    if (capturedConsoleKeys.has(dedupKey)) continue
+    capturedConsoleKeys.add(dedupKey)
+
+    const description = apiInfo.url
+      ? `${apiInfo.method || 'CALL'} ${apiInfo.url.replace(/^https?:\/\/[^\/]+/, '')}`
+      : `${apiInfo.method || 'CALL'} [Console] ${apiInfo.apiPath || text.slice(0, 40)}`
+
+    console.log('[recorder:console] TRACE:', description)
+
+    onStep({
+      type: 'api',
+      description,
+      apiMethod: apiInfo.method || 'UNKNOWN',
+      apiUrl: apiInfo.url || apiInfo.apiPath || '',
+      traceId: apiInfo.traceId || undefined,
+    })
+  }
+}
+
+/**
+ * 检测 JSON 对象是否包含 API 调用特征
+ * 返回提取到的 API 信息，或 null（不是 API 数据）
+ */
+function detectApiPattern(data: any): {
+  method?: string
+  url?: string
+  apiPath?: string
+  headers?: Record<string, string>
+  requestBody?: string
+  status?: number
+  code?: number
+  body?: any
+  response?: any
+  traceId?: string
+} | null {
+  if (!data || typeof data !== 'object') return null
+  const keys = Object.keys(data)
+
+  // 模式-A: 完整请求日志格式（H5 供应链接口日志）
+  // {requestUri, requestHeaders, requestBody, responseBody: {respCode, respMsg, traceId}, ...}
+  if (data.requestUri && (data.requestBody !== undefined || data.responseBody !== undefined)) {
+    const resBody = data.responseBody || {}
+    const rawStatus = resBody['respCode'] ?? data['respCode'] ?? data['code']
+    let httpStatus = 0
+    if (rawStatus !== undefined && rawStatus !== null) {
+      const s = String(rawStatus)
+      if (s === '10000' || s === '0' || s === '00000') httpStatus = 200
+      else httpStatus = parseInt(s) || 0
+    }
+
+    // 提取请求头（token 等）
+    const reqHeaders: Record<string, string> = {}
+    if (data.requestHeaders && typeof data.requestHeaders === 'object') {
+      for (const [k, v] of Object.entries(data.requestHeaders)) {
+        if (k.toLowerCase() !== 'cookie' && k.toLowerCase() !== 'host') {
+          reqHeaders[k] = String(v || '')
+        }
+      }
+    }
+
+    let reqBody = ''
+    try {
+      const body = data.requestBody
+      reqBody = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : ''
+      if (reqBody.length > 5000) reqBody = reqBody.slice(0, 5000) + '…(截断)'
+    } catch {}
+
+    return {
+      method: data.method || 'POST',
+      url: data.requestUri,
+      headers: reqHeaders,
+      requestBody: reqBody,
+      status: httpStatus,
+      code: rawStatus,
+      body: data.responseBody || data,
+      response: data.responseBody || data,
+      traceId: resBody['traceId'] || data['traceId'] || undefined,
+    }
+  }
+
+  // 模式0: 中文 key 格式（JSBridge 常见）
+  // {响应: {…}, 请求: {…}, url: '/api/xxx', respCode: '10000', traceId: '...'}
+  const hasChineseKeys = keys.some(k => k === '响应' || k === '请求' || k === 'respCode' || k === 'respMsg')
+  if (hasChineseKeys && data.url) {
+    const reqData = data['请求'] || data['请求参数'] || data['request']
+    const resData = data['响应'] || data['返回'] || data['response']
+    const method = data['method'] || data['请求方式'] || (reqData ? 'POST' : 'GET')
+    const rawStatus = data['respCode'] ?? data['code'] ?? data['status']
+    const statusMsg = data['respMsg'] || data['msg'] || data['message'] || ''
+
+    // 标准化 respCode -> HTTP 状态码: '10000'/'0'=成功(200), 其他=业务错误(仍记录原值)
+    let httpStatus = 0
+    if (rawStatus !== undefined && rawStatus !== null) {
+      const s = String(rawStatus)
+      if (s === '10000' || s === '0' || s === '00000') httpStatus = 200
+      else httpStatus = parseInt(s) || 0
+    }
+
+    let reqBody = ''
+    try {
+      reqBody = reqData ? (typeof reqData === 'string' ? reqData : JSON.stringify(reqData)) : ''
+      if (reqBody.length > 5000) reqBody = reqBody.slice(0, 5000) + '…(截断)'
+    } catch {}
+
+    // 提取请求头（token 等）—— 兼容完整日志中附带的 requestHeaders
+    const reqHeaders: Record<string, string> = {}
+    const hdrSource = data['requestHeaders'] || data['headers'] || data['header']
+    if (hdrSource && typeof hdrSource === 'object') {
+      for (const [k, v] of Object.entries(hdrSource)) {
+        if (k.toLowerCase() !== 'cookie' && k.toLowerCase() !== 'host') {
+          reqHeaders[k] = String(v || '')
+        }
+      }
+    }
+
+    return {
+      method,
+      url: data.url,
+      headers: Object.keys(reqHeaders).length > 0 ? reqHeaders : undefined,
+      requestBody: reqBody,
+      status: httpStatus,
+      code: rawStatus,
+      body: resData || data,
+      response: resData || data,
+      traceId: data['traceId'] || data['traceid'] || data['trace_id'] || undefined,
+    }
+  }
+
+  // 模式1: 标准 API 调用日志 {url, method, status, response/body/data}
+  if (data.url && (data.method || data.status !== undefined || data.response !== undefined || data.data !== undefined)) {
+    return {
+      method: data.method || (data.request?.method),
+      url: data.url,
+      headers: data.headers || data.requestHeaders,
+      requestBody: typeof data.requestBody === 'string' ? data.requestBody : JSON.stringify(data.requestBody || data.params || data.request || ''),
+      status: data.status ?? data.statusCode ?? data.httpStatus,
+      body: data.response || data.data || data.body || data.result,
+    }
+  }
+
+  // 模式2: 业务响应格式 {code, data, msg}（常见于国内接口）
+  if ((data.code !== undefined || data.errcode !== undefined) && (data.data !== undefined || data.result !== undefined || data.msg !== undefined || data.message !== undefined)) {
+    const code = data.code ?? data.errcode ?? data.status
+    return {
+      method: 'RESPONSE',
+      apiPath: data.api || data.path || data.url || `code=${code}`,
+      status: typeof code === 'number' ? code : 0,
+      body: data.data || data.result || data,
+      response: data,
+    }
+  }
+
+  // 模式3: 含 request + response 结构（axios/fetch 拦截器日志）
+  if (data.request && (data.response || data.data)) {
+    const req = data.request
+    const res = data.response || data
+    return {
+      method: req.method || data.method,
+      url: req.url || data.url,
+      headers: req.headers,
+      requestBody: typeof req.body === 'string' ? req.body : JSON.stringify(req.body || req.data || ''),
+      status: res.status ?? res.statusCode ?? data.status ?? data.code,
+      body: res.data || res.body || data.data || data.response,
+    }
+  }
+
+  // 模式4: 含 path/api/endpoint + data/response
+  const apiPath = data.path || data.api || data.endpoint || data.url
+  const responseData = data.data || data.response || data.result || data.body
+  if (apiPath && responseData) {
+    return {
+      method: data.method || data.type,
+      apiPath,
+      status: data.status ?? data.code,
+      body: responseData,
+    }
+  }
+
+  // 模式5: 仅含 status + body/data（响应片段）
+  if ((data.status !== undefined || data.code !== undefined) && keys.length <= 5 && (data.body || data.data || data.result || data.message)) {
+    return {
+      method: data.method,
+      status: data.status ?? data.code,
+      body: data.body || data.data || data.result || data,
+    }
+  }
+
+  // 模式6: 兜底 — Console 模式下，任何含 url/api/path/code/status 字段的对象都捕获
+  const hasUrl = data.url || data.api || data.path || data.requestUrl
+  const hasData = data.data || data.body || data.response || data.result || data.msg
+  if (hasUrl || (hasData && keys.length <= 10)) {
+    return {
+      method: data.method || data.type || 'LOG',
+      url: hasUrl || '',
+      apiPath: hasUrl || '',
+      status: data.status ?? data.code ?? data.respCode,
+      body: data.data || data.body || data.response || data.result || data,
+      response: data,
+    }
+  }
+
+  return null
+}
+
 /** 开始录制：启动浏览器，注入 UI 监听 + 网络拦截 */
 export async function startRecording(
   startUrl: string,
   onStep: RecordEventCallback,
   apiOnly = false,
+  captureMode: 'network' | 'console' = 'network',
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const p = await getPage()
     isRecording = true
     recordCallback = onStep
     capturedApiUrls = new Set()
+    capturedConsoleKeys = new Set()
 
-    // 网络请求拦截 - 捕获 XHR/Fetch API 调用（UI 和 API 模式都开启）
+    console.log('[recorder] startRecording mode:', captureMode, 'apiOnly:', apiOnly)
+
+    // 网络请求拦截 - 仅在 network 模式下捕获
+    if (captureMode === 'network') {
     p.on('response', async (response) => {
       if (!isRecording) return
       const req = response.request()
@@ -357,35 +628,199 @@ export async function startRecording(
 
       const url = response.url()
       const dedupKey = `${req.method()}:${url}`
-      if (capturedApiUrls.has(dedupKey)) return
+      // 每个 XHR/fetch 都记录，方便排查
+      console.log('[recorder:net] EVENT', dedupKey, 'isRecording:', isRecording)
+      if (capturedApiUrls.has(dedupKey)) {
+        console.log('[recorder:net] SKIP dedup:', dedupKey)
+        return
+      }
       capturedApiUrls.add(dedupKey)
 
       try {
-        const reqHeaders = req.headers()
-        delete reqHeaders['cookie']
-        delete reqHeaders['authorization']
-
-        let reqBody = req.postData() || ''
-        if (reqBody.length > 2000) reqBody = reqBody.slice(0, 2000) + '…(截断)'
-
+        // 提取 traceId、响应状态、响应体
+        let traceId = ''
         let resBody = ''
+        const resHeaders = response.headers()
+        const httpStatus = response.status()
+        traceId = resHeaders['x-trace-id'] || resHeaders['traceid'] || resHeaders['x-request-id'] || ''
+
         try {
           const body = await response.text()
-          resBody = body.length > 2000 ? body.slice(0, 2000) + '…(截断)' : body
+          if (body && !isEncryptedPayload(body) && body.length < 100000) {
+            resBody = body
+            if (!traceId) {
+              try {
+                const parsed = JSON.parse(body)
+                traceId = parsed['traceId'] || parsed['traceid'] || parsed['trace_id'] || ''
+              } catch {}
+            }
+          }
         } catch {}
 
-        const shortUrl = url.replace(/^https?:\/\/[^\/]+/, '')
+        // 提取请求头、请求体
+        const reqHeaders: Record<string, string> = {}
+        const rawHeaders = req.headers()
+        for (const [k, v] of Object.entries(rawHeaders)) {
+          if (k.toLowerCase() !== 'cookie' && k.toLowerCase() !== 'host') {
+            reqHeaders[k] = String(v || '')
+          }
+        }
+        let reqBody = ''
+        try {
+          const postData = req.postDataBuffer()
+          if (postData) {
+            reqBody = Buffer.from(postData).toString('utf-8')
+            if (reqBody.length > 50000) reqBody = reqBody.slice(0, 50000) + '…(截断)'
+          }
+        } catch {}
+
+        console.log('[recorder:net] TRACE:', dedupKey, traceId ? traceId.slice(0, 16) : 'no-traceId')
+
         onStep({
           type: 'api',
-          description: `${req.method()} ${shortUrl}`,
+          description: `${req.method()} ${url.replace(/^https?:\/\/[^\/]+/, '')}`,
           apiMethod: req.method(),
           apiUrl: url,
-          apiHeaders: reqHeaders as Record<string, string>,
-          apiBody: reqBody,
-          apiStatus: response.status(),
-          apiResponse: resBody,
+          apiHeaders: Object.keys(reqHeaders).length > 0 ? reqHeaders : undefined,
+          apiBody: reqBody || undefined,
+          apiStatus: httpStatus,
+          apiResponse: resBody || undefined,
+          traceId: traceId || undefined,
         })
       } catch {}
+    })
+    } // end captureMode === 'network'
+
+    // Console 消息拦截 - 仅在 console 模式下捕获
+    if (captureMode === 'console') {
+    p.on('console', async (msg) => {
+      if (!isRecording) return
+
+      // 优先从 args 中提取 JS 对象（最完整），失败则回退到 text
+      let captured = false
+      try {
+        const args = msg.args()
+        for (const arg of args) {
+          try {
+            const jsonValue = await arg.jsonValue()
+            if (jsonValue && typeof jsonValue === 'object' && !Array.isArray(jsonValue)) {
+              const beforeCount = capturedConsoleKeys.size
+              tryToExtractApiFromConsole(JSON.stringify(jsonValue), onStep)
+              if (capturedConsoleKeys.size > beforeCount) captured = true
+            }
+          } catch {}
+        }
+      } catch {}
+
+      // 回退：从 text 提取
+      if (!captured) {
+        const text = msg.text().trim()
+        if (text && text.length >= 10) {
+          tryToExtractApiFromConsole(text, onStep)
+        }
+      }
+    })
+    } // end captureMode === 'console'
+
+    // 监控页面导航（排查是否跳到了新页面/新窗口导致监听丢失）
+    p.on('framenavigated', (frame) => {
+      if (frame === p.mainFrame()) {
+        console.log('[recorder:nav] MAIN frame navigated to:', frame.url())
+      }
+    })
+    if (context) {
+      context.on('page', (newPage) => {
+        console.log('[recorder:nav] NEW PAGE opened:', newPage.url())
+        // 根据 captureMode 给新页面加上对应监听
+        if (captureMode === 'console') {
+        newPage.on('console', async (msg) => {
+          if (!isRecording) return
+
+          // 优先 args，失败回退 text
+          let captured = false
+          try {
+            const args = msg.args()
+            for (const arg of args) {
+              try {
+                const jsonValue = await arg.jsonValue()
+                if (jsonValue && typeof jsonValue === 'object' && !Array.isArray(jsonValue)) {
+                  const beforeCount = capturedConsoleKeys.size
+                  tryToExtractApiFromConsole(JSON.stringify(jsonValue), onStep)
+                  if (capturedConsoleKeys.size > beforeCount) captured = true
+                }
+              } catch {}
+            }
+          } catch {}
+          if (!captured) {
+            const text = msg.text().trim()
+            if (text && text.length >= 10) {
+              tryToExtractApiFromConsole(text, onStep)
+            }
+          }
+        })
+        }
+        if (captureMode === 'network') {
+        newPage.on('response', async (response) => {
+          if (!isRecording) return
+          const req = response.request()
+          if (req.resourceType() !== 'xhr' && req.resourceType() !== 'fetch') return
+          try {
+            let traceId = ''
+            let resBody = ''
+            const resHeaders = response.headers()
+            const httpStatus = response.status()
+            traceId = resHeaders['x-trace-id'] || resHeaders['traceid'] || ''
+            try {
+              const body = await response.text()
+              if (body && !isEncryptedPayload(body) && body.length < 100000) {
+                resBody = body
+                if (!traceId) {
+                  try {
+                    const parsed = JSON.parse(body)
+                    traceId = parsed['traceId'] || parsed['traceid'] || ''
+                  } catch {}
+                }
+              }
+            } catch {}
+            const reqHeaders: Record<string, string> = {}
+            const rawHeaders = req.headers()
+            for (const [k, v] of Object.entries(rawHeaders)) {
+              if (k.toLowerCase() !== 'cookie' && k.toLowerCase() !== 'host') {
+                reqHeaders[k] = String(v || '')
+              }
+            }
+            let reqBody = ''
+            try {
+              const postData = req.postDataBuffer()
+              if (postData) {
+                reqBody = Buffer.from(postData).toString('utf-8')
+                if (reqBody.length > 50000) reqBody = reqBody.slice(0, 50000) + '…(截断)'
+              }
+            } catch {}
+            onStep({
+              type: 'api', description: req.method() + ' ' + response.url().replace(/^https?:\/\/[^\/]+/, ''),
+              apiMethod: req.method(), apiUrl: response.url(),
+              apiHeaders: Object.keys(reqHeaders).length > 0 ? reqHeaders : undefined,
+              apiBody: reqBody || undefined,
+              apiStatus: httpStatus,
+              apiResponse: resBody || undefined,
+              traceId: traceId || undefined,
+            })
+          } catch {}
+        })
+        }
+      })
+    }
+    console.log('[recorder:nav] Current page URL:', p.url())
+
+    // 监听页面关闭 → 自动停止录制
+    p.on('close', () => {
+      console.log('[recorder] Browser page closed, auto-stopping recording')
+      isRecording = false
+      if (recordCallback) {
+        recordCallback({ type: 'recording_stopped', description: '浏览器已关闭' })
+        recordCallback = null
+      }
     })
 
     // 如果不在目标URL，先导航
@@ -419,6 +854,16 @@ export async function startRecording(
 export function stopRecording(): void {
   isRecording = false
   recordCallback = null
+  capturedConsoleKeys = new Set()
+  // 关闭浏览器
+  closeBrowser().catch(() => {})
+}
+
+/** 清空去重集合（不清空录制状态，允许已捕获过的 URL 再次被捕获） */
+export function clearRecordingDedup(): void {
+  console.log('[recorder] clearRecordingDedup called, isRecording=', isRecording)
+  capturedApiUrls = new Set()
+  capturedConsoleKeys = new Set()
 }
 
 /** 是否正在录制 */

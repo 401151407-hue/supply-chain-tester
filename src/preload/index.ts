@@ -123,10 +123,12 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.RECORDER_DELETE_SESSION, id),
 
   // ── API 录制（纯网络拦截）──
-  apirecorderStart: (startUrl: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_START, startUrl),
+  apirecorderStart: (startUrl: string, captureMode?: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_START, startUrl, captureMode || 'network'),
   apirecorderStop: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_STOP),
+  apirecorderClear: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_CLEAR),
   onApiRecorderEvent: (callback: (step: any) => void) => {
     const handler = (_event: any, step: any) => callback(step)
     ipcRenderer.on(IPC_CHANNELS.APIRECORDER_EVENT, handler)
