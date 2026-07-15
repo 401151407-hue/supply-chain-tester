@@ -282,7 +282,7 @@ export function ApiRecorder() {
 
       // 步骤注释
       const pathSegs = path.split('/').filter(Boolean)
-      const stepLabel = pathSegs.slice(-2).join('/') || pathSegs[pathSegs.length - 1] || `步骤${i + 1}`
+      const stepLabel = path || `步骤${i + 1}`
       code += `# traceId: ${traceId}\n`
       code += `# ${stepLabel}\n`
 
@@ -309,7 +309,13 @@ export function ApiRecorder() {
       }
 
       // 请求调用
-      code += 'a1 = requests.post(url, headers=headers, json=json)\n'
+      code += 'try:\n'
+      code += '    a1 = requests.post(url, headers=headers, json=json, timeout=30)\n'
+      code += 'except Exception as e:\n'
+      code += `    print('\\n'+'*'*30+'连接异常'+'*'*30)\n`
+      code += '    print(f\'请求失败: {e}\')\n'
+      code += '    print(\'请检查服务器是否在运行\\n\')\n'
+      code += '    sys.exit()\n'
       code += 'b1 = a1.json()\n'
 
       // 结果检查
@@ -337,8 +343,12 @@ export function ApiRecorder() {
             code += `    if b1.get('body') and len(b1['body']) > 0:\n`
             extractVars = generateVarExtraction(firstItem, source, '')
             if (extractVars.code) {
-              // 嵌套缩进
-              code += '    ' + extractVars.code.trim().replace(/\n/g, '\n    ') + '\n'
+              // 每行加 8 格缩进（if 块内）
+              for (const line of extractVars.code.split('\n')) {
+                if (line.trim()) {
+                  code += '        ' + line.trim() + '\n'
+                }
+              }
             }
           }
         } else {
