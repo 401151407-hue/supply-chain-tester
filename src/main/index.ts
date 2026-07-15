@@ -550,7 +550,16 @@ function registerIpcHandlers(): void {
       })
       proc.on('error', (err) => {
         cleanup()
-        const msg = `无法启动 Python: ${err.message}`
+        const code = (err as any).code
+        let hint = ''
+        if (code === 'ENOENT') {
+          const portableDir = getPythonPortableDir()
+          hint = `\n\n💡 请将 python-portable.zip 解压到 ${portableDir}/`
+          if (process.platform === 'win32') {
+            hint += `\n   或安装 Python 3.11 并添加到系统 PATH 环境变量`
+          }
+        }
+        const msg = `无法启动 Python: ${err.message}${hint}`
         event.sender.send('script:output', msg)
         event.sender.send('script:done', { ok: false })
         resolve({ ok: false, output: msg })
