@@ -424,7 +424,8 @@ function registerIpcHandlers(): void {
         .join('\n') + '\n' : ''
       const argvPart = envArg ? `sys.argv = ['${fullScriptPath.replace(/\\/g, '\\\\')}', '${envArg}']` : ''
       const varPart = varLines.trim().split('\n').filter(Boolean).join('; ')
-      const injectLine = `import sys; sys.path.insert(0, r"${scriptsDir}"); ${argvPart}${varPart ? '; ' + varPart : ''}; __file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"`
+      const sitePackages = join(getPythonPortableDir(), 'site-packages')
+      const injectLine = `import sys; sys.path.insert(0, r"${scriptsDir}"); sys.path.insert(0, r"${sitePackages.replace(/\\/g, '\\\\')}"); ${argvPart}${varPart ? '; ' + varPart : ''}; __file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"`
       // 注入代码拼到脚本第一行，保持报错行号和原脚本完全一致
       const firstNewline = scriptContent.indexOf('\n')
       let insertPos = firstNewline
