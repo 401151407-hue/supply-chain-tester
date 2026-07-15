@@ -89,7 +89,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
       {/* Logo */}
       <div className="h-12 flex items-center gap-2 px-4 border-b border-border/5 drag-region mt-7">
         <Package size={20} className="text-accent" />
-        <span className="font-semibold text-sm tracking-wide flex-1">供应链测试</span>
+        <span className="font-semibold text-sm tracking-wide flex-1">测易融</span>
         <button onClick={handleRefresh} disabled={isScanning}
           className="no-drag p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-hover/10 transition-colors disabled:opacity-50" title="刷新产品线">
           <RotateCw size={15} className={isScanning ? 'animate-spin' : ''} />
