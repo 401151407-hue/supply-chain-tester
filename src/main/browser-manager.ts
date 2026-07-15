@@ -22,9 +22,18 @@ function setupPlaywrightBrowsersPath() {
   process.env.PLAYWRIGHT_BROWSERS_PATH = join(base, 'ms-playwright')
 }
 
-// 获取 Playwright Chromium 预期路径
+// 获取 Chromium 可执行文件路径（多来源优先级）
 function getChromiumExecutablePath(): string {
-  const base = process.env.PLAYWRIGHT_BROWSERS_PATH || join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'resources', 'ms-playwright')
+  const resourcesPath = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
+
+  // 优先级 1：用户手动放置的 chrome-win64（来自分发包 chrome-win64.zip）
+  const userPath = join(resourcesPath, 'chrome-win64', 'chrome.exe')
+  if (process.platform === 'win32' && existsSync(userPath)) {
+    return userPath
+  }
+
+  // 优先级 2：Playwright 自动下载的路径
+  const base = process.env.PLAYWRIGHT_BROWSERS_PATH || join(resourcesPath, 'ms-playwright')
   const osMap: Record<string, string> = {
     win32: 'chrome-win64/chrome.exe',
     darwin: 'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
@@ -44,32 +53,21 @@ async function ensurePlaywrightBrowser(): Promise<boolean> {
   console.log('[Playwright] Browser not found at:', exePath)
   console.log('[Playwright] Auto-installing Chromium...')
 
-  // 在打包后的 app 中，用 electron 自带的 node 来跑 npx
-  const nodeExe = process.execPath // electron 可执行文件
-  const cmd = process.platform === 'win32'
-    ? `"${nodeExe}" "${join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'playwright', 'cli.js')}" install chromium`
-    : `npx playwright install chromium`
+  // 优先用 npx，它会在系统 PATH 中查找 Node.js
+  // 不再用 process.execPath（Electron 的 exe），因为 Windows 上会错误地打开新 APP 窗口
+  const cmd = `npx playwright install chromium`
 
   try {
     execSync(cmd, {
       stdio: 'pipe',
       timeout: 300000,
-      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH },
+      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || '' },
     })
     console.log('[Playwright] Browser installed successfully')
     installingBrowser = false
     return existsSync(exePath)
   } catch (err: any) {
     console.error('[Playwright] Auto-install failed:', err.message)
-    // 回退：尝试 npx
-    try {
-      execSync('npx playwright install chromium', { stdio: 'pipe', timeout: 300000 })
-      console.log('[Playwright] Browser installed via npx fallback')
-      installingBrowser = false
-      return existsSync(exePath)
-    } catch (err2: any) {
-      console.error('[Playwright] npx fallback also failed:', err2.message)
-    }
     installingBrowser = false
     return false
   }
@@ -101,6 +99,7 @@ async function getPage(): Promise<Page> {
     }
     browser = await chromium.launch({
       headless: false,
+      executablePath: getChromiumExecutablePath(),
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     })
     context = await browser.newContext({
