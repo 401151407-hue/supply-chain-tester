@@ -40,8 +40,8 @@ const reportStore = new ReportStore()
 // Python 路径解析
 function getPythonPortableDir(): string {
   if (app.isPackaged) {
-    // extraResources 解压到 resources/ 目录下
-    return join(process.resourcesPath, 'resources', 'python-portable')
+    // python-portable 与 app.asar 同级，都在 resources/ 下
+    return join(process.resourcesPath, 'python-portable')
   }
   return join(app.getAppPath(), 'resources', 'python-portable')
 }
