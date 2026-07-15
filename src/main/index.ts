@@ -1125,12 +1125,36 @@ print(f"CHROMIUM_OK={has_chromium}")
     }
 
     try {
+      const sender = event.sender
       await new Promise<void>((resolve, reject) => {
-        const proc = execFile(pythonPath, [fetcherScript, tmpIn, '--output', tmpOut], {
+        const proc = spawn(pythonPath, [fetcherScript, tmpIn, '--output', tmpOut], {
           timeout: 120000,
           env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-        }, (err, stdout, stderr) => {
-          if (err && !existsSync(tmpOut)) { reject(err); return }
+        })
+        
+        // 监听 stderr 中的进度行
+        if (proc.stderr) {
+          let stderrBuf = ''
+          proc.stderr.on('data', (chunk: Buffer) => {
+            stderrBuf += chunk.toString()
+            const lines = stderrBuf.split('\n')
+            stderrBuf = lines.pop() || ''
+            for (const line of lines) {
+              const m = line.match(/^PROGRESS:(\d+)\/(\d+)/)
+              if (m) {
+                sender.send(IPC_CHANNELS.APIRECORDER_EVENT, {
+                  type: 'import_progress',
+                  current: parseInt(m[1]),
+                  total: parseInt(m[2]),
+                })
+              }
+            }
+          })
+        }
+        
+        proc.on('error', (err: any) => { reject(err) })
+        proc.on('close', (code: number | null) => {
+          if (code !== 0 && !existsSync(tmpOut)) { reject(new Error(`Python exit code: ${code}`)); return }
           resolve()
         })
       })

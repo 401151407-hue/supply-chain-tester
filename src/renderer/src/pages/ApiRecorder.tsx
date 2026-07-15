@@ -37,11 +37,27 @@ const HTTP_METHOD_COLORS: Record<string, string> = {
 let stepIdCounter = 0
 function genId(): string { return `api_${Date.now()}_${++stepIdCounter}` }
 
+// 模块级持久化 — 切换 tab 不丢失数据
+let persistedSteps: RecordStep[] = []
+let persistedIsCapturing = false
+let persistedCaptureMode: 'network' | 'console' = 'network'
+let persistedUrlInput = 'https://'
+
 export function ApiRecorder() {
   const getApi = () => (window as any).supplyChainTester
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [steps, setSteps] = useState<RecordStep[]>([])
-  const [urlInput, setUrlInput] = useState('https://')
+  const [isCapturing, setIsCapturingRaw] = useState(persistedIsCapturing)
+  const setIsCapturing = (v: boolean | ((prev: boolean) => boolean)) => {
+    const val = typeof v === 'function' ? v(persistedIsCapturing) : v
+    persistedIsCapturing = val
+    setIsCapturingRaw(val)
+  }
+  const [steps, setStepsRaw] = useState<RecordStep[]>(persistedSteps)
+  const setSteps = (v: RecordStep[] | ((prev: RecordStep[]) => RecordStep[])) => {
+    const val = typeof v === 'function' ? v(persistedSteps) : v
+    persistedSteps = val
+    setStepsRaw(val)
+  }
+  const [urlInput, setUrlInput] = useState(persistedUrlInput)
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
   const [sessions, setSessions] = useState<RecordSession[]>([])
   const [sessionName, setSessionName] = useState('')
@@ -51,12 +67,15 @@ export function ApiRecorder() {
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportProduct, setExportProduct] = useState('common')
   const [exportFilename, setExportFilename] = useState('')
-  const [captureMode, setCaptureMode] = useState<'network' | 'console'>('network')
+  const [captureMode, setCaptureMode] = useState<'network' | 'console'>(persistedCaptureMode)
   const [showTraceExport, setShowTraceExport] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [isUndoing, setIsUndoing] = useState(false)
   const [canUndo, setCanUndo] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 })
+  const [importDoneMsg, setImportDoneMsg] = useState('')
+  const [importDoneFile, setImportDoneFile] = useState('')
   const lastClearedRef = useRef<RecordStep[]>([])
   const cleanupRef = useRef<(() => void) | null>(null)
 
@@ -67,6 +86,10 @@ export function ApiRecorder() {
       if (step.type === 'recording_stopped') {
         setIsCapturing(false)
         setStatusMsg('浏览器已关闭，捕获已停止')
+        return
+      }
+      if (step.type === 'import_progress') {
+        setImportProgress({ current: step.current, total: step.total })
         return
       }
       if (step.type === 'api' && step.apiMethod) {
@@ -92,6 +115,9 @@ export function ApiRecorder() {
   }, [])
 
   useEffect(() => { loadSessions() }, [])
+  // 持久化：同步关键状态到模块级变量
+  useEffect(() => { persistedUrlInput = urlInput }, [urlInput])
+  useEffect(() => { persistedCaptureMode = captureMode }, [captureMode])
 
   async function loadSessions() {
     const api = getApi()
@@ -161,26 +187,48 @@ export function ApiRecorder() {
     })
   }
 
-  /** 从响应数据中生成变量提取代码 */
-  function generateVarExtraction(data: any, source: string, prefix = ''): string {
-    if (!data || typeof data !== 'object') return ''
+  /** 将 JSON key 转成合法的 Python 变量名 */
+  function sanitizePyVar(name: string): string {
+    // 替换非字母数字下划线为 _，去掉开头数字
+    let s = name.replace(/[^a-zA-Z0-9_]/g, '_')
+    if (/^[0-9]/.test(s)) s = '_' + s
+    return s || '_var'
+  }
+
+  /** 从响应数据中生成变量提取代码，并返回变量名列表 */
+  function generateVarExtraction(data: any, source: string, prefix = ''): { code: string; vars: string[] } {
+    if (!data || typeof data !== 'object') return { code: '', vars: [] }
     const lines: string[] = []
+    const varNames: string[] = []
     for (const [k, v] of Object.entries(data)) {
-      const pyName = prefix ? `${prefix}_${k}` : k
+      const pyName = prefix ? `${prefix}_${sanitizePyVar(k)}` : sanitizePyVar(k)
       if (Array.isArray(v)) {
-        // 数组：取第一个元素
-        lines.push(`    ${pyName} = ${source}['${k}'][0] if ${source}.get('${k}') else {}`)
+        // 数组：取第一个元素，递归提取其内部字段
+        const firstItem = v.length > 0 ? v[0] : null
+        if (firstItem && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
+          const itemSource = `${source}['${k}'][0]`
+          const guard = `if ${source}.get('${k}') and len(${source}['${k}']) > 0:`
+          lines.push(`    ${guard}`)
+          const sub = generateVarExtraction(firstItem, itemSource, '')
+          if (sub.code) {
+            for (const line of sub.code.trim().split('\n')) {
+              lines.push('        ' + line.trim())
+            }
+          }
+          varNames.push(...sub.vars)
+        }
       } else if (v && typeof v === 'object') {
-        // 对象：递归提取子字段
+        // 中间对象不设变量，只递归提取叶子值
         lines.push(`    ${pyName} = ${source}.get('${k}')`)
         const sub = generateVarExtraction(v, pyName, '')
-        if (sub) lines.push(sub)
+        if (sub.code) lines.push(sub.code)
+        varNames.push(...sub.vars)
       } else {
-        // 标量：直接取值
+        varNames.push(pyName)
         lines.push(`    ${pyName} = ${source}.get('${k}')`)
       }
     }
-    return lines.join('\n') + '\n'
+    return { code: lines.join('\n') + '\n', vars: varNames }
   }
 
   /** 从导入的 enriched API 数据生成 Python 测试脚本 */
@@ -268,6 +316,10 @@ export function ApiRecorder() {
       code += "if b1 and b1.get('respCode') == str(10000):\n"
       code += '    dangqianbushu += 1\n'
       code += `    print(f"第「{dangqianbushu}」步，${stepLabel}成功\\n")\n`
+      code += '    # 打印接口响应\n'
+      code += '    print(\'响应:\')\n'
+      code += '    print(b1)\n'
+      code += `    print('-' * 50 + '\\n')\n`
 
       // 从响应中提取变量
       let bodyData: any = respBody
@@ -275,11 +327,34 @@ export function ApiRecorder() {
         try { bodyData = JSON.parse(bodyData) } catch { bodyData = {} }
       }
       const innerBody = bodyData?.body
-      if (innerBody && typeof innerBody === 'object' && !Array.isArray(innerBody)) {
-        const extractVars = generateVarExtraction(innerBody, "b1['body']")
-        if (extractVars) {
-          code += '    # 提取响应变量\n'
-          code += extractVars
+      if (innerBody && typeof innerBody === 'object') {
+        let extractVars: { code: string; vars: string[] } | null = null
+        if (Array.isArray(innerBody)) {
+          // body 直接是数组：取第一个元素提取字段
+          const firstItem = innerBody.length > 0 ? innerBody[0] : null
+          if (firstItem && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
+            const source = "b1['body'][0]"
+            code += `    if b1.get('body') and len(b1['body']) > 0:\n`
+            extractVars = generateVarExtraction(firstItem, source, '')
+            if (extractVars.code) {
+              // 嵌套缩进
+              code += '    ' + extractVars.code.trim().replace(/\n/g, '\n    ') + '\n'
+            }
+          }
+        } else {
+          extractVars = generateVarExtraction(innerBody, "b1['body']")
+          if (extractVars.code) {
+            code += '    # 提取响应变量\n'
+            code += extractVars.code
+          }
+        }
+        if (extractVars && extractVars.code) {
+          // 打印获取到的变量
+          code += '    # 打印获取到的变量\n'
+          for (const v of extractVars.vars) {
+            code += `    print(f"  ${v} = {${v}}")\n`
+          }
+          code += `    print('-' * 50 + '\\n')\n`
         }
       }
 
@@ -309,8 +384,8 @@ export function ApiRecorder() {
       return
     }
     // 第二步：显示进度条，SSH 查询
+    setImportProgress({ current: 0, total: 0 })
     setIsImporting(true)
-    setStatusMsg('正在查询服务器日志...')
     try {
       const result = await api.apirecorderImportTrace(pick.filePath)
       if (!result.ok) {
@@ -330,7 +405,7 @@ export function ApiRecorder() {
       // 直接保存到 common 目录
       try {
         await api.writeFile(`test-suites/common/${fn}`, pyCode)
-        setStatusMsg(`✅ 已生成脚本 common/${fn}`)
+        setImportDoneFile(fn)
         if (api?.scanScripts) setTimeout(() => api.scanScripts(), 500)
       } catch (err: any) {
         setStatusMsg(`❌ 保存脚本失败: ${err.message}`)
@@ -359,9 +434,18 @@ export function ApiRecorder() {
         })
       }
       setSteps(prev => [...prev, ...newSteps])
-      setStatusMsg(`✅ 已导入 ${newSteps.length} 个接口并生成脚本`)
-    } catch (err: any) { setStatusMsg(`导入异常: ${err.message}`) }
-    finally { setIsImporting(false) }
+      const msg = `已查询 ${apis.length} 条，成功解析 ${newSteps.length} 个接口，脚本已保存到通用`
+      setImportDoneMsg(msg)
+      // 成功提示停留 3 秒后关闭
+      setTimeout(() => {
+        setIsImporting(false)
+        setImportDoneMsg('')
+        setImportDoneFile('')
+      }, 3000)
+    } catch (err: any) {
+      setStatusMsg(`导入异常: ${err.message}`)
+      setIsImporting(false)
+    }
   }
 
   async function saveSession() {
@@ -728,13 +812,33 @@ export function ApiRecorder() {
     {isImporting && (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100]">
         <div className="bg-surface-light border border-border/20 rounded-2xl p-8 w-96 shadow-2xl text-center">
-          <div className="text-4xl mb-4 animate-bounce">🔍</div>
-          <h3 className="text-sm font-medium mb-2">正在查询服务器日志</h3>
-          <p className="text-xs text-muted mb-4">通过 SSH 逐条 grep traceId，请稍候...</p>
-          <div className="w-full bg-background rounded-full h-2 overflow-hidden">
-            <div className="h-full bg-accent rounded-full animate-pulse w-2/3" />
-          </div>
-          <p className="text-[10px] text-muted mt-3">这可能需要 10~60 秒</p>
+          {importDoneMsg ? (
+            <>
+              <div className="text-4xl mb-4">✅</div>
+              <h3 className="text-sm font-medium mb-2 text-green-400">解析完成</h3>
+              <p className="text-xs text-muted mb-1">{importDoneMsg}</p>
+              {importDoneFile && (
+                <p className="text-[10px] text-accent font-mono">📄 test-suites/common/{importDoneFile}</p>
+              )}
+              <p className="text-[10px] text-muted mt-3">脚本已放入通用，可在左侧脚本列表找到</p>
+            </>
+          ) : (
+            <>
+              <div className="text-4xl mb-4 animate-bounce">🔍</div>
+              <h3 className="text-sm font-medium mb-2">正在查询服务器日志</h3>
+              <p className="text-xs text-muted mb-4">通过 SSH 逐条 grep traceId，请稍候...</p>
+              {importProgress.total > 0 ? (
+                <>
+                  <div className="w-full bg-background rounded-full h-2 overflow-hidden">
+                    <div className="h-full bg-accent rounded-full transition-all duration-300" style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }} />
+                  </div>
+                  <p className="text-[10px] text-muted mt-2">{importProgress.current} / {importProgress.total}</p>
+                </>
+              ) : (
+                <p className="text-[10px] text-muted">正在连接服务器...</p>
+              )}
+            </>
+          )}
         </div>
       </div>
     )}
