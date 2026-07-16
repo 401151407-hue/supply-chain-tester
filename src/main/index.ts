@@ -689,75 +689,107 @@ function registerIpcHandlers(): void {
     return parseScriptVars(scriptPath, env)
   })
 
-  // 环境检测：chrome-win64、python-portable、Python 依赖、系统 Python
+  // 环境检测：python-portable → chrome-win64 → 依赖 → 系统 Python
   ipcMain.handle('app:detect-environment', async () => {
     type CheckItem = { label: string; ok: boolean; detail: string }
     const results: CheckItem[] = []
+    const { execSync: exec } = require('child_process')
 
     const resourcesPath = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
-
-    // 1. chrome-win64
-    const chromeExe = join(resourcesPath, 'chrome-win64', 'chrome.exe')
-    results.push({
-      label: 'Chromium 浏览器 (chrome-win64)',
-      ok: existsSync(chromeExe) || existsSync(join(resourcesPath, 'chrome-win64', 'chrome-win64', 'chrome.exe')),
-      detail: `路径: ${join(resourcesPath, 'chrome-win64')}`
-    })
-
-    // 2. python-portable
     const pythonDir = join(resourcesPath, 'python-portable')
     const pythonExe = join(pythonDir, 'python.exe')
-    const pythonExists = existsSync(pythonExe)
-    results.push({
-      label: '便携版 Python',
-      ok: pythonExists,
-      detail: pythonExists ? `路径: ${pythonExe}` : '未找到'
-    })
-
-    // 3. Python 依赖检测（如果有便携版 Python）
     const sitePackages = join(pythonDir, 'site-packages')
-    if (pythonExists && existsSync(sitePackages)) {
-      const deps = ['requests', 'paramiko', 'Crypto', 'mysql', 'openpyxl', 'faker']
-      const { execSync: exec } = require('child_process')
-      for (const dep of deps) {
-        try {
-          exec(`"${pythonExe}" -c "import ${dep}"`, { timeout: 5000, env: { ...process.env, PYTHONPATH: sitePackages } })
-          results.push({ label: `Python 依赖: ${dep}`, ok: true, detail: '已安装' })
-        } catch {
-          results.push({ label: `Python 依赖: ${dep}`, ok: false, detail: '未安装' })
-        }
+    const pythonExists = existsSync(pythonExe)
+
+    let activePython = ''  // 实际使用的 python 路径
+    let useSystemPython = false
+
+    // ==== 第 1 步：检测 python-portable ====
+    if (pythonExists) {
+      try {
+        const ver = exec(`"${pythonExe}" --version`, { timeout: 5000 }).toString().trim()
+        results.push({
+          label: '便携版 Python',
+          ok: true,
+          detail: ver
+        })
+        activePython = pythonExe
+      } catch {
+        results.push({
+          label: '便携版 Python',
+          ok: false,
+          detail: '已找到但无法执行'
+        })
       }
-    } else if (!pythonExists) {
-      // 4. 没有便携版 Python，检测系统 Python
+    } else {
+      results.push({
+        label: '便携版 Python',
+        ok: false,
+        detail: '未找到，将检测系统 Python'
+      })
+
+      // ==== 第 1 步备选：检测系统 Python ====
       const systemCandidates = process.platform === 'win32'
         ? ['python', 'py', `${process.env.LOCALAPPDATA}\\Programs\\Python\\Python311\\python.exe`,
            'C:\\Python311\\python.exe', 'D:\\Python311\\python.exe']
         : ['python3', 'python', '/usr/local/bin/python3', '/usr/bin/python3']
-      let systemPython = ''
-      const { execSync: exec } = require('child_process')
+      let found = false
       for (const cand of systemCandidates) {
         try {
           const ver = exec(`"${cand}" --version`, { timeout: 5000 }).toString().trim()
-          systemPython = `${cand} (${ver})`
+          results.push({
+            label: '系统 Python',
+            ok: true,
+            detail: `${ver} — 将使用电脑上安装的 Python 来运行脚本`
+          })
+          activePython = cand
+          found = true
+          useSystemPython = true
           break
         } catch {}
       }
-      if (systemPython) {
-        results.push({ label: '系统 Python', ok: true, detail: systemPython })
-        // 检测系统 Python 的依赖
-        const sysPy = systemPython.split(' (')[0]
-        const deps = ['requests', 'paramiko', 'Crypto', 'mysql', 'openpyxl', 'faker']
-        for (const dep of deps) {
-          try {
-            exec(`"${sysPy}" -c "import ${dep}"`, { timeout: 5000 })
-            results.push({ label: `系统依赖: ${dep}`, ok: true, detail: '已安装' })
-          } catch {
-            results.push({ label: `系统依赖: ${dep}`, ok: false, detail: '未安装' })
-          }
-        }
-      } else {
-        results.push({ label: '系统 Python', ok: false, detail: '未找到任何 Python' })
+      if (!found) {
+        results.push({
+          label: '系统 Python',
+          ok: false,
+          detail: '未找到任何 Python，请安装或放置 python-portable'
+        })
       }
+    }
+
+    // ==== 第 2 步：检测 chrome-win64 ====
+    const chromeExe = join(resourcesPath, 'chrome-win64', 'chrome.exe')
+    const chromeOk = existsSync(chromeExe) || existsSync(join(resourcesPath, 'chrome-win64', 'chrome-win64', 'chrome.exe'))
+    results.push({
+      label: 'Chromium 浏览器 (chrome-win64)',
+      ok: chromeOk,
+      detail: chromeOk ? '已就绪' : `未找到，请放置到 ${join(resourcesPath, 'chrome-win64')}`
+    })
+
+    // ==== 第 3 步：检测依赖 ====
+    if (activePython) {
+      const deps = ['requests', 'paramiko', 'Crypto', 'mysql', 'openpyxl', 'faker']
+      const env = useSystemPython
+        ? { ...process.env }
+        : { ...process.env, PYTHONPATH: existsSync(sitePackages) ? sitePackages : '' }
+      let missingCount = 0
+      for (const dep of deps) {
+        try {
+          exec(`"${activePython}" -c "import ${dep}"`, { timeout: 5000, env })
+          results.push({ label: `依赖: ${dep}`, ok: true, detail: '已安装' })
+        } catch {
+          missingCount++
+          results.push({ label: `依赖: ${dep}`, ok: false, detail: '未安装' })
+        }
+      }
+      if (missingCount === 0) {
+        results.push({ label: '脚本依赖', ok: true, detail: '全部已安装 ✅' })
+      } else {
+        results.push({ label: '脚本依赖', ok: false, detail: `${missingCount} 个依赖缺失，请安装后重试` })
+      }
+    } else {
+      results.push({ label: '脚本依赖', ok: false, detail: '无可用 Python，跳过检测' })
+    }
     }
 
     const allOk = results.every(r => r.ok)
