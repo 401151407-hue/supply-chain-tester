@@ -77,6 +77,16 @@ export function UtilsPage() {
     }, 150)
   }
 
+  // ESC 关闭弹窗
+  useEffect(() => {
+    if (!showVarDialog) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeVarDialog()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showVarDialog])
+
   useEffect(() => {
     loadScripts()
     return () => { unsubRef.current?.() }
@@ -543,9 +553,7 @@ export function UtilsPage() {
 
       {/* 脚本变量选择弹窗 */}
       {showVarDialog && pendingRun && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${closingVarDialog ? 'opacity-0' : 'opacity-100'}`} style={{ background: 'rgba(0,0,0,0.5)' }}
-             onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); closeVarDialog() } }}
-             tabIndex={-1} ref={el => el?.focus()}>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${closingVarDialog ? 'opacity-0' : 'opacity-100'}`} style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-surface border border-border/10 rounded-2xl p-6 w-80 shadow-2xl animate-zoom-in" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-semibold text-foreground mb-4">{pendingRun.script.name}</p>
             <div className="flex flex-col gap-3">

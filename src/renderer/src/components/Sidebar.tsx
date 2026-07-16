@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 import { UpdateIndicator } from './UpdateIndicator'
 import {
@@ -67,6 +67,16 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
       setClosingDetect(false)
     }, 150)
   }
+
+  // ESC 关闭检测弹窗
+  useEffect(() => {
+    if (!showDetect) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeDetect()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showDetect])
 
   async function handleDetect() {
     setDetecting(true)
@@ -397,9 +407,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
 
         {/* 检测结果弹窗 */}
         {showDetect && (
-          <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-150 ${closingDetect ? 'opacity-0' : 'opacity-100'}`}
-               onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); closeDetect() } }}
-               tabIndex={-1} ref={el => el?.focus()}>
+          <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-150 ${closingDetect ? 'opacity-0' : 'opacity-100'}`}>
             <div className="bg-surface border border-border rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden animate-zoom-in"
                  onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b border-border/10">
