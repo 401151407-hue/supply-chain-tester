@@ -8,6 +8,11 @@ import {
   Plus,
   Trash2,
   FolderOpen,
+  ShieldCheck,
+  X,
+  CheckCircle,
+  XCircle,
+  Loader2,
   Sparkles,
   Shield,
   ClipboardList,
@@ -48,6 +53,25 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
   const [isScanning, setIsScanning] = useState(false)
 
   const [scannedScripts, setScannedScripts] = useState<Record<string, { subProduct: string; scripts: { name: string; path: string }[] }[]> | null>(null)
+
+  // 环境检测
+  const [showDetect, setShowDetect] = useState(false)
+  const [detectResults, setDetectResults] = useState<{ label: string; ok: boolean; detail: string }[]>([])
+  const [detecting, setDetecting] = useState(false)
+
+  async function handleDetect() {
+    setDetecting(true)
+    setShowDetect(true)
+    try {
+      const api = (window as any).supplyChainTester
+      const result = await api?.detectEnvironment?.()
+      setDetectResults(result?.results || [])
+    } catch {
+      setDetectResults([{ label: '检测失败', ok: false, detail: '请稍后重试' }])
+    } finally {
+      setDetecting(false)
+    }
+  }
 
   async function handleRefresh() {
     setIsScanning(true)
@@ -351,6 +375,52 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
         <div className="border-t border-border/5 pt-1.5 mt-1.5">
           <UpdateIndicator />
         </div>
+        <button
+          onClick={handleDetect}
+          disabled={detecting}
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs text-muted
+                     hover:bg-hover/5 hover:text-foreground transition-colors disabled:opacity-50"
+        >
+          <ShieldCheck size={14} />
+          {detecting ? '检测中...' : '环境检测'}
+        </button>
+
+        {/* 检测结果弹窗 */}
+        {showDetect && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+               onClick={() => setShowDetect(false)}>
+            <div className="bg-surface border border-border rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden"
+                 onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border/10">
+                <span className="font-semibold text-sm">环境检测</span>
+                <button onClick={() => setShowDetect(false)}
+                  className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="px-5 py-4 space-y-2 overflow-y-auto max-h-[60vh]">
+                {detecting ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 size={24} className="animate-spin text-accent" />
+                  </div>
+                ) : (
+                  detectResults.map((r, i) => (
+                    <div key={i} className={`flex items-start gap-2 p-2 rounded-lg text-xs
+                      ${r.ok ? 'bg-green-500/5' : 'bg-red-500/5'}`}>
+                      {r.ok
+                        ? <CheckCircle size={14} className="text-green-400 mt-0.5 shrink-0" />
+                        : <XCircle size={14} className="text-red-400 mt-0.5 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className={r.ok ? 'text-green-300' : 'text-red-300'}>{r.label}</div>
+                        <div className="text-muted truncate">{r.detail}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   )

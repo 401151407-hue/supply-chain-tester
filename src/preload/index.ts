@@ -172,6 +172,10 @@ const api = {
   checkPython: (): Promise<{ available: boolean; version?: string; hint?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.CHECK_PYTHON),
 
+  /** 环境检测：chrome-win64、python-portable、依赖、系统 Python */
+  detectEnvironment: (): Promise<{ results: { label: string; ok: boolean; detail: string }[]; allOk: boolean }> =>
+    ipcRenderer.invoke('app:detect-environment'),
+
   /** 解析脚本可配置变量 */
   parseScriptVars: (scriptPath: string, env?: string): Promise<{ key: string; value: string; comment: string }[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.PARSE_SCRIPT_VARS, scriptPath, env),

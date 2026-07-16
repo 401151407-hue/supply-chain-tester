@@ -689,6 +689,81 @@ function registerIpcHandlers(): void {
     return parseScriptVars(scriptPath, env)
   })
 
+  // 环境检测：chrome-win64、python-portable、Python 依赖、系统 Python
+  ipcMain.handle('app:detect-environment', async () => {
+    type CheckItem = { label: string; ok: boolean; detail: string }
+    const results: CheckItem[] = []
+
+    const resourcesPath = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
+
+    // 1. chrome-win64
+    const chromeExe = join(resourcesPath, 'chrome-win64', 'chrome.exe')
+    results.push({
+      label: 'Chromium 浏览器 (chrome-win64)',
+      ok: existsSync(chromeExe) || existsSync(join(resourcesPath, 'chrome-win64', 'chrome-win64', 'chrome.exe')),
+      detail: `路径: ${join(resourcesPath, 'chrome-win64')}`
+    })
+
+    // 2. python-portable
+    const pythonDir = join(resourcesPath, 'python-portable')
+    const pythonExe = join(pythonDir, 'python.exe')
+    const pythonExists = existsSync(pythonExe)
+    results.push({
+      label: '便携版 Python',
+      ok: pythonExists,
+      detail: pythonExists ? `路径: ${pythonExe}` : '未找到'
+    })
+
+    // 3. Python 依赖检测（如果有便携版 Python）
+    const sitePackages = join(pythonDir, 'site-packages')
+    if (pythonExists && existsSync(sitePackages)) {
+      const deps = ['requests', 'paramiko', 'Crypto', 'mysql', 'openpyxl', 'faker']
+      const { execSync: exec } = require('child_process')
+      for (const dep of deps) {
+        try {
+          exec(`"${pythonExe}" -c "import ${dep}"`, { timeout: 5000, env: { ...process.env, PYTHONPATH: sitePackages } })
+          results.push({ label: `Python 依赖: ${dep}`, ok: true, detail: '已安装' })
+        } catch {
+          results.push({ label: `Python 依赖: ${dep}`, ok: false, detail: '未安装' })
+        }
+      }
+    } else if (!pythonExists) {
+      // 4. 没有便携版 Python，检测系统 Python
+      const systemCandidates = process.platform === 'win32'
+        ? ['python', 'py', `${process.env.LOCALAPPDATA}\\Programs\\Python\\Python311\\python.exe`,
+           'C:\\Python311\\python.exe', 'D:\\Python311\\python.exe']
+        : ['python3', 'python', '/usr/local/bin/python3', '/usr/bin/python3']
+      let systemPython = ''
+      const { execSync: exec } = require('child_process')
+      for (const cand of systemCandidates) {
+        try {
+          const ver = exec(`"${cand}" --version`, { timeout: 5000 }).toString().trim()
+          systemPython = `${cand} (${ver})`
+          break
+        } catch {}
+      }
+      if (systemPython) {
+        results.push({ label: '系统 Python', ok: true, detail: systemPython })
+        // 检测系统 Python 的依赖
+        const sysPy = systemPython.split(' (')[0]
+        const deps = ['requests', 'paramiko', 'Crypto', 'mysql', 'openpyxl', 'faker']
+        for (const dep of deps) {
+          try {
+            exec(`"${sysPy}" -c "import ${dep}"`, { timeout: 5000 })
+            results.push({ label: `系统依赖: ${dep}`, ok: true, detail: '已安装' })
+          } catch {
+            results.push({ label: `系统依赖: ${dep}`, ok: false, detail: '未安装' })
+          }
+        }
+      } else {
+        results.push({ label: '系统 Python', ok: false, detail: '未找到任何 Python' })
+      }
+    }
+
+    const allOk = results.every(r => r.ok)
+    return { results, allOk }
+  })
+
   // API 调试：发送 HTTP 请求
   ipcMain.handle(IPC_CHANNELS.API_DEBUG, async (_event, req: { method: string; url: string; headers: Record<string,string>; body?: string; timeout?: number }) => {
     const start = Date.now()
