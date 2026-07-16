@@ -549,24 +549,23 @@ sudo xattr -rd com.apple.quarantine /Applications/SupplyChainTester.app
 ### 标准模板
 
 ```python
-# 步骤描述（如：授信列表查询）
+# 步骤描述
 url = env_config.{服务名}+'{接口路径}'
 json = {
     "参数1": 值1,
     "参数2": 值2
 }
-a1 = requests.post(url, headers=headers, json=json)   # GET 则用 requests.get
+a1 = requests.post(url=url, json=json, headers=headers)
 b1 = a1.json()
-if b1['respCode'] == str(10000):
+if b1 and b1.get('respCode') == str(10000):
     step += 1
     print(f'[步骤{step}] {步骤描述}成功',
           '| 关键字段:', b1['body'].get('字段名', ''))
 else:
-    print('\n'+'*'*100)
-    print_current_line_number()
+    print('*'*100)
     print(url)
     print(b1)
-    print('*'*100+'\n')
+    print('*'*100)
     sys.exit()
 ```
 
@@ -574,14 +573,14 @@ else:
 
 | 规则 | 说明 |
 |------|------|
-| 变量命名 | 统一用 `response`/`result`，或 `a1`/`b1` 命名，不递增 |
-| 步骤计数 | 成功时 `step += 1`，`print` 中必须带 `[步骤{step}]` |
-| 错误处理 | 失败时打印分隔线 + `print_current_line_number()` + URL + 响应体 + `sys.exit()` |
-| respCode 判断 | 使用 `b1['respCode'] == str(10000)` 字符串比较 |
+| 变量命名 | 统一用 `a1`/`b1` 或 `r`/`res`，当前脚本内保持一致，不递增 |
+| 步骤计数 | 变量名可用 `step` 或 `dangqianbushu`，成功时 `+= 1`，print 中带 `[步骤{step}]` 或 `第[{dangqianbushu}]步` |
+| 错误处理 | 失败时打印 `*`×100 分隔线 + URL + 响应体 + `sys.exit()`，关键步骤可加 `print_current_line_number()` |
+| respCode 判断 | 使用 `b1 and b1.get('respCode') == str(10000)` 安全取值 |
 | headers | 统一用 `headers = {'token': token}`，token 由 `login()` 获取 |
-| URL 拼接 | 用 `+` 直接拼接，不用 f-string：`env_config.xxx+'/path'` |
-| import | 不在接口调用处重复 import，依赖顶部统一定义 |
-| 循环场景 | 如有多笔造数，外层 `for` 循环包裹，内层接口递增变量名仍用 `a1/b1` |
+| URL 拼装 | 可用 `env_config.xxx+'/path'` 拼接，也可用 f-string |
+| POST 调用 | 统一用命名参数 `requests.post(url=url, json=json, headers=headers)` |
+| 循环场景 | 外层 `for` 循环包裹，内层接口变量名复用 `a1/b1` |
 
 ### 服务名对应 env_config 变量
 
