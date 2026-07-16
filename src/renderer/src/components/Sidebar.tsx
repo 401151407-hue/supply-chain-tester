@@ -397,8 +397,8 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
 
         {/* 检测结果弹窗 */}
         {showDetect && (
-          <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${closingDetect ? 'animate-fade-out' : 'animate-fade-in'}`}
-               onKeyDown={e => { if (e.key === 'Escape') closeDetect() }}
+          <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-150 ${closingDetect ? 'opacity-0' : 'opacity-100'}`}
+               onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); closeDetect() } }}
                tabIndex={-1} ref={el => el?.focus()}>
             <div className="bg-surface border border-border rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden animate-zoom-in"
                  onClick={e => e.stopPropagation()}>
