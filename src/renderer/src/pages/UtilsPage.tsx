@@ -546,7 +546,7 @@ export function UtilsPage() {
         <div className={`fixed inset-0 z-50 flex items-center justify-center ${closingVarDialog ? 'animate-fade-out' : 'animate-fade-in'}`} style={{ background: 'rgba(0,0,0,0.5)' }}
              onKeyDown={e => { if (e.key === 'Escape') closeVarDialog() }}
              tabIndex={-1} ref={el => el?.focus()}>
-          <div className={`bg-surface border border-border/10 rounded-2xl p-6 w-80 shadow-2xl ${closingVarDialog ? 'animate-zoom-out' : 'animate-zoom-in'}`} onClick={e => e.stopPropagation()}>
+          <div className="bg-surface border border-border/10 rounded-2xl p-6 w-80 shadow-2xl animate-zoom-in" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-semibold text-foreground mb-4">{pendingRun.script.name}</p>
             <div className="flex flex-col gap-3">
               {pendingRun.vars
