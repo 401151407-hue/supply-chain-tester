@@ -490,7 +490,7 @@ export function UtilsPage() {
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={scripts.map(s => s.path)} strategy={rectSortingStrategy}>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-5 gap-2">
                   {scripts.map(script => (
                     <SortableScriptCard
                       key={script.path}
@@ -668,27 +668,26 @@ function SortableScriptCard({ script, isActive, isRunning, onRun }: {
         }
       }}
       disabled={isRunning}
-      className={`flex items-center gap-3 p-4 rounded-xl bg-surface border border-border/5
+      className={`flex items-center gap-2 p-2.5 rounded-lg bg-surface border border-border/5
                  hover:border-accent/30 hover:bg-accent/5 transition-all text-left group cursor-grab active:cursor-grabbing
                  ${isDragging ? 'shadow-xl border-accent/30' : ''}
                  ${isActive ? 'border-accent/50 bg-accent/5' : ''}
                  disabled:opacity-50 disabled:cursor-not-allowed`}
       title="点击运行 · Ctrl+点击打开文件 · 拖拽排序"
     >
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors
+      <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors
                     ${script.wip
                       ? 'bg-amber-500/10 group-hover:bg-amber-500/20'
                       : isActive && isRunning
                         ? 'bg-green-500/20' : 'bg-green-500/10 group-hover:bg-green-500/20'}`}>
         {isActive && isRunning ? (
-          <Loader2 size={20} className={script.wip ? 'text-amber-400 animate-spin' : 'text-green-400 animate-spin'} />
+          <Loader2 size={14} className={script.wip ? 'text-amber-400 animate-spin' : 'text-green-400 animate-spin'} />
         ) : (
-          <Play size={20} className={script.wip ? 'text-amber-400' : 'text-green-400'} />
+          <Play size={14} className={script.wip ? 'text-amber-400' : 'text-green-400'} />
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{script.name}</p>
-        <p className="text-[11px] text-muted truncate mt-0.5">{script.path}</p>
+        <p className="text-xs font-medium text-foreground truncate">{script.name}</p>
       </div>
     </button>
   )
