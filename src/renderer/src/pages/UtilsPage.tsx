@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useAppStore } from '../store'
-import { Wrench, Loader2, Play, Square, Terminal, Trash2, Search, Database, Eraser, Download, HelpCircle } from 'lucide-react'
+import { Wrench, Loader2, Play, Square, Terminal, Trash2, Search, Database, Eraser, HelpCircle } from 'lucide-react'
 import { highlightOutput } from '../utils/highlight'
 import {
   DndContext,
@@ -67,15 +67,8 @@ export function UtilsPage() {
   // 弹窗中用户选中的值
   const [dialogValues, setDialogValues] = useState<Record<string, string>>({})
 
-  // Playwright 安装状态
-  const [installingPW, setInstallingPW] = useState(false)
-  const [pwOutput, setPwOutput] = useState('')
-  const [pwInstalled, setPwInstalled] = useState(false)  // playwright 模块已安装
-  const [pwHasBrowser, setPwHasBrowser] = useState(false) // Chromium 浏览器已下载
-
   useEffect(() => {
     loadScripts()
-    checkPlaywright()
     return () => { unsubRef.current?.() }
   }, [])
 
@@ -169,47 +162,6 @@ export function UtilsPage() {
     setPendingRun(null)
   }
 
-  async function checkPlaywright() {
-    const api = (window as any).supplyChainTester
-    try {
-      const result = await api?.checkPlaywright?.()
-      setPwInstalled(result?.playwright === true)
-      setPwHasBrowser(result?.chromium === true)
-    } catch { setPwInstalled(false); setPwHasBrowser(false) }
-  }
-
-  async function handleInstallPlaywright() {
-    if (installingPW || pwInstalled) return
-    setInstallingPW(true)
-    setPwOutput('')
-    const api = (window as any).supplyChainTester
-
-    // 监听安装输出
-    const unsub = api?.onScriptOutput?.((chunk: string) => {
-      setPwOutput(prev => {
-        const next = prev + chunk
-        // 同步到主输出框
-        outputRef.current += chunk
-        setOutput(outputRef.current)
-        return next
-      })
-    })
-
-    try {
-      const result = await api?.installPlaywright?.()
-      if (result?.ok) {
-        setPwInstalled(true)
-        setPwHasBrowser(true)
-      } else {
-        setPwOutput(prev => prev + `\n安装失败: ${result?.error || '未知错误'}`)
-      }
-    } catch (err: any) {
-      setPwOutput(prev => prev + `\n安装出错: ${err.message}`)
-    } finally {
-      unsub?.()
-      setInstallingPW(false)
-    }
-  }
 
   async function handleStop() {
     const api = (window as any).supplyChainTester
@@ -500,38 +452,7 @@ export function UtilsPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">        {/* Playwright 安装提示 */}
-        <div className={`shrink-0 px-6 py-3 border-b border-border/5 ${pwHasBrowser ? 'bg-green-500/5' : 'bg-amber-500/5'}`}>
-          <div className="flex items-center gap-3">
-            <Download size={16} className={pwHasBrowser ? 'text-green-400' : 'text-amber-400'} />
-            <span className="text-xs text-foreground flex-1">
-              {pwHasBrowser
-                ? '✅ Playwright + Chromium 已安装，脚本中的浏览器功能可用'
-                : pwInstalled
-                  ? '⚠️ Playwright 已安装但 Chromium 未下载，点击一键安装下载浏览器'
-                  : '部分脚本需要 Playwright + Chromium 浏览器，点击安装（约 150MB，仅需一次）'}
-            </span>
-            <button
-              onClick={handleInstallPlaywright}
-              disabled={installingPW || pwHasBrowser}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all disabled:opacity-50
-                ${pwHasBrowser
-                  ? 'bg-green-500/15 text-green-400 border-green-500/20 cursor-default'
-                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/20'}`}
-            >
-              {installingPW ? (
-                <><Loader2 size={12} className="animate-spin" /> 安装中...</>
-              ) : pwHasBrowser ? (
-                '已安装'
-              ) : (
-                '一键安装'
-              )}
-            </button>
-          </div>
-          {installingPW && pwOutput && (
-            <pre className="mt-2 text-[11px] text-muted max-h-32 overflow-y-auto bg-surface rounded p-2">{pwOutput}</pre>
-          )}
-        </div>        <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 flex flex-col overflow-hidden">        <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 size={24} className="animate-spin text-muted" />

@@ -172,14 +172,6 @@ const api = {
   checkPython: (): Promise<{ available: boolean; version?: string; hint?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.CHECK_PYTHON),
 
-  /** 一键安装 Playwright + Chromium */
-  installPlaywright: (): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.INSTALL_PLAYWRIGHT),
-
-  /** 检测 Playwright + Chromium 是否可用 */
-  checkPlaywright: (): Promise<{ playwright: boolean; chromium: boolean }> =>
-    ipcRenderer.invoke('app:check-playwright'),
-
   /** 解析脚本可配置变量 */
   parseScriptVars: (scriptPath: string, env?: string): Promise<{ key: string; value: string; comment: string }[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.PARSE_SCRIPT_VARS, scriptPath, env),
