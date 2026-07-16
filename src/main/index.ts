@@ -1136,6 +1136,7 @@ print(f"CHROMIUM_OK={has_chromium}")
 
     try {
       const sender = event.sender
+      let stderrLog = ''
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(pythonPath, [fetcherScript, tmpIn, '--output', tmpOut], {
           timeout: 120000,
@@ -1146,7 +1147,9 @@ print(f"CHROMIUM_OK={has_chromium}")
         if (proc.stderr) {
           let stderrBuf = ''
           proc.stderr.on('data', (chunk: Buffer) => {
-            stderrBuf += chunk.toString()
+            const text = chunk.toString()
+            stderrBuf += text
+            stderrLog += text
             const lines = stderrBuf.split('\n')
             stderrBuf = lines.pop() || ''
             for (const line of lines) {
@@ -1164,7 +1167,11 @@ print(f"CHROMIUM_OK={has_chromium}")
         
         proc.on('error', (err: any) => { reject(err) })
         proc.on('close', (code: number | null) => {
-          if (code !== 0 && !existsSync(tmpOut)) { reject(new Error(`Python exit code: ${code}`)); return }
+          if (code !== 0 && !existsSync(tmpOut)) {
+            const tail = stderrLog.trim().split('\n').slice(-5).join('\n') || '(无输出)'
+            reject(new Error(`Python exit code: ${code}\n${tail}`))
+            return
+          }
           resolve()
         })
       })
