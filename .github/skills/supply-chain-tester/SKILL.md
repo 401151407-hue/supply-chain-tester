@@ -541,3 +541,88 @@ sudo xattr -rd com.apple.quarantine /Applications/SupplyChainTester.app
 |------|------|------|
 | 不签名（当前） | $0 | 有时弹"已损坏"，需用户手动处理 |
 | 买 Apple Developer 账号 | $99/年 | 签名后永不弹，需 CI 配置证书 |
+
+## Python 脚本 API 调用风格规范
+
+当用户提供接口数据（如 API 录制结果的 JSON 片段），要求「写调用接口」或「按我的风格写」时，必须严格遵循以下模板。
+
+### 标准模板
+
+```python
+# 步骤描述（如：授信列表查询）
+url = env_config.{服务名}+'{接口路径}'
+json = {
+    "参数1": 值1,
+    "参数2": 值2
+}
+a1 = requests.post(url, headers=headers, json=json)   # GET 则用 requests.get
+b1 = a1.json()
+if b1['respCode'] == str(10000):
+    step += 1
+    print(f'[步骤{step}] {步骤描述}成功',
+          '| 关键字段:', b1['body'].get('字段名', ''))
+else:
+    print('\n'+'*'*100)
+    print_current_line_number()
+    print(url)
+    print(b1)
+    print('*'*100+'\n')
+    sys.exit()
+```
+
+### 规则要点
+
+| 规则 | 说明 |
+|------|------|
+| 变量命名 | 第1个接口用 `a1`/`b1`，第2个用 `a2`/`b2`，依次递增 |
+| 步骤计数 | 成功时 `step += 1`，`print` 中必须带 `[步骤{step}]` |
+| 错误处理 | 失败时打印分隔线 + `print_current_line_number()` + URL + 响应体 + `sys.exit()` |
+| respCode 判断 | 使用 `b1['respCode'] == str(10000)` 字符串比较 |
+| headers | 统一用 `headers = {'token': token}`，token 由 `login()` 获取 |
+| URL 拼接 | 用 `+` 直接拼接，不用 f-string：`env_config.xxx+'/path'` |
+| import | 不在接口调用处重复 import，依赖顶部统一定义 |
+| 循环场景 | 如有多笔造数，外层 `for` 循环包裹，内层接口递增变量名仍用 `a1/b1` |
+
+### 服务名对应 env_config 变量
+
+| 服务 | env_config 变量 |
+|------|----------------|
+| CMP 审批管理 | `wxsbank_supplychain_cmp` |
+| 供应链 Web | `wxsbank_supplychain_web` |
+| 供应链 Partner | `wxsbank_supplychain_partner` |
+| 门户 Web | `wxsbank_supplychain_portal_web` |
+| 产品 Partner | `wxsbank_supplychain_product_partner` |
+| 小工具 | `wxsbank_scp_small_tool` |
+| Adam | `wxsbank_supplychain_adam` |
+| PCL Partner | `wxsbank_supplychain_pcl_partner` |
+| 流动性 Partner | `wxsbank_scp_liquidity_partner` |
+
+### 示例
+
+用户提供接口数据后，生成如下代码：
+
+```python
+# 授信列表查询
+url = env_config.wxsbank_supplychain_cmp+'/wxsbank-supplychain-cmp/manage/grant/credit/record/list'
+json = {
+    "auditStatus": "00",
+    "pageSize": 10,
+    "projectIdList": [],
+    "socialCreditCode": socialCreditCode,
+    "pageNum": 1
+}
+a1 = requests.post(url, headers=headers, json=json)
+b1 = a1.json()
+if b1['respCode'] == str(10000):
+    pageList = b1['body'].get('pageList', [])
+    step += 1
+    print(f'[步骤{step}] 授信列表查询成功',
+          '| 记录数:', b1['body'].get('totalNum', 0))
+else:
+    print('\n'+'*'*100)
+    print_current_line_number()
+    print(url)
+    print(b1)
+    print('*'*100+'\n')
+    sys.exit()
+```
