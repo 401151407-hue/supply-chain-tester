@@ -56,8 +56,17 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
 
   // 环境检测
   const [showDetect, setShowDetect] = useState(false)
+  const [closingDetect, setClosingDetect] = useState(false)
   const [detectResults, setDetectResults] = useState<{ label: string; ok: boolean; detail: string }[]>([])
   const [detecting, setDetecting] = useState(false)
+
+  const closeDetect = () => {
+    setClosingDetect(true)
+    setTimeout(() => {
+      setShowDetect(false)
+      setClosingDetect(false)
+    }, 200)
+  }
 
   async function handleDetect() {
     setDetecting(true)
@@ -388,14 +397,14 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
 
         {/* 检测结果弹窗 */}
         {showDetect && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-               onKeyDown={e => { if (e.key === 'Escape') setShowDetect(false) }}
+          <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${closingDetect ? 'animate-fade-out' : 'animate-fade-in'}`}
+               onKeyDown={e => { if (e.key === 'Escape') closeDetect() }}
                tabIndex={-1} ref={el => el?.focus()}>
-            <div className="bg-surface border border-border rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden"
+            <div className={`bg-surface border border-border rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden ${closingDetect ? 'animate-zoom-out' : 'animate-zoom-in'}`}
                  onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b border-border/10">
                 <span className="font-semibold text-sm">环境检测</span>
-                <button onClick={() => setShowDetect(false)}
+                <button onClick={closeDetect}
                   className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground">
                   <X size={18} />
                 </button>

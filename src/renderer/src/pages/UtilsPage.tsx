@@ -63,9 +63,19 @@ export function UtilsPage() {
 
   // 发起方式弹窗 → 改为通用的脚本变量选择弹窗
   const [showVarDialog, setShowVarDialog] = useState(false)
+  const [closingVarDialog, setClosingVarDialog] = useState(false)
   const [pendingRun, setPendingRun] = useState<{ script: ScriptItem; vars: { key: string; value: string; comment: string; options?: { label: string; value: string }[] | null }[] } | null>(null)
   // 弹窗中用户选中的值
   const [dialogValues, setDialogValues] = useState<Record<string, string>>({})
+
+  // 关闭弹窗（带动画）
+  const closeVarDialog = () => {
+    setClosingVarDialog(true)
+    setTimeout(() => {
+      setShowVarDialog(false)
+      setClosingVarDialog(false)
+    }, 200)
+  }
 
   useEffect(() => {
     loadScripts()
@@ -155,11 +165,13 @@ export function UtilsPage() {
   }
 
   function handleVarDialogConfirm() {
-    setShowVarDialog(false)
-    if (!pendingRun) return
-    const { script } = pendingRun
-    runUtilityScript(script.path, script.name, dialogValues)
-    setPendingRun(null)
+    closeVarDialog()
+    setTimeout(() => {
+      if (!pendingRun) return
+      const { script } = pendingRun
+      runUtilityScript(script.path, script.name, dialogValues)
+      setPendingRun(null)
+    }, 200)
   }
 
 
@@ -531,10 +543,10 @@ export function UtilsPage() {
 
       {/* 脚本变量选择弹窗 */}
       {showVarDialog && pendingRun && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in" style={{ background: 'rgba(0,0,0,0.5)' }}
-             onKeyDown={e => { if (e.key === 'Escape') setShowVarDialog(false) }}
+        <div className={`fixed inset-0 z-50 flex items-center justify-center ${closingVarDialog ? 'animate-fade-out' : 'animate-fade-in'}`} style={{ background: 'rgba(0,0,0,0.5)' }}
+             onKeyDown={e => { if (e.key === 'Escape') closeVarDialog() }}
              tabIndex={-1} ref={el => el?.focus()}>
-          <div className="bg-surface border border-border/10 rounded-2xl p-6 w-80 shadow-2xl animate-zoom-in" onClick={e => e.stopPropagation()}>
+          <div className={`bg-surface border border-border/10 rounded-2xl p-6 w-80 shadow-2xl ${closingVarDialog ? 'animate-zoom-out' : 'animate-zoom-in'}`} onClick={e => e.stopPropagation()}>
             <p className="text-sm font-semibold text-foreground mb-4">{pendingRun.script.name}</p>
             <div className="flex flex-col gap-3">
               {pendingRun.vars
@@ -585,7 +597,7 @@ export function UtilsPage() {
             </div>
             <div className="flex gap-2 mt-5">
               <button
-                onClick={() => setShowVarDialog(false)}
+                onClick={closeVarDialog}
                 className="flex-1 py-1 rounded-lg text-xs text-muted hover:text-foreground hover:bg-hover/5 transition-colors">
                 取消
               </button>
