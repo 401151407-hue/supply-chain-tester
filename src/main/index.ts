@@ -790,7 +790,6 @@ function registerIpcHandlers(): void {
     } else {
       results.push({ label: '脚本依赖', ok: false, detail: '无可用 Python，跳过检测' })
     }
-    }
 
     const allOk = results.every(r => r.ok)
     return { results, allOk }
