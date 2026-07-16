@@ -65,7 +65,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
     setTimeout(() => {
       setShowDetect(false)
       setClosingDetect(false)
-    }, 200)
+    }, 150)
   }
 
   async function handleDetect() {

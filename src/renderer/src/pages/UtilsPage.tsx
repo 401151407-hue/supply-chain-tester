@@ -74,7 +74,7 @@ export function UtilsPage() {
     setTimeout(() => {
       setShowVarDialog(false)
       setClosingVarDialog(false)
-    }, 200)
+    }, 150)
   }
 
   useEffect(() => {
@@ -171,7 +171,7 @@ export function UtilsPage() {
       const { script } = pendingRun
       runUtilityScript(script.path, script.name, dialogValues)
       setPendingRun(null)
-    }, 200)
+    }, 150)
   }
 
 
