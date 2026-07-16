@@ -372,18 +372,19 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
           打开脚本目录
         </button>
 
-        <div className="border-t border-border/5 pt-1.5 mt-1.5">
-          <UpdateIndicator />
+        <div className="border-t border-border/5 pt-1.5 mt-1.5 flex items-center">
+          <div className="flex-1 min-w-0">
+            <UpdateIndicator />
+          </div>
+          <button
+            onClick={handleDetect}
+            disabled={detecting}
+            title="环境检测"
+            className="p-1 rounded text-muted hover:text-foreground hover:bg-hover/10 transition-colors disabled:opacity-50 mr-1"
+          >
+            <ShieldCheck size={15} className={detecting ? 'animate-pulse' : ''} />
+          </button>
         </div>
-        <button
-          onClick={handleDetect}
-          disabled={detecting}
-          title="环境检测"
-          className="flex items-center justify-center w-full py-1.5 rounded text-xs text-muted
-                     hover:bg-hover/5 hover:text-foreground transition-colors disabled:opacity-50"
-        >
-          <ShieldCheck size={16} className={detecting ? 'animate-pulse' : ''} />
-        </button>
 
         {/* 检测结果弹窗 */}
         {showDetect && (
