@@ -1172,6 +1172,13 @@ print(f"CHROMIUM_OK={has_chromium}")
           })
         }
         
+        // 也捕获 stdout（log_fetcher.py 用 print 报错）
+        if (proc.stdout) {
+          proc.stdout.on('data', (chunk: Buffer) => {
+            stderrLog += chunk.toString()
+          })
+        }
+        
         proc.on('error', (err: any) => { reject(err) })
         proc.on('close', (code: number | null) => {
           if (code !== 0 && !existsSync(tmpOut)) {
