@@ -1137,10 +1137,17 @@ print(f"CHROMIUM_OK={has_chromium}")
     try {
       const sender = event.sender
       let stderrLog = ''
+      const sitePackages = join(getPythonPortableDir(), 'site-packages')
       await new Promise<void>((resolve, reject) => {
+        const pythonEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' }
+        // 注入 site-packages 到 PYTHONPATH，确保便携版 Python 能找到 paramiko 等依赖
+        if (existsSync(sitePackages)) {
+          const existing = pythonEnv.PYTHONPATH || ''
+          pythonEnv.PYTHONPATH = existing ? `${sitePackages}${require('path').delimiter}${existing}` : sitePackages
+        }
         const proc = spawn(pythonPath, [fetcherScript, tmpIn, '--output', tmpOut], {
           timeout: 120000,
-          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+          env: pythonEnv,
         })
         
         // 监听 stderr 中的进度行
