@@ -424,8 +424,9 @@ function registerIpcHandlers(): void {
         .join('\n') + '\n' : ''
       const argvPart = envArg ? `sys.argv = ['${fullScriptPath.replace(/\\/g, '\\\\')}', '${envArg}']` : ''
       const varPart = varLines.trim().split('\n').filter(Boolean).join('; ')
-      const sitePackages = join(getPythonPortableDir(), 'site-packages')
-      const injectLine = `import sys; sys.path.insert(0, r"${scriptsDir}"); sys.path.insert(0, r"${sitePackages.replace(/\\/g, '\\\\')}"); ${argvPart}${varPart ? '; ' + varPart : ''}; __file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"`
+      const sitePackages = process.platform === 'win32' ? join(getPythonPortableDir(), 'site-packages') : ''
+      const sitePackagesInsert = sitePackages ? `; sys.path.insert(0, r"${sitePackages.replace(/\\/g, '\\\\')}")` : ''
+      const injectLine = `import sys; sys.path.insert(0, r"${scriptsDir}")${sitePackagesInsert}; ${argvPart}${varPart ? '; ' + varPart : ''}; __file__ = r"${fullScriptPath.replace(/\\/g, '\\\\')}"`
       // 注入代码拼到脚本第一行，保持报错行号和原脚本完全一致
       const firstNewline = scriptContent.indexOf('\n')
       let insertPos = firstNewline
@@ -1138,10 +1139,11 @@ print(f"CHROMIUM_OK={has_chromium}")
       const sender = event.sender
       let stderrLog = ''
       const sitePackages = join(getPythonPortableDir(), 'site-packages')
+      // 仅 Windows 注入便携版 site-packages（macOS 用系统 Python 自带依赖）
+      const isWin = process.platform === 'win32'
       await new Promise<void>((resolve, reject) => {
         const pythonEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' }
-        // 注入 site-packages 到 PYTHONPATH，确保便携版 Python 能找到 paramiko 等依赖
-        if (existsSync(sitePackages)) {
+        if (isWin && existsSync(sitePackages)) {
           const existing = pythonEnv.PYTHONPATH || ''
           pythonEnv.PYTHONPATH = existing ? `${sitePackages}${require('path').delimiter}${existing}` : sitePackages
         }
