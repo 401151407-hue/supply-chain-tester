@@ -531,7 +531,9 @@ export function UtilsPage() {
 
       {/* 脚本变量选择弹窗 */}
       {showVarDialog && pendingRun && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowVarDialog(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in" style={{ background: 'rgba(0,0,0,0.5)' }}
+             onKeyDown={e => { if (e.key === 'Escape') setShowVarDialog(false) }}
+             tabIndex={-1} ref={el => el?.focus()}>
           <div className="bg-surface border border-border/10 rounded-2xl p-6 w-80 shadow-2xl animate-zoom-in" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-semibold text-foreground mb-4">{pendingRun.script.name}</p>
             <div className="flex flex-col gap-3">

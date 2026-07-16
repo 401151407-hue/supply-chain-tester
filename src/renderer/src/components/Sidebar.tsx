@@ -389,7 +389,8 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
         {/* 检测结果弹窗 */}
         {showDetect && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-               onClick={() => setShowDetect(false)}>
+               onKeyDown={e => { if (e.key === 'Escape') setShowDetect(false) }}
+               tabIndex={-1} ref={el => el?.focus()}>
             <div className="bg-surface border border-border rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden"
                  onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b border-border/10">
