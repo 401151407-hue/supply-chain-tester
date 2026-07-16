@@ -687,7 +687,7 @@ function SortableScriptCard({ script, isActive, isRunning, onRun }: {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-foreground truncate">{script.name}</p>
+        <p className="text-xs font-medium text-foreground leading-tight break-all">{script.name}</p>
       </div>
     </button>
   )
