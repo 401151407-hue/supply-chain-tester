@@ -574,7 +574,7 @@ else:
 
 | 规则 | 说明 |
 |------|------|
-| 变量命名 | 第1个接口用 `a1`/`b1`，第2个用 `a2`/`b2`，依次递增 |
+| 变量命名 | 统一用 `response`/`result`，或 `a1`/`b1` 命名，不递增 |
 | 步骤计数 | 成功时 `step += 1`，`print` 中必须带 `[步骤{step}]` |
 | 错误处理 | 失败时打印分隔线 + `print_current_line_number()` + URL + 响应体 + `sys.exit()` |
 | respCode 判断 | 使用 `b1['respCode'] == str(10000)` 字符串比较 |
