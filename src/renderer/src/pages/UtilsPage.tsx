@@ -250,14 +250,14 @@ export function UtilsPage() {
     }
 
     try {
-      // 全局变量（stderr注入） + 输入框值，输入框优先
+      // 全局变量（stderr注入）优先于输入框值
       const vars: Record<string, string> = {
         ...globalVars,
         env,
-        projectId: projectId || globalVars.projectId || '',
-        certNo: certNo || globalVars.certNo || '',
-        amount: amount || globalVars.amount || '',
-        multiFunc: multiFunc || globalVars.multiFunc || '',
+        projectId: globalVars.projectId || projectId || '',
+        certNo: globalVars.certNo || certNo || '',
+        amount: globalVars.amount || amount || '',
+        multiFunc: globalVars.multiFunc || multiFunc || '',
       }
       if (extraVars) {
         Object.assign(vars, extraVars)
