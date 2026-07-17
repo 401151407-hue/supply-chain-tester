@@ -1145,6 +1145,11 @@ function registerIpcHandlers(): void {
       try { unlinkSync(tmpIn) } catch {}
       return { ok: false, error: `找不到 log_fetcher.py: ${fetcherScript}` }
     }
+    const serverConfigPath = pathJoin(scriptsDir, 'utils', 'server_config.py')
+    if (!existsSync(serverConfigPath)) {
+      try { unlinkSync(tmpIn) } catch {}
+      return { ok: false, error: `找不到 server_config.py，请确保 test-suites/utils/server_config.py 存在（该文件未纳入版本管理，需手动分发）` }
+    }
 
     try {
       const sender = event.sender
@@ -1154,10 +1159,16 @@ function registerIpcHandlers(): void {
       const isWin = process.platform === 'win32'
       await new Promise<void>((resolve, reject) => {
         const pythonEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' }
+        // 构建 PYTHONPATH：scriptsDir（test-suites 根目录）+ site-packages + 原有 PYTHONPATH
+        const pathParts: string[] = [scriptsDir]
         if (isWin && existsSync(sitePackages)) {
-          const existing = pythonEnv.PYTHONPATH || ''
-          pythonEnv.PYTHONPATH = existing ? `${sitePackages}${require('path').delimiter}${existing}` : sitePackages
+          pathParts.push(sitePackages)
         }
+        const existing = pythonEnv.PYTHONPATH || ''
+        if (existing) {
+          pathParts.push(existing)
+        }
+        pythonEnv.PYTHONPATH = pathParts.join(require('path').delimiter)
         const proc = spawn(pythonPath, [fetcherScript, tmpIn, '--output', tmpOut], {
           timeout: 120000,
           env: pythonEnv,
