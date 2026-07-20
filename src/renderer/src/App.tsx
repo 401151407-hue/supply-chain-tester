@@ -13,7 +13,7 @@ import { AIAssistant } from './components/AIAssistant'
 import { useAppStore } from './store'
 
 export default function App() {
-  const { activeTab, setTestCases, setReports, loadAIConfig, theme, scriptParams, selectedSubProduct, navKey } = useAppStore()
+  const { activeTab, setTestCases, setReports, loadAIConfig, theme, scriptParams, selectedSubProduct, navKey, transitionKey } = useAppStore()
   const [showAISettings, setShowAISettings] = useState(false)
 
   // 同步主题 class 到 html 元素
@@ -39,10 +39,10 @@ export default function App() {
     })
   }, [activeTab])
 
-  // navKey 只在同标签刷新时递增，所以这里用固定格式即可：
-  // 切换标签时 navKey 不变 → key 不变 → 不重挂载
-  // 同标签刷新时 navKey 递增 → key 变化 → 重挂载清空
+  // 仅当前活跃标签页的 key 受 navKey 驱动（刷新时重挂载），非活跃页 key 不变保活
   const tabKey = (name: string) => `${name}-${navKey}`
+  // wrapper key 每次导航都变，触发 animate-fade-in 动画
+  const wrapKey = (name: string) => `wrap-${name}-${transitionKey}`
 
   async function loadInitialData() {
     try {
@@ -82,38 +82,40 @@ export default function App() {
         )}
 
         {/* ===== 以下页面惰性挂载 + display 切换，切换 tab 不丢状态 ===== */}
+        {/* wrapper 的 key 每次导航都变 → 重挂载 → animate-fade-in 播放 */}
+        {/* 内部页面的 key 只在刷新时变 → 状态保留 */}
         {mountedTabs.has('editor') && activeTab !== 'script' && (
-          <div style={{ display: activeTab === 'editor' ? undefined : 'none' }} className="h-full">
+          <div key={wrapKey('editor')} style={{ display: activeTab === 'editor' ? undefined : 'none' }} className="h-full animate-fade-in">
             <TestEditor key={tabKey('editor')} />
           </div>
         )}
         {mountedTabs.has('reports') && (
-          <div style={{ display: activeTab === 'reports' ? undefined : 'none' }} className="h-full">
+          <div key={wrapKey('reports')} style={{ display: activeTab === 'reports' ? undefined : 'none' }} className="h-full animate-fade-in">
             <Reports key={tabKey('reports')} />
           </div>
         )}
         {mountedTabs.has('apidebug') && (
-          <div style={{ display: activeTab === 'apidebug' ? undefined : 'none' }} className="h-full">
+          <div key={wrapKey('apidebug')} style={{ display: activeTab === 'apidebug' ? undefined : 'none' }} className="h-full animate-fade-in">
             <ApiDebugger key={tabKey('apidebug')} />
           </div>
         )}
         {mountedTabs.has('aiassistant') && (
-          <div style={{ display: activeTab === 'aiassistant' ? undefined : 'none' }} className="h-full">
+          <div key={wrapKey('aiassistant')} style={{ display: activeTab === 'aiassistant' ? undefined : 'none' }} className="h-full animate-fade-in">
             <AIAssistant key={tabKey('aiassistant')} />
           </div>
         )}
         {mountedTabs.has('utils') && (
-          <div style={{ display: activeTab === 'utils' ? undefined : 'none' }} className="h-full">
+          <div key={wrapKey('utils')} style={{ display: activeTab === 'utils' ? undefined : 'none' }} className="h-full animate-fade-in">
             <UtilsPage key={tabKey('utils')} />
           </div>
         )}
         {mountedTabs.has('recorder') && (
-          <div style={{ display: activeTab === 'recorder' ? undefined : 'none' }} className="h-full">
+          <div key={wrapKey('recorder')} style={{ display: activeTab === 'recorder' ? undefined : 'none' }} className="h-full animate-fade-in">
             <VisualRecorder key={tabKey('recorder')} />
           </div>
         )}
         {mountedTabs.has('apirecorder') && (
-          <div style={{ display: activeTab === 'apirecorder' ? undefined : 'none' }} className="h-full">
+          <div key={wrapKey('apirecorder')} style={{ display: activeTab === 'apirecorder' ? undefined : 'none' }} className="h-full animate-fade-in">
             <ApiRecorder key={tabKey('apirecorder')} />
           </div>
         )}
@@ -124,7 +126,7 @@ export default function App() {
   return (
     <div className="flex h-full">
       <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
-      <main className="flex-1 overflow-hidden animate-fade-in">
+      <main className="flex-1 overflow-hidden">
         {renderContent()}
       </main>
       {showAISettings && (

@@ -16,7 +16,8 @@ interface AppState {
   // 导航
   activeTab: 'xinerong' | 'dingerong' | 'huoerong' | 'zhangerong' | 'piaoerong' | 'editor' | 'reports' | 'apidebug' | 'script' | 'aiassistant' | 'utils' | 'recorder' | 'apirecorder'
   setActiveTab: (tab: AppState['activeTab']) => void
-  navKey: number  // 每次导航递增，触发页面切换动画
+  navKey: number  // 同标签刷新时递增，触发页面重挂载
+  transitionKey: number  // 每次导航递增，触发切换动画
   navigateTo: (tab: AppState['activeTab'], sub?: string | null) => void
 
   // 动态子产品选择（用于扫描发现的新子产品，如 货e融/测试专用）
@@ -97,9 +98,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   navKey: 0,
+  transitionKey: 0,
   navigateTo: (tab, sub) => set(s => ({
     // 同标签点击时递增 navKey 触发刷新，切换不同标签时不递增保持状态
     navKey: s.activeTab === tab ? s.navKey + 1 : s.navKey,
+    // 每次导航都递增 transitionKey，触发切换动画
+    transitionKey: s.transitionKey + 1,
     activeTab: tab,
     selectedSubProduct: sub ?? null,
   })),
