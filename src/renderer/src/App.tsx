@@ -83,37 +83,37 @@ export default function App() {
 
         {/* ===== 以下页面惰性挂载 + display 切换，切换 tab 不丢状态 ===== */}
         {mountedTabs.has('editor') && activeTab !== 'script' && (
-          <div style={{ display: activeTab === 'editor' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <div style={{ display: activeTab === 'editor' ? undefined : 'none' }} className="h-full">
             <TestEditor key={tabKey('editor')} />
           </div>
         )}
         {mountedTabs.has('reports') && (
-          <div style={{ display: activeTab === 'reports' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <div style={{ display: activeTab === 'reports' ? undefined : 'none' }} className="h-full">
             <Reports key={tabKey('reports')} />
           </div>
         )}
         {mountedTabs.has('apidebug') && (
-          <div style={{ display: activeTab === 'apidebug' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <div style={{ display: activeTab === 'apidebug' ? undefined : 'none' }} className="h-full">
             <ApiDebugger key={tabKey('apidebug')} />
           </div>
         )}
         {mountedTabs.has('aiassistant') && (
-          <div style={{ display: activeTab === 'aiassistant' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <div style={{ display: activeTab === 'aiassistant' ? undefined : 'none' }} className="h-full">
             <AIAssistant key={tabKey('aiassistant')} />
           </div>
         )}
         {mountedTabs.has('utils') && (
-          <div style={{ display: activeTab === 'utils' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <div style={{ display: activeTab === 'utils' ? undefined : 'none' }} className="h-full">
             <UtilsPage key={tabKey('utils')} />
           </div>
         )}
         {mountedTabs.has('recorder') && (
-          <div style={{ display: activeTab === 'recorder' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <div style={{ display: activeTab === 'recorder' ? undefined : 'none' }} className="h-full">
             <VisualRecorder key={tabKey('recorder')} />
           </div>
         )}
         {mountedTabs.has('apirecorder') && (
-          <div style={{ display: activeTab === 'apirecorder' ? 'flex' : 'none' }} className="flex-1 h-full">
+          <div style={{ display: activeTab === 'apirecorder' ? undefined : 'none' }} className="h-full">
             <ApiRecorder key={tabKey('apirecorder')} />
           </div>
         )}
