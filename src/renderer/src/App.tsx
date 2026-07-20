@@ -39,8 +39,10 @@ export default function App() {
     })
   }, [activeTab])
 
-  // 仅当前活跃标签页的 key 受 navKey 驱动（刷新时重挂载），非活跃页 key 不变保活
-  const tabKey = (name: string) => activeTab === name ? `${name}-${navKey}` : name
+  // navKey 只在同标签刷新时递增，所以这里用固定格式即可：
+  // 切换标签时 navKey 不变 → key 不变 → 不重挂载
+  // 同标签刷新时 navKey 递增 → key 变化 → 重挂载清空
+  const tabKey = (name: string) => `${name}-${navKey}`
 
   async function loadInitialData() {
     try {
