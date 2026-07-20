@@ -30,6 +30,18 @@ export default function App() {
     loadInitialData()
   }, [])
 
+  // 惰性挂载：只挂载访问过的页面，之后保持挂载，用 display 切换可见性
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(() => new Set(['editor']))
+  useEffect(() => {
+    setMountedTabs(prev => {
+      if (prev.has(activeTab)) return prev
+      return new Set([...prev, activeTab])
+    })
+  }, [activeTab])
+
+  // 仅当前活跃标签页的 key 受 navKey 驱动（刷新时重挂载），非活跃页 key 不变保活
+  const tabKey = (name: string) => activeTab === name ? `${name}-${navKey}` : name
+
   async function loadInitialData() {
     try {
       const api = (window as any).supplyChainTester
@@ -47,40 +59,70 @@ export default function App() {
   }
 
   const subProduct = selectedSubProduct
+  const productTabs = ['xinerong', 'dingerong', 'huoerong', 'zhangerong', 'piaoerong']
+  const isProduct = productTabs.includes(activeTab)
 
   function renderContent() {
-    switch (activeTab) {
-      case 'xinerong':
-      case 'dingerong':
-      case 'huoerong':
-      case 'zhangerong':
-      case 'piaoerong':
-        return <ProductPage key={navKey} product={activeTab} subProduct={subProduct ?? undefined} />
-      case 'script':
-        return scriptParams ? (
-          <ScriptRunner scriptPath={scriptParams.scriptPath} scriptName={`${scriptParams.subProduct} - ${scriptParams.scriptName}`} vars={scriptParams.vars} />
-        ) : <TestEditor />
-      case 'editor':
-        return <TestEditor />
-      case 'reports':
-        return <Reports />
-      case 'apidebug':
-        return <ApiDebugger />
-      case 'aiassistant':
-        return <AIAssistant />
-      case 'utils':
-        return <UtilsPage />
-      case 'recorder':
-        return <VisualRecorder />
-      case 'apirecorder':
-        return <ApiRecorder />
-    }
+    return (
+      <>
+        {/* ===== 产品页：按产品切换时重挂载获取新数据 ===== */}
+        {isProduct && (
+          <ProductPage key={navKey} product={activeTab} subProduct={subProduct ?? undefined} />
+        )}
+
+        {/* ===== 脚本运行页 ===== */}
+        {activeTab === 'script' && (
+          scriptParams ? (
+            <ScriptRunner scriptPath={scriptParams.scriptPath} scriptName={`${scriptParams.subProduct} - ${scriptParams.scriptName}`} vars={scriptParams.vars} />
+          ) : (
+            <TestEditor key={tabKey('editor')} />
+          )
+        )}
+
+        {/* ===== 以下页面惰性挂载 + display 切换，切换 tab 不丢状态 ===== */}
+        {mountedTabs.has('editor') && activeTab !== 'script' && (
+          <div style={{ display: activeTab === 'editor' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <TestEditor key={tabKey('editor')} />
+          </div>
+        )}
+        {mountedTabs.has('reports') && (
+          <div style={{ display: activeTab === 'reports' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <Reports key={tabKey('reports')} />
+          </div>
+        )}
+        {mountedTabs.has('apidebug') && (
+          <div style={{ display: activeTab === 'apidebug' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <ApiDebugger key={tabKey('apidebug')} />
+          </div>
+        )}
+        {mountedTabs.has('aiassistant') && (
+          <div style={{ display: activeTab === 'aiassistant' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <AIAssistant key={tabKey('aiassistant')} />
+          </div>
+        )}
+        {mountedTabs.has('utils') && (
+          <div style={{ display: activeTab === 'utils' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <UtilsPage key={tabKey('utils')} />
+          </div>
+        )}
+        {mountedTabs.has('recorder') && (
+          <div style={{ display: activeTab === 'recorder' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <VisualRecorder key={tabKey('recorder')} />
+          </div>
+        )}
+        {mountedTabs.has('apirecorder') && (
+          <div style={{ display: activeTab === 'apirecorder' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <ApiRecorder key={tabKey('apirecorder')} />
+          </div>
+        )}
+      </>
+    )
   }
 
   return (
     <div className="flex h-full">
       <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
-      <main key={navKey} className="flex-1 overflow-hidden animate-fade-in">
+      <main className="flex-1 overflow-hidden animate-fade-in">
         {renderContent()}
       </main>
       {showAISettings && (
