@@ -62,14 +62,15 @@ export default function App() {
   const productTabs = ['xinerong', 'dingerong', 'huoerong', 'zhangerong', 'piaoerong']
   const isProduct = productTabs.includes(activeTab)
 
-  // 通用层样式：绝对定位叠放，用 opacity 切换实现过渡动画
+  // 通用层样式：绝对定位叠放，opacity+transform 过渡实现切换动画
   const layerStyle = (name: string): React.CSSProperties => ({
     position: 'absolute',
     inset: 0,
     opacity: activeTab === name ? 1 : 0,
+    transform: activeTab === name ? 'translateX(0)' : 'translateX(24px)',
     zIndex: activeTab === name ? 10 : 0,
     pointerEvents: activeTab === name ? 'auto' : 'none',
-    transition: 'opacity 0.2s ease-out',
+    transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
   })
 
   function renderContent() {
