@@ -98,7 +98,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   navKey: 0,
   navigateTo: (tab, sub) => set(s => ({
-    navKey: s.navKey + 1,
+    // 同标签点击时递增 navKey 触发刷新，切换不同标签时不递增保持状态
+    navKey: s.activeTab === tab ? s.navKey + 1 : s.navKey,
     activeTab: tab,
     selectedSubProduct: sub ?? null,
   })),

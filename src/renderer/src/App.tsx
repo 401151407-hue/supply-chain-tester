@@ -80,7 +80,7 @@ export default function App() {
   return (
     <div className="flex h-full">
       <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
-      <main className="flex-1 overflow-hidden animate-fade-in">
+      <main key={navKey} className="flex-1 overflow-hidden animate-fade-in">
         {renderContent()}
       </main>
       {showAISettings && (
