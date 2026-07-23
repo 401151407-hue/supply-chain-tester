@@ -175,31 +175,35 @@ export function UtilsPage() {
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e
     const activePath = active.id as string
+    const srcGroup = scriptGroupMap[activePath] || 'default'
 
-    // 同组内排序
-    if (over && active.id !== over.id) {
-      const srcG = scriptGroupMap[activePath] || 'default'
-      const dstG = scriptGroupMap[over.id as string] || 'default'
-      if (srcG === dstG) {
-        setScripts(prev => {
-          const oldIndex = prev.findIndex(s => s.path === active.id)
-          const newIndex = prev.findIndex(s => s.path === over.id)
-          if (oldIndex < 0 || newIndex < 0) return prev
-          const next = arrayMove(prev, oldIndex, newIndex)
-          localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(next.map(s => s.path)))
-          return next
-        })
-        return
-      }
+    // 确定目标分组：优先用 over（精确），其次用鼠标坐标
+    let targetGroup: string | null = null
+    if (over) {
+      targetGroup = scriptGroupMap[over.id as string] || 'default'
+    }
+    if (!targetGroup) {
+      targetGroup = findGroupAt(pointerRef.current.y)
     }
 
-    // 跨组移动：用鼠标坐标判定目标分组
-    const targetGroup = findGroupAt(pointerRef.current.y)
-    const srcGroup = scriptGroupMap[activePath] || 'default'
+    // 跨组移动
     if (targetGroup && targetGroup !== srcGroup) {
       const newMap = { ...scriptGroupMap, [activePath]: targetGroup }
       setScriptGroupMap(newMap)
       localStorage.setItem(GROUP_MAP_STORAGE_KEY, JSON.stringify(newMap))
+      return
+    }
+
+    // 同组内排序
+    if (over && active.id !== over.id) {
+      setScripts(prev => {
+        const oldIndex = prev.findIndex(s => s.path === active.id)
+        const newIndex = prev.findIndex(s => s.path === over.id)
+        if (oldIndex < 0 || newIndex < 0) return prev
+        const next = arrayMove(prev, oldIndex, newIndex)
+        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(next.map(s => s.path)))
+        return next
+      })
     }
   }
 
