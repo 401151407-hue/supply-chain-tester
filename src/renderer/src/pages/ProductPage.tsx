@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useAppStore } from '../store'
-import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2, X, RotateCcw } from 'lucide-react'
+import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2, X, RotateCcw, Edit2 } from 'lucide-react'
 
 interface ScriptVar {
   key: string
@@ -64,6 +64,112 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
   const prevEnvRef = useRef(env)
   // 跟踪动画定时器，避免快速切换导致动画卡住
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ———————————— 脚本分组 ————————————
+  interface Group { id: string; name: string }
+  const GROUP_STORAGE_KEY = `script-groups-${product}-${subProduct || ''}`
+  const [groups, setGroups] = useState<Group[]>(() => {
+    try {
+      const saved = localStorage.getItem(GROUP_STORAGE_KEY)
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return [{ id: 'default', name: '默认分组' }]
+  })
+  const [scriptGroupMap, setScriptGroupMap] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem(GROUP_STORAGE_KEY + '-map')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return {}
+  })
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+  const [editGroupName, setEditGroupName] = useState('')
+  const [dragScript, setDragScript] = useState<string | null>(null)
+
+  // 持久化分组
+  const persistGroups = useCallback((g: Group[], m: Record<string, string>) => {
+    setGroups(g)
+    setScriptGroupMap(m)
+    localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(g))
+    localStorage.setItem(GROUP_STORAGE_KEY + '-map', JSON.stringify(m))
+  }, [GROUP_STORAGE_KEY])
+
+  // 给新脚本自动分配分组
+  const ensureScriptGroup = useCallback((scriptPath: string, currentMap: Record<string, string>, currentGroups: Group[]) => {
+    if (currentMap[scriptPath]) return currentMap
+    const defaultGroup = currentGroups[0]?.id || 'default'
+    return { ...currentMap, [scriptPath]: defaultGroup }
+  }, [])
+
+  // 当脚本列表变化时，确保所有脚本都有分组
+  const allFlatScripts = scripts.flatMap(s => s.scripts.map(sc => ({ ...sc, subProduct: s.subProduct })))
+  useEffect(() => {
+    let map = { ...scriptGroupMap }
+    let changed = false
+    for (const s of allFlatScripts) {
+      if (!map[s.path]) {
+        map[s.path] = groups[0]?.id || 'default'
+        changed = true
+      }
+    }
+    if (changed) persistGroups(groups, map)
+  }, [allFlatScripts.length])
+
+  function handleDragStart(e: React.DragEvent, scriptPath: string) {
+    setDragScript(scriptPath)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', scriptPath)
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  function handleDrop(e: React.DragEvent, targetGroupId: string) {
+    e.preventDefault()
+    const scriptPath = dragScript || e.dataTransfer.getData('text/plain')
+    if (!scriptPath) return
+    const newMap = { ...scriptGroupMap, [scriptPath]: targetGroupId }
+    persistGroups(groups, newMap)
+    setDragScript(null)
+  }
+
+  function handleAddGroup() {
+    const newId = `group-${Date.now()}`
+    const newGroup: Group = { id: newId, name: `新分组 ${groups.length + 1}` }
+    persistGroups([...groups, newGroup], scriptGroupMap)
+  }
+
+  function startRename(groupId: string, currentName: string) {
+    setEditingGroupId(groupId)
+    setEditGroupName(currentName)
+  }
+
+  function finishRename(groupId: string) {
+    if (editGroupName.trim()) {
+      const newGroups = groups.map(g => g.id === groupId ? { ...g, name: editGroupName.trim() } : g)
+      persistGroups(newGroups, scriptGroupMap)
+    }
+    setEditingGroupId(null)
+    setEditGroupName('')
+  }
+
+  function handleDeleteGroup(groupId: string) {
+    if (groups.length <= 1) return
+    const defaultId = groups[0].id === groupId ? groups[1]?.id || 'default' : groups[0].id
+    const newMap = { ...scriptGroupMap }
+    for (const key of Object.keys(newMap)) {
+      if (newMap[key] === groupId) newMap[key] = defaultId
+    }
+    const newGroups = groups.filter(g => g.id !== groupId)
+    persistGroups(newGroups, newMap)
+  }
+
+  // 分组下的脚本（按 scripts 原始顺序排列）
+  function getGroupScripts(groupId: string) {
+    return allFlatScripts.filter(s => (scriptGroupMap[s.path] || groups[0]?.id) === groupId)
+  }
 
   useEffect(() => {
     // 在当前 effect 中同步检测 env 变化（即使上次被取消也能正确检测）
@@ -227,45 +333,124 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
         ) : (
           <div className="flex h-full overflow-hidden animate-fade-in">
             <div className="flex-1 overflow-y-auto p-6">
-              {scripts.map(sub => (
-                <div key={sub.subProduct} className="mb-8">
-                  {sub.scripts.map((s, i) => (
-                    <div key={s.name} className="relative flex items-start">
-                      {i < sub.scripts.length - 1 && (
-                        <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-accent/30" />
-                      )}
-                      <button
-                        onClick={e => {
-                          if (e.ctrlKey || e.metaKey) {
-                            e.preventDefault()
-                            const api = (window as any).supplyChainTester
-                            api?.openPath?.(s.path)
-                            return
-                          }
-                          handleRun(s.name, s.path)
-                        }}
-                        className="relative z-10 flex items-center gap-4 w-full mb-3 p-4 rounded-xl
-                                   border border-border/5 bg-surface-light
-                                   hover:bg-accent/10 hover:border-accent/30
-                                   transition-all text-left group"
-                        title="点击运行 · Ctrl+点击打开文件"
-                      >
-                        <span className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center
-                                         text-accent-light text-xs font-bold shrink-0
-                                         group-hover:bg-accent group-hover:text-foreground transition-colors">
-                          {i + 1}
+              {/* 分组列表 */}
+              {groups.map(group => {
+                const groupScripts = getGroupScripts(group.id)
+                return (
+                  <div
+                    key={group.id}
+                    className="mb-6"
+                    onDragOver={handleDragOver}
+                    onDrop={e => handleDrop(e, group.id)}
+                  >
+                    {/* 分组头 — 浅浅的分隔线 + 可编辑名称 */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="flex-1 h-px bg-border/20" />
+                      {editingGroupId === group.id ? (
+                        <input
+                          autoFocus
+                          value={editGroupName}
+                          onChange={e => setEditGroupName(e.target.value)}
+                          onBlur={() => finishRename(group.id)}
+                          onKeyDown={e => { if (e.key === 'Enter') finishRename(group.id); if (e.key === 'Escape') setEditingGroupId(null) }}
+                          className="text-xs font-medium text-muted bg-transparent border-b border-accent/50 outline-none px-1 text-center min-w-[80px]"
+                        />
+                      ) : (
+                        <span className="group/name flex items-center gap-1">
+                        <span
+                          className="text-xs font-medium text-muted cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap"
+                          onDoubleClick={() => startRename(group.id, group.name)}
+                          title="双击修改分组名称"
+                        >
+                          {group.name}
                         </span>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-foreground group-hover:text-accent-light transition-colors">
-                            {s.name}
-                          </span>
-                        </div>
-                        <Play size={16} className="text-muted group-hover:text-accent-light transition-colors shrink-0" />
-                      </button>
+                        {groups.length > 1 && group.id !== groups[0].id && (
+                          <button
+                            onClick={() => handleDeleteGroup(group.id)}
+                            className="text-muted/40 hover:text-red-400 transition-opacity opacity-0 group-hover/name:opacity-100"
+                            title="删除分组，脚本移回默认分组"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                        </span>
+                      )}
+                      <div className="flex-1 h-px bg-border/20" />
+                      {groups.length > 1 && groupScripts.length === 0 && (
+                        <span className="text-[10px] text-muted/50 italic">拖入脚本</span>
+                      )}
                     </div>
-                  ))}
+
+                    {/* 分组内脚本 */}
+                    {groupScripts.length === 0 && groups.length === 1 ? (
+                      <div className="text-center text-muted/40 text-xs py-4">暂无脚本</div>
+                    ) : (
+                      groupScripts.map((s, i) => (
+                        <div key={s.path} className="relative flex items-start">
+                          {i < groupScripts.length - 1 && (
+                            <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-accent/30" />
+                          )}
+                          <button
+                            draggable
+                            onDragStart={e => handleDragStart(e, s.path)}
+                            onDragEnd={() => setDragScript(null)}
+                            onClick={e => {
+                              if (e.ctrlKey || e.metaKey) {
+                                e.preventDefault()
+                                const api = (window as any).supplyChainTester
+                                api?.openPath?.(s.path)
+                                return
+                              }
+                              handleRun(s.name, s.path)
+                            }}
+                            className={
+                              `relative z-10 flex items-center gap-4 w-full mb-3 p-4 rounded-xl
+                               border border-border/5 bg-surface-light
+                               hover:bg-accent/10 hover:border-accent/30
+                               transition-all text-left group
+                               ${dragScript === s.path ? 'opacity-50 scale-95' : ''}`
+                            }
+                            title="点击运行 · Ctrl+点击打开文件 · 拖拽到其他分组"
+                          >
+                            <span className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center
+                                             text-accent-light text-xs font-bold shrink-0
+                                             group-hover:bg-accent group-hover:text-foreground transition-colors">
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-foreground group-hover:text-accent-light transition-colors">
+                                {s.name}
+                              </span>
+                            </div>
+                            <Play size={16} className="text-muted group-hover:text-accent-light transition-colors shrink-0" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* 添加分组按钮 */}
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={handleAddGroup}
+                  className="text-xs text-muted hover:text-foreground transition-colors flex items-center gap-1 py-1 px-3 rounded hover:bg-surface-light"
+                >
+                  + 添加分组
+                </button>
+              </div>
+
+              {/* 无分组脚本兜底 */}
+              {allFlatScripts.filter(s => !scriptGroupMap[s.path]).length > 0 && groups.length > 0 && (
+                <div
+                  className="mb-6"
+                  onDragOver={handleDragOver}
+                  onDrop={e => handleDrop(e, groups[0].id)}
+                >
+                  <p className="text-[10px] text-muted/50 text-center">拖拽到上方分组</p>
                 </div>
-              ))}
+              )}
             </div>
 
             {/* 右侧变量面板 */}
