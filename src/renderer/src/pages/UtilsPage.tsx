@@ -177,13 +177,12 @@ export function UtilsPage() {
     const activePath = active.id as string
     const srcGroup = scriptGroupMap[activePath] || 'default'
 
-    // 确定目标分组：优先用 over（精确），其次用鼠标坐标
-    let targetGroup: string | null = null
-    if (over) {
-      targetGroup = scriptGroupMap[over.id as string] || 'default'
-    }
-    if (!targetGroup) {
-      targetGroup = findGroupAt(pointerRef.current.y)
+    // 确定目标分组：over 优先，但也要用坐标验证（防止 over 指向同组时误判）
+    let targetGroup = over ? (scriptGroupMap[over.id as string] || 'default') : null
+    const coordGroup = findGroupAt(pointerRef.current.y)
+    // 如果坐标指向不同分组（如空分组），以坐标为准
+    if (coordGroup && coordGroup !== srcGroup) {
+      targetGroup = coordGroup
     }
 
     // 跨组移动
