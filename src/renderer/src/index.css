@@ -229,6 +229,17 @@ body {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ———— 分组删除过渡动画 ———— */
+@keyframes groupExit {
+  0%   { opacity: 1; transform: scaleY(1); max-height: 600px; }
+  100% { opacity: 0; transform: scaleY(0.8); max-height: 0; margin-top: 0; margin-bottom: 0; }
+}
+.animate-group-exit {
+  animation: groupExit 0.25s ease-in forwards;
+  overflow: hidden;
+  transform-origin: top;
+}
+
 /* Tab 切换左右滑入动画 */
 @keyframes slideInRight {
   from { opacity: 0; transform: translateX(60px); }

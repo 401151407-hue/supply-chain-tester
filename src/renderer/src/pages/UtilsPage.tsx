@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import React, { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useAppStore } from '../store'
 import { Wrench, Loader2, Play, Square, Terminal, Trash2, Search, Database, Eraser, HelpCircle, X } from 'lucide-react'
 import { highlightOutput } from '../utils/highlight'
@@ -41,6 +41,10 @@ export function UtilsPage() {
   const outputContainerRef = useRef<HTMLDivElement>(null)
   const unsubRef = useRef<(() => void) | null>(null)
 
+  // FLIP 动画：记录脚本卡片位置
+  const flipRectsRef = useRef<Map<string, DOMRect>>(new Map())
+  const flipPendingRef = useRef(false)
+
   // 变量输入
   const [projectId, setProjectId] = useState('')
   const [certNo, setCertNo] = useState('')
@@ -61,7 +65,23 @@ export function UtilsPage() {
   const [groups, setGroups] = useState<Group[]>(() => {
     try {
       const saved = localStorage.getItem(GROUP_STORAGE_KEY)
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed: Group[] = JSON.parse(saved)
+        // 清理空分组：只保留默认分组 + 有脚本归属的分组
+        const mapRaw = localStorage.getItem(GROUP_MAP_STORAGE_KEY)
+        let usedIds = new Set<string>(['default'])
+        if (mapRaw) {
+          try {
+            const map: Record<string, string> = JSON.parse(mapRaw)
+            Object.values(map).forEach(id => usedIds.add(id))
+          } catch {}
+        }
+        const cleaned = parsed.filter(g => usedIds.has(g.id))
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(cleaned))
+        }
+        return cleaned.length > 0 ? cleaned : [{ id: 'default', name: '默认分组' }]
+      }
     } catch {}
     return [{ id: 'default', name: '默认分组' }]
   })
@@ -74,6 +94,9 @@ export function UtilsPage() {
   })
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [editGroupName, setEditGroupName] = useState('')
+
+  // ———————————— 删除分组动画 ————————————
+  const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null)
 
   const persistGroups = useCallback((g: Group[], m: Record<string, string>) => {
     setGroups(g)
@@ -104,13 +127,33 @@ export function UtilsPage() {
 
   function handleDeleteGroup(groupId: string) {
     if (groups.length <= 1) return
+
+    // 记录所有卡片当前位置（FLIP First）
+    const cards = document.querySelectorAll<HTMLElement>('[data-script-path]')
+    flipRectsRef.current.clear()
+    cards.forEach(el => {
+      const path = el.dataset.scriptPath
+      if (path) flipRectsRef.current.set(path, el.getBoundingClientRect())
+    })
+    flipPendingRef.current = true
+
+    // 移动脚本到默认分组（触发 useLayoutEffect FLIP 动画）
     const defaultId = groups[0].id === groupId ? groups[1]?.id || 'default' : groups[0].id
     const newMap = { ...scriptGroupMap }
     for (const key of Object.keys(newMap)) {
       if (newMap[key] === groupId) newMap[key] = defaultId
     }
-    const newGroups = groups.filter(g => g.id !== groupId)
-    persistGroups(newGroups, newMap)
+    setScriptGroupMap(newMap)
+    localStorage.setItem(GROUP_MAP_STORAGE_KEY, JSON.stringify(newMap))
+
+    // 分组退出动画 + 延迟删除
+    setDeletingGroupId(groupId)
+    setTimeout(() => {
+      const newGroups = groups.filter(g => g.id !== groupId)
+      setGroups(newGroups)
+      localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(newGroups))
+      setDeletingGroupId(null)
+    }, 350)
   }
 
   function getGroupScripts(groupId: string) {
@@ -121,18 +164,60 @@ export function UtilsPage() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
+  const pointerRef = useRef({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => { pointerRef.current = { x: e.clientX, y: e.clientY } }
+    window.addEventListener('pointermove', onMove)
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [])
 
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e
+    const activePath = active.id as string
+
+    // 同组内排序
     if (over && active.id !== over.id) {
-      setScripts(prev => {
-        const oldIndex = prev.findIndex(s => s.path === active.id)
-        const newIndex = prev.findIndex(s => s.path === over.id)
-        const next = arrayMove(prev, oldIndex, newIndex)
-        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(next.map(s => s.path)))
-        return next
-      })
+      const srcG = scriptGroupMap[activePath] || 'default'
+      const dstG = scriptGroupMap[over.id as string] || 'default'
+      if (srcG === dstG) {
+        setScripts(prev => {
+          const oldIndex = prev.findIndex(s => s.path === active.id)
+          const newIndex = prev.findIndex(s => s.path === over.id)
+          if (oldIndex < 0 || newIndex < 0) return prev
+          const next = arrayMove(prev, oldIndex, newIndex)
+          localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(next.map(s => s.path)))
+          return next
+        })
+        return
+      }
     }
+
+    // 跨组移动：用鼠标坐标判定目标分组
+    const targetGroup = findGroupAt(pointerRef.current.y)
+    const srcGroup = scriptGroupMap[activePath] || 'default'
+    if (targetGroup && targetGroup !== srcGroup) {
+      const newMap = { ...scriptGroupMap, [activePath]: targetGroup }
+      setScriptGroupMap(newMap)
+      localStorage.setItem(GROUP_MAP_STORAGE_KEY, JSON.stringify(newMap))
+    }
+  }
+
+  /** 根据 Y 坐标找到所属分组 */
+  function findGroupAt(clientY: number): string | null {
+    // 收集所有分组容器位置
+    const containers = document.querySelectorAll<HTMLElement>('[data-group-id]')
+    if (containers.length === 0) return null
+    const sorted = Array.from(containers).sort((a, b) =>
+      a.getBoundingClientRect().top - b.getBoundingClientRect().top
+    )
+    // 找到 cursor 下方最近的分隔
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (clientY >= sorted[i].getBoundingClientRect().top) {
+        return sorted[i].dataset.groupId || null
+      }
+    }
+    return sorted[0]?.dataset.groupId || null
   }
 
   // 按分组排序
@@ -184,6 +269,39 @@ export function UtilsPage() {
     loadScripts()
     return () => { unsubRef.current?.() }
   }, [])
+
+  // FLIP 动画：脚本分组变化时，平滑过渡卡片位置
+  useLayoutEffect(() => {
+    if (!flipPendingRef.current || flipRectsRef.current.size === 0) return
+    flipPendingRef.current = false
+
+    const cards = document.querySelectorAll<HTMLElement>('[data-script-path]')
+    cards.forEach(el => {
+      const path = el.dataset.scriptPath
+      if (!path) return
+      const firstRect = flipRectsRef.current.get(path)
+      if (!firstRect) return
+      const lastRect = el.getBoundingClientRect()
+      const dx = firstRect.left - lastRect.left
+      const dy = firstRect.top - lastRect.top
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
+
+      // Invert: 瞬移到旧位置
+      el.style.transition = 'none'
+      el.style.transform = `translate(${dx}px, ${dy}px)`
+
+      // Play: 过渡到新位置
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+        el.style.transform = ''
+        el.addEventListener('transitionend', () => {
+          el.style.transition = ''
+          el.style.transform = ''
+        }, { once: true })
+      })
+    })
+    flipRectsRef.current.clear()
+  }, [scriptGroupMap])
 
   // 输出内容变化时自动滚动到底部
   useEffect(() => {
@@ -568,75 +686,75 @@ export function UtilsPage() {
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={sortedScripts.map(s => s.path)} strategy={rectSortingStrategy}>
                   <div className="grid grid-cols-5 gap-2">
-                    {(() => {
-                      let lastGroup = ''
-                      const rows: React.ReactNode[] = []
-                      sortedScripts.forEach(script => {
-                        const gid = scriptGroupMap[script.path] || 'default'
-                        if (gid !== lastGroup) {
-                          const group = groups.find(g => g.id === gid)
-                          if (group) {
-                            rows.push(
-                              <div key={`sep-${gid}`} className="col-span-5 flex items-center gap-3 my-2 first:mt-0">
-                                <div className="flex-1 h-px bg-border/20" />
-                                {editingGroupId === group.id ? (
-                                  <input
-                                    autoFocus
-                                    value={editGroupName}
-                                    onChange={e => setEditGroupName(e.target.value)}
-                                    onBlur={() => finishRename(group.id)}
-                                    onKeyDown={e => { if (e.key === 'Enter') finishRename(group.id); if (e.key === 'Escape') setEditingGroupId(null) }}
-                                    className="text-xs font-medium text-muted bg-transparent border-b border-accent/50 outline-none px-1 text-center min-w-[80px]"
-                                  />
-                                ) : (
-                                  <span className="group/name flex items-center gap-1">
-                                    <span
-                                      className="text-xs font-medium text-muted cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap"
-                                      onDoubleClick={() => startRename(group.id, group.name)}
-                                      title="双击修改分组名称"
-                                    >
-                                      {group.name}
-                                    </span>
-                                    {groups.length > 1 && group.id !== groups[0].id && (
-                                      <button
-                                        onClick={() => handleDeleteGroup(group.id)}
-                                        className="text-muted/40 hover:text-red-400 transition-opacity opacity-0 group-hover/name:opacity-100"
-                                        title="删除分组"
-                                      >
-                                        <X size={14} />
-                                      </button>
-                                    )}
-                                  </span>
+                    {groups.map((group) => {
+                      const groupScripts = sortedScripts.filter(s => (scriptGroupMap[s.path] || 'default') === group.id)
+                      const isDeleting = deletingGroupId === group.id
+                      return (
+                        <React.Fragment key={group.id}>
+                          {/* 分组分隔线 */}
+                          <div data-group-id={group.id} className={`col-span-5 flex items-center gap-3 my-2 ${isDeleting ? 'animate-group-exit' : ''}`}>
+                            <div className="flex-1 h-px bg-border/20" />
+                            {editingGroupId === group.id ? (
+                              <input
+                                autoFocus
+                                value={editGroupName}
+                                onChange={e => setEditGroupName(e.target.value)}
+                                onBlur={() => finishRename(group.id)}
+                                onKeyDown={e => { if (e.key === 'Enter') finishRename(group.id); if (e.key === 'Escape') setEditingGroupId(null) }}
+                                className="text-xs font-medium text-muted bg-transparent border-b border-accent/50 outline-none px-1 text-center min-w-[80px]"
+                              />
+                            ) : (
+                              <span className="group/name flex items-center gap-1">
+                                <span
+                                  className="text-xs font-medium text-muted cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap"
+                                  onDoubleClick={() => startRename(group.id, group.name)}
+                                  title="双击修改分组名称"
+                                >
+                                  {group.name}
+                                </span>
+                                {groups.length > 1 && group.id !== groups[0].id && (
+                                  <button
+                                    onClick={() => handleDeleteGroup(group.id)}
+                                    className="text-muted/40 hover:text-red-400 transition-opacity opacity-0 group-hover/name:opacity-100"
+                                    title="删除分组"
+                                  >
+                                    <X size={14} />
+                                  </button>
                                 )}
-                                <div className="flex-1 h-px bg-border/20" />
-                              </div>
-                            )
-                          }
-                          lastGroup = gid
-                        }
-                        rows.push(
-                          <SortableScriptCard
-                            key={script.path}
-                            script={script}
-                            isActive={activeScript?.path === script.path}
-                            isRunning={isRunning}
-                            onRun={handleRunScript}
-                          />
-                        )
-                      })
-                      return rows
-                    })()}
+                              </span>
+                            )}
+                            <div className="flex-1 h-px bg-border/20" />
+                          </div>
+                          {/* 空分组占位 */}
+                          {groupScripts.length === 0 && !isDeleting && (
+                            <div className="col-span-5 text-center py-6 text-[11px] text-muted/40 border-2 border-dashed border-border/10 rounded-lg select-none">
+                              拖拽脚本到此分组
+                            </div>
+                          )}
+                          {/* 脚本卡片 */}
+                          {groupScripts.map(script => (
+                            <SortableScriptCard
+                              key={script.path}
+                              script={script}
+                              isActive={activeScript?.path === script.path}
+                              isRunning={isRunning}
+                              onRun={handleRunScript}
+                            />
+                          ))}
+                        </React.Fragment>
+                      )
+                    })}
                   </div>
                 </SortableContext>
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={handleAddGroup}
+                    className="text-xs text-muted hover:text-foreground transition-colors flex items-center gap-1 py-1 px-3 rounded hover:bg-surface-light"
+                  >
+                    + 添加分组
+                  </button>
+                </div>
               </DndContext>
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={handleAddGroup}
-                  className="text-xs text-muted hover:text-foreground transition-colors flex items-center gap-1 py-1 px-3 rounded hover:bg-surface-light"
-                >
-                  + 添加分组
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -761,7 +879,6 @@ export function UtilsPage() {
   )
 }
 
-/** 可拖拽排序的脚本卡片 */
 function SortableScriptCard({ script, isActive, isRunning, onRun }: {
   script: ScriptItem
   isActive: boolean
@@ -788,6 +905,7 @@ function SortableScriptCard({ script, isActive, isRunning, onRun }: {
     <button
       ref={setNodeRef}
       style={style}
+      data-script-path={script.path}
       {...attributes}
       {...listeners}
       onClick={e => {
