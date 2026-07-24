@@ -702,6 +702,96 @@
 			"type": "shell",
 			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m 'chore: 杂项更新' && npm version patch && git push origin master && git push gitee master && git push origin --tags && git push gitee --tags",
 			"isBackground": false
+		},
+		{
+			"label": "kill-dev",
+			"type": "shell",
+			"command": "pkill -f \"electron\" 2>/dev/null; pkill -f \"vite\" 2>/dev/null; sleep 2 && echo \"已清理\"",
+			"isBackground": false
+		},
+		{
+			"label": "start-dev",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "clean-rebuild",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; pkill -f vite 2>/dev/null; sleep 1 && rm -rf out node_modules/.vite && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "git-log",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git log --oneline -10",
+			"isBackground": false
+		},
+		{
+			"label": "git-show",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git show f1c5945 --stat",
+			"isBackground": false
+		},
+		{
+			"label": "git-diff-check",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git diff HEAD~5 -- src/renderer/src/pages/ProductPage.tsx src/renderer/src/store/index.ts src/renderer/src/App.tsx | head -100",
+			"isBackground": false
+		},
+		{
+			"label": "check-scripts",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && ls -la test-suites/信e融/ 2>/dev/null && echo '---' && find test-suites/信e融 -name '*.py' 2>/dev/null",
+			"isBackground": false
+		},
+		{
+			"label": "git-log2",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git log --all --oneline -- src/preload/index.ts src/main/index.ts | head -10",
+			"isBackground": false
+		},
+		{
+			"label": "restart-dev",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "restart-dev2",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "restart-dev",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "restart-dev3",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "restart-dev4",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "restart-final",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "git-commit-push",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m \"feat: traceId导入支持实时查询+自定义系统选择弹窗; 修复ProductPage缺失editingGroupId; 产品线移除分组; parseScriptVars支持current_env\" && git push origin master && git push gitee master",
+			"isBackground": false
 		}
 	]
 }

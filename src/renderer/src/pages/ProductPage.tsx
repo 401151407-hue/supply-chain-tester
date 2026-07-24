@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useAppStore } from '../store'
-import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Settings, ChevronDown, Trash2, X, RotateCcw, Edit2 } from 'lucide-react'
+import { Play, Package, Shield, ClipboardList, Truck, Receipt, ScrollText, Trash2, X, RotateCcw, Edit2 } from 'lucide-react'
 import {
   DndContext,
   rectIntersection,
@@ -9,8 +9,6 @@ import {
   useSensors,
   DragEndEvent,
   DragStartEvent,
-  DragOverEvent,
-  useDroppable,
   DragOverlay,
 } from '@dnd-kit/core'
 import {
@@ -84,132 +82,22 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
   // 跟踪动画定时器，避免快速切换导致动画卡住
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ———————————— 脚本分组 ————————————
-  interface Group { id: string; name: string }
-  const GROUP_STORAGE_KEY = `script-groups-${product}-${subProduct || ''}`
-  const [groups, setGroups] = useState<Group[]>(() => {
-    try {
-      const saved = localStorage.getItem(GROUP_STORAGE_KEY)
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return [{ id: 'default', name: '默认分组' }]
-  })
-  const [scriptGroupMap, setScriptGroupMap] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem(GROUP_STORAGE_KEY + '-map')
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return {}
-  })
-  const [editGroupName, setEditGroupName] = useState('')
-
-  // 持久化分组
-  const persistGroups = useCallback((g: Group[], m: Record<string, string>) => {
-    setGroups(g)
-    setScriptGroupMap(m)
-    localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(g))
-    localStorage.setItem(GROUP_STORAGE_KEY + '-map', JSON.stringify(m))
-  }, [GROUP_STORAGE_KEY])
-
-  // 给新脚本自动分配分组
-  const ensureScriptGroup = useCallback((scriptPath: string, currentMap: Record<string, string>, currentGroups: Group[]) => {
-    if (currentMap[scriptPath]) return currentMap
-    const defaultGroup = currentGroups[0]?.id || 'default'
-    return { ...currentMap, [scriptPath]: defaultGroup }
-  }, [])
-
-  // 当脚本列表变化时，确保所有脚本都有分组
-  const allFlatScripts = scripts.flatMap(s => s.scripts.map(sc => ({ ...sc, subProduct: s.subProduct })))
-  useEffect(() => {
-    let map = { ...scriptGroupMap }
-    let changed = false
-    for (const s of allFlatScripts) {
-      if (!map[s.path]) {
-        map[s.path] = groups[0]?.id || 'default'
-        changed = true
-      }
-    }
-    if (changed) persistGroups(groups, map)
-  }, [allFlatScripts.length])
-
-  // ———————————— dnd-kit 跨组拖拽 ————————————
+  // ———————————— dnd-kit 排序 ————————————
   const [activeId, setActiveId] = useState<string | null>(null)
-  const activeGroupRef = useRef<string>('default')
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
 
   function handleDndDragStart(e: DragStartEvent) {
     setActiveId(e.active.id as string)
-    activeGroupRef.current = scriptGroupMap[e.active.id as string] || 'default'
-  }
-
-  function handleDndDragOver(e: DragOverEvent) {
-    const { active, over } = e
-    if (!over) return
-    const srcGroup = activeGroupRef.current
-    const overId = over.id as string
-    if (overId.startsWith('group-')) {
-      const dstGroup = overId.replace('group-', '')
-      if (srcGroup !== dstGroup) {
-        const newMap = { ...scriptGroupMap, [active.id as string]: dstGroup }
-        setScriptGroupMap(newMap)
-        activeGroupRef.current = dstGroup
-      }
-    }
   }
 
   function handleDndDragEnd(e: DragEndEvent) {
     setActiveId(null)
-    const { active, over } = e
-    if (!over) return
-
-    const overId = over.id as string
-
-    // 跨组移动：已在 onDragOver 中处理，此处仅持久化
-    if (overId.startsWith('group-')) {
-      localStorage.setItem(GROUP_STORAGE_KEY + '-map', JSON.stringify(scriptGroupMap))
-      return
-    }
-
-    // 同组内排序（目前 ProductPage 不需要脚本级别的排序，仅做占位）
   }
 
-  function handleAddGroup() {
-    const newId = `group-${Date.now()}`
-    const newGroup: Group = { id: newId, name: `新分组 ${groups.length + 1}` }
-    persistGroups([...groups, newGroup], scriptGroupMap)
-  }
-
-  function startRename(groupId: string, currentName: string) {
-    setEditingGroupId(groupId)
-    setEditGroupName(currentName)
-  }
-
-  function finishRename(groupId: string) {
-    if (editGroupName.trim()) {
-      const newGroups = groups.map(g => g.id === groupId ? { ...g, name: editGroupName.trim() } : g)
-      persistGroups(newGroups, scriptGroupMap)
-    }
-    setEditingGroupId(null)
-    setEditGroupName('')
-  }
-
-  function handleDeleteGroup(groupId: string) {
-    if (groups.length <= 1) return
-    const defaultId = groups[0].id === groupId ? groups[1]?.id || 'default' : groups[0].id
-    const newMap = { ...scriptGroupMap }
-    for (const key of Object.keys(newMap)) {
-      if (newMap[key] === groupId) newMap[key] = defaultId
-    }
-    const newGroups = groups.filter(g => g.id !== groupId)
-    persistGroups(newGroups, newMap)
-  }
-
-  // 分组下的脚本（按 scripts 原始顺序排列）
-  function getGroupScripts(groupId: string) {
-    return allFlatScripts.filter(s => (scriptGroupMap[s.path] || groups[0]?.id) === groupId)
-  }
+  // 所有脚本扁平列表
+  const allFlatScripts = scripts.flatMap(s => s.scripts.map(sc => ({ ...sc, subProduct: s.subProduct })))
 
   useEffect(() => {
     // 在当前 effect 中同步检测 env 变化（即使上次被取消也能正确检测）
@@ -372,78 +260,23 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
           </div>
         ) : (
           <div className="flex h-full overflow-hidden animate-fade-in">
-            <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDndDragStart} onDragOver={handleDndDragOver} onDragEnd={handleDndDragEnd}>
+            <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDndDragStart} onDragEnd={handleDndDragEnd}>
             <div className="flex-1 overflow-y-auto p-6">
-              {/* 分组列表 */}
-              {groups.map(group => {
-                const groupScripts = getGroupScripts(group.id)
-                const groupPaths = groupScripts.map(s => s.path)
-                return (
-                  <GroupContainer key={group.id} groupId={group.id} className="mb-6">
-                    {/* 分组头 — 浅浅的分隔线 + 可编辑名称 */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="flex-1 h-px bg-border/20" />
-                      {editingGroupId === group.id ? (
-                        <input
-                          autoFocus
-                          value={editGroupName}
-                          onChange={e => setEditGroupName(e.target.value)}
-                          onBlur={() => finishRename(group.id)}
-                          onKeyDown={e => { if (e.key === 'Enter') finishRename(group.id); if (e.key === 'Escape') setEditingGroupId(null) }}
-                          className="text-xs font-medium text-muted bg-transparent border-b border-accent/50 outline-none px-1 text-center min-w-[80px]"
-                        />
-                      ) : (
-                        <span className="group/name flex items-center gap-1">
-                          <span
-                            className="text-xs font-medium text-muted cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap"
-                            onDoubleClick={() => startRename(group.id, group.name)}
-                            title="双击修改分组名称"
-                          >
-                            {group.name}
-                          </span>
-                          {groups.length > 1 && group.id !== groups[0].id && (
-                            <button
-                              onClick={() => handleDeleteGroup(group.id)}
-                              className="text-muted/40 hover:text-red-400 transition-opacity opacity-0 group-hover/name:opacity-100"
-                              title="删除分组，脚本移回默认分组"
-                            >
-                              <X size={14} />
-                            </button>
-                          )}
-                        </span>
-                      )}
-                      <div className="flex-1 h-px bg-border/20" />
-                    </div>
-
-                    {/* 分组内脚本 */}
-                    <SortableContext items={groupPaths} strategy={verticalListSortingStrategy}>
-                      {groupScripts.length === 0 && groups.length === 1 ? (
-                        <div className="text-center text-muted/40 text-xs py-4">暂无脚本</div>
-                      ) : groupScripts.length === 0 ? (
-                        <p className="text-center text-muted/40 text-xs py-4">拖入脚本</p>
-                      ) : (
-                        groupScripts.map((s, i) => (
-                          <SortableScriptCard
-                            key={s.path}
-                            script={s}
-                            index={i}
-                            isLast={i === groupScripts.length - 1}
-                            onRun={handleRun}
-                          />
-                        ))
-                      )}
-                    </SortableContext>
-                  </GroupContainer>
-                )
-              })}
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={handleAddGroup}
-                  className="text-xs text-muted hover:text-foreground transition-colors flex items-center gap-1 py-1 px-3 rounded hover:bg-surface-light"
-                >
-                  + 添加分组
-                </button>
-              </div>
+              <SortableContext items={allFlatScripts.map(s => s.path)} strategy={verticalListSortingStrategy}>
+                {allFlatScripts.length === 0 ? (
+                  <div className="text-center text-muted/40 text-xs py-4">暂无脚本</div>
+                ) : (
+                  allFlatScripts.map((s, i) => (
+                    <SortableScriptCard
+                      key={s.path}
+                      script={s}
+                      index={i}
+                      isLast={i === allFlatScripts.length - 1}
+                      onRun={handleRun}
+                    />
+                  ))
+                )}
+              </SortableContext>
             </div>
             <DragOverlay>
               {activeId ? (
@@ -624,16 +457,6 @@ function SortableScriptCard({ script, index, isLast, onRun }: {
         </div>
         <Play size={16} className="text-muted group-hover:text-accent-light transition-colors shrink-0" />
       </button>
-    </div>
-  )
-}
-
-// 可拖放分组容器
-function GroupContainer({ groupId, children, className }: { groupId: string; children: React.ReactNode; className?: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `group-${groupId}` })
-  return (
-    <div ref={setNodeRef} className={`${className || ''} ${isOver ? 'ring-2 ring-accent/30 rounded-lg' : ''}`}>
-      {children}
     </div>
   )
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Play, Square, Trash2, Save, FolderOpen,
   ChevronUp, ChevronDown, Download, X, Wifi,
-  Globe, Clock, Camera, ArrowDown,
+  Globe, Clock, Camera, ArrowDown, Loader2,
 } from 'lucide-react'
 
 interface RecordStep {
@@ -76,6 +76,11 @@ export function ApiRecorder() {
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 })
   const [importDoneMsg, setImportDoneMsg] = useState('')
   const [importDoneFile, setImportDoneFile] = useState('')
+  // 系统选择弹窗
+  const [systemDialogVisible, setSystemDialogVisible] = useState(false)
+  const [systemDialogLoading, setSystemDialogLoading] = useState(false)
+  const [systemDialogFile, setSystemDialogFile] = useState('')
+  const [systemOptions, setSystemOptions] = useState<{ label: string; value: string }[]>([])
   const lastClearedRef = useRef<RecordStep[]>([])
   const cleanupRef = useRef<(() => void) | null>(null)
 
@@ -393,11 +398,33 @@ export function ApiRecorder() {
       if (pick.error !== '用户取消') setStatusMsg(`❌ ${pick.error}`)
       return
     }
-    // 第二步：显示进度条，SSH 查询
+
+    // 第二步：查询可用系统列表
+    setSystemDialogLoading(true)
+    setSystemDialogVisible(true)
+    setSystemDialogFile(pick.filePath)
+    try {
+      const sysResult = await api.apirecorderListSystems()
+      if (sysResult.ok && sysResult.systems) {
+        setSystemOptions(sysResult.systems)
+      } else {
+        setSystemOptions([])
+      }
+    } catch {
+      setSystemOptions([])
+    } finally {
+      setSystemDialogLoading(false)
+    }
+  }
+
+  async function doImportTrace(targetSystem: string) {
+    setSystemDialogVisible(false)
+    const api = getApi()
+    // 显示进度条，SSH 查询
     setImportProgress({ current: 0, total: 0 })
     setIsImporting(true)
     try {
-      const result = await api.apirecorderImportTrace(pick.filePath)
+      const result = await api.apirecorderImportTrace(systemDialogFile, targetSystem)
       if (!result.ok) {
         setStatusMsg(`导入失败: ${result.error}`)
         setIsImporting(false)
@@ -767,6 +794,65 @@ export function ApiRecorder() {
           </div>
         )}
       </div>
+
+      {/* 系统选择弹窗 */}
+    {systemDialogVisible && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSystemDialogVisible(false)}>
+        <div className="bg-surface-light border border-border/20 rounded-xl p-5 w-[420px] max-h-[70vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium">🔍 选择日志系统</h3>
+            <button onClick={() => setSystemDialogVisible(false)} className="p-1 rounded-md hover:bg-hover/10 text-muted hover:text-foreground transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+          <p className="text-xs text-muted mb-3">
+            已读取 traceId 清单，请选择要查询的日志系统：
+          </p>
+          {systemDialogLoading ? (
+            <div className="flex items-center justify-center py-8 text-muted text-xs gap-2">
+              <Loader2 size={16} className="animate-spin" /> 正在查询服务器可用系统...
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto space-y-1.5 mb-3">
+              <button
+                onClick={() => doImportTrace('auto')}
+                className="w-full text-left px-3 py-2.5 rounded-lg border border-accent/30 bg-accent/10 hover:bg-accent/20 transition-colors"
+              >
+                <span className="text-sm font-medium text-accent-light">🎯 自动匹配（根据URL）</span>
+                <span className="text-[10px] text-muted block mt-0.5">按接口URL前缀自动路由到对应系统日志</span>
+              </button>
+              <button
+                onClick={() => doImportTrace('')}
+                className="w-full text-left px-3 py-2.5 rounded-lg border border-border/10 hover:bg-hover/5 transition-colors"
+              >
+                <span className="text-sm font-medium">🔎 全量搜索（较慢）</span>
+                <span className="text-[10px] text-muted block mt-0.5">遍历所有日志路径，适合不确定来源的 traceId</span>
+              </button>
+              {systemOptions.length > 0 && (
+                <div className="pt-2 border-t border-border/10 mt-2">
+                  <p className="text-[10px] text-muted mb-2 px-1">指定系统：</p>
+                  {systemOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => doImportTrace(opt.value)}
+                      className="w-full text-left px-3 py-2 rounded-lg border border-border/10 hover:bg-hover/5 transition-colors"
+                    >
+                      <span className="text-sm">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {systemOptions.length === 0 && (
+                <div className="text-center py-6">
+                  <p className="text-xs text-muted">未检测到可用系统列表</p>
+                  <p className="text-[10px] text-muted/50 mt-1">（SSH 连接失败或 log_fetcher.py 未配置）</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
 
       {/* traceId 导出 */}
     {showTraceExport && (

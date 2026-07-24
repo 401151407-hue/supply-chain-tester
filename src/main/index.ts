@@ -1101,7 +1101,7 @@ function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.APIRECORDER_IMPORT_TRACE, async (event, filePath?: string) => {
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_IMPORT_TRACE, async (event, filePath?: string, targetSystem?: string) => {
     const { dialog } = require('electron')
     const { readFileSync, writeFileSync, unlinkSync } = require('fs')
     const { execFile } = require('child_process')
@@ -1127,7 +1127,8 @@ function registerIpcHandlers(): void {
       return { ok: false, error: `JSON 解析失败: ${err.message}` }
     }
     const traceIds: string[] = jsonData.traceIds || []
-    const system = jsonData.system || ''
+    // 优先使用传入的 targetSystem，其次用 JSON 中的 system 字段
+    const system = targetSystem ?? jsonData.system ?? ''
     if (traceIds.length === 0) return { ok: false, error: '未找到 traceId' }
 
     // 构建临时输入文件
@@ -1244,6 +1245,59 @@ function registerIpcHandlers(): void {
     })
     if (result.canceled || result.filePaths.length === 0) return { ok: false, error: '用户取消' }
     return { ok: true, filePath: result.filePaths[0] }
+  })
+
+  // 实时 SSH 查询服务器上可用的日志系统列表
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_LIST_SYSTEMS, async () => {
+    const { execFileSync } = require('child_process')
+    try {
+      const scriptsDir = getScriptsDir()
+      const pythonPath = getPythonPath()
+      const fetcherPath = join(scriptsDir, 'utils', 'log_fetcher.py')
+      if (!existsSync(fetcherPath)) throw new Error('log_fetcher.py not found')
+
+      const pythonEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' }
+      const pathParts: string[] = [scriptsDir]
+      const existing = pythonEnv.PYTHONPATH || ''
+      if (existing) pathParts.push(existing)
+      pythonEnv.PYTHONPATH = pathParts.join(require('path').delimiter)
+
+      const output = execFileSync(pythonPath, [fetcherPath, '--list-systems'], {
+        timeout: 15000,
+        env: pythonEnv,
+        encoding: 'utf-8',
+      })
+      const lines = output.trim().split('\n')
+      const jsonLine = lines[lines.length - 1]
+      const data = JSON.parse(jsonLine)
+      if (data.systems && Array.isArray(data.systems)) {
+        return { ok: true, systems: data.systems.map((s: string) => ({ label: s, value: s })) }
+      }
+      return { ok: true, systems: [] }
+    } catch (e: any) {
+      // 回退：从本地 log_fetcher.py 的 URL_TO_LOG_DIR 读取
+      try {
+        const scriptsDir = getScriptsDir()
+        const fetcherPath = join(scriptsDir, 'utils', 'log_fetcher.py')
+        if (existsSync(fetcherPath)) {
+          const { readFileSync } = require('fs')
+          const content = readFileSync(fetcherPath, 'utf-8')
+          const dirSet = new Set<string>()
+          const regex = /:\s*'([^']+-node\d+)'/g
+          let m
+          while ((m = regex.exec(content)) !== null) {
+            dirSet.add(m[1])
+          }
+          if (dirSet.size > 0) {
+            return { ok: true, systems: Array.from(dirSet).sort().map(dir => ({
+              label: dir.replace('wxsbank-', '').replace('-node01', ''),
+              value: dir,
+            }))}
+          }
+        }
+      } catch {}
+      return { ok: false, error: `查询系统列表失败: ${e.message}` }
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.RECORDER_PLAY, async (_event, steps: any[]) => {
@@ -1453,8 +1507,8 @@ function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string
         branchMatched = false
       }
 
-      // 检测 if env == 'X': 分支
-      const ifMatch = line.match(/^if\s+env\s*==\s*['"]([^'"]+)['"]/)
+      // 检测 if env == 'X': 或 if current_env == 'X': 分支
+      const ifMatch = line.match(/^if\s+(?:env|current_env)\s*==\s*['"]([^'"]+)['"]/)
       if (ifMatch) {
         ifEnvIndent = indent
         if (currentEnv) {
@@ -1463,8 +1517,8 @@ function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string
         }
         continue
       }
-      // 检测 elif env == 'X': 分支
-      const elifMatch = line.match(/^elif\s+env\s*==\s*['"]([^'"]+)['"]/)
+      // 检测 elif env == 'X': 或 elif current_env == 'X': 分支
+      const elifMatch = line.match(/^elif\s+(?:env|current_env)\s*==\s*['"]([^'"]+)['"]/)
       if (elifMatch) {
         if (currentEnv && !branchMatched) {
           skipBranch = elifMatch[1] !== currentEnv
