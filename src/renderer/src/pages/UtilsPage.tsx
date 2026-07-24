@@ -41,6 +41,39 @@ export function UtilsPage() {
   const outputContainerRef = useRef<HTMLDivElement>(null)
   const unsubRef = useRef<(() => void) | null>(null)
 
+  // 执行结果面板拖拽调整高度
+  const [outputHeight, setOutputHeight] = useState(300)
+  const isResizingRef = useRef(false)
+  const outputPanelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!isResizingRef.current) return
+      const container = outputPanelRef.current?.parentElement
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const newHeight = rect.bottom - e.clientY
+      setOutputHeight(Math.max(100, Math.min(newHeight, rect.height - 100)))
+    }
+    function onMouseUp() {
+      isResizingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
+
+  function handleResizeStart() {
+    isResizingRef.current = true
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+  }
+
   // FLIP 动画：记录脚本卡片位置
   const flipRectsRef = useRef<Map<string, DOMRect>>(new Map())
   const flipPendingRef = useRef(false)
@@ -776,7 +809,17 @@ export function UtilsPage() {
           </div>
         )}
 
-        <div className="border-t border-border/5 bg-surface-light/10 flex flex-col shrink-0" style={{ height: '45%' }}>
+        {/* 拖拽调整条 */}
+        <div
+          className="shrink-0 h-1.5 cursor-row-resize hover:bg-accent/30 transition-colors"
+          onMouseDown={handleResizeStart}
+        />
+
+        <div
+          ref={outputPanelRef}
+          className="border-t border-border/5 bg-surface-light/10 flex flex-col shrink-0"
+          style={{ height: outputHeight }}
+        >
             <div className="flex items-center gap-2 px-4 py-2 border-b border-border/5 bg-surface-light/20 shrink-0">
               <Terminal size={14} className="text-muted" />
               <span className="text-xs font-medium text-foreground truncate flex-1">执行结果</span>

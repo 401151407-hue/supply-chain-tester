@@ -678,6 +678,12 @@
 			"command": "$env:GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new'; git pull",
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "git-commit",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m 'feat: 执行结果面板支持拖拽调整高度 + 新增迭代时间表生成脚本' && git push origin master && git push gitee master",
+			"isBackground": false
 		}
 	]
 }
