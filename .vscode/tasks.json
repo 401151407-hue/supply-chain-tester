@@ -792,6 +792,24 @@
 			"type": "shell",
 			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m \"feat: traceId导入支持实时查询+自定义系统选择弹窗; 修复ProductPage缺失editingGroupId; 产品线移除分组; parseScriptVars支持current_env\" && git push origin master && git push gitee master",
 			"isBackground": false
+		},
+		{
+			"label": "build-release",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && npm version patch && git push origin master && git push gitee master && git push origin --tags && git push gitee --tags",
+			"isBackground": false
+		},
+		{
+			"label": "git-status2",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git status --short",
+			"isBackground": false
+		},
+		{
+			"label": "build-release2",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m 'chore: tasks.json' && npm version patch && git push origin master && git push gitee master && git push origin --tags && git push gitee --tags",
+			"isBackground": false
 		}
 	]
 }
