@@ -828,6 +828,42 @@
 			"type": "shell",
 			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m \"feat: Ctrl+点击导入traceId导出原始日志JSON; 提取纯净JSON+多TraceId自动补充+实时查询系统列表\" && git push origin master && git push gitee master",
 			"isBackground": false
+		},
+		{
+			"label": "restart-fix",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "replace-stepnum",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && sed -i '' 's/StepNum/step/g' \"test-suites/信e融/药师帮个人信e融2/授信.py\" && echo \"替换完成\" && grep -n 'step ' \"test-suites/信e融/药师帮个人信e融2/授信.py\" | head -20",
+			"isBackground": false
+		},
+		{
+			"label": "check-stepnum",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && grep -n 'StepNum\\|stepber\\|stepfrom' \"test-suites/信e融/药师帮个人信e融2/授信.py\" 2>/dev/null; echo '---'; python3 -c \"\nwith open('test-suites/信e融/药师帮个人信e融2/授信.py', 'r') as f:\n    for i, line in enumerate(f, 1):\n        if 'step' in line.lower() and 'step' not in line:\n            continue\n        if 'Step' in line:\n            print(f'{i}: {line.rstrip()}')\n\"",
+			"isBackground": false
+		},
+		{
+			"label": "verify-step",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && python3 -c \"\nwith open('test-suites/信e融/药师帮个人信e融2/授信.py', 'r') as f:\n    content = f.read()\n    # Check for any remaining StepNum\n    if 'StepNum' in content:\n        print('ERROR: StepNum still present')\n    else:\n        print('OK: No StepNum found')\n    # Check step definition\n    lines = content.split('\\n')\n    for i, l in enumerate(lines, 1):\n        if 'step = 0' in l:\n            print(f'Line {i}: {l.strip()}')\n            break\n\"",
+			"isBackground": false
+		},
+		{
+			"label": "replace-dangqianbushu",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && sed -i '' 's/dangqianbushu/step/g' \"test-suites/common/特殊提额.py\" && echo \"替换完成\" && grep -n 'step' \"test-suites/common/特殊提额.py\" | head -20",
+			"isBackground": false
+		},
+		{
+			"label": "git-commit-final",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m \"chore: 脚本优化 — StepNum统一改step, 授信脚本环境分支, 特殊提额步骤变量统一, 测试日报按部门过滤\" && git push origin master && git push gitee master",
+			"isBackground": false
 		}
 	]
 }
