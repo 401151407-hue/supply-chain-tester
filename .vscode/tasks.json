@@ -684,6 +684,24 @@
 			"type": "shell",
 			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m 'feat: 执行结果面板支持拖拽调整高度 + 新增迭代时间表生成脚本' && git push origin master && git push gitee master",
 			"isBackground": false
+		},
+		{
+			"label": "build-release",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && npm version patch && git push origin master && git push gitee master && git push origin --tags && git push gitee --tags",
+			"isBackground": false
+		},
+		{
+			"label": "git-status",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git status --short",
+			"isBackground": false
+		},
+		{
+			"label": "release",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m 'chore: 杂项更新' && npm version patch && git push origin master && git push gitee master && git push origin --tags && git push gitee --tags",
+			"isBackground": false
 		}
 	]
 }
