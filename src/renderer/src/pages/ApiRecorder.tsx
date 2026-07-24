@@ -81,6 +81,7 @@ export function ApiRecorder() {
   const [systemDialogLoading, setSystemDialogLoading] = useState(false)
   const [systemDialogFile, setSystemDialogFile] = useState('')
   const [systemOptions, setSystemOptions] = useState<{ label: string; value: string }[]>([])
+  const rawModeRef = useRef(false)
   const lastClearedRef = useRef<RecordStep[]>([])
   const cleanupRef = useRef<(() => void) | null>(null)
 
@@ -387,7 +388,7 @@ export function ApiRecorder() {
     return code
   }
 
-  async function importTrace() {
+  async function importTrace(rawMode = false) {
     const api = getApi()
     if (!api?.apirecorderPickFile || !api?.apirecorderImportTrace) {
       setStatusMsg('❌ 导入功能不可用，请重启应用'); return
@@ -398,6 +399,8 @@ export function ApiRecorder() {
       if (pick.error !== '用户取消') setStatusMsg(`❌ ${pick.error}`)
       return
     }
+
+    rawModeRef.current = rawMode
 
     // 第二步：查询可用系统列表
     setSystemDialogLoading(true)
@@ -420,11 +423,32 @@ export function ApiRecorder() {
   async function doImportTrace(targetSystem: string) {
     setSystemDialogVisible(false)
     const api = getApi()
+    const raw = rawModeRef.current
     // 显示进度条，SSH 查询
     setImportProgress({ current: 0, total: 0 })
     setIsImporting(true)
     try {
-      const result = await api.apirecorderImportTrace(systemDialogFile, targetSystem)
+      const result = await api.apirecorderImportTrace(systemDialogFile, targetSystem, raw)
+      if (!result.ok) {
+        setStatusMsg(`导入失败: ${result.error}`)
+        setIsImporting(false)
+        return
+      }
+
+      // 原始日志模式：保存为 .txt
+      if (raw && result.raw) {
+        const now = new Date()
+        const fn = `trace_raw_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.log`
+        try {
+          await api.writeFile(`test-suites/common/${fn}`, result.raw)
+          setImportDoneFile(fn)
+          setImportDoneMsg(`原始日志已保存 (${result.raw.split('\\n').length} 行)`)
+        } catch (err: any) {
+          setStatusMsg(`❌ 保存失败: ${err.message}`)
+        }
+        setTimeout(() => { setIsImporting(false); setImportDoneMsg(''); setImportDoneFile('') }, 3000)
+        return
+      }
       if (!result.ok) {
         setStatusMsg(`导入失败: ${result.error}`)
         setIsImporting(false)
@@ -715,8 +739,9 @@ export function ApiRecorder() {
             className="w-full py-1.5 text-[11px] bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 rounded-md disabled:opacity-30">
             📤 导出traceId
           </button>
-          <button onClick={importTrace}
-            className="w-full py-1.5 text-[11px] bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-md">
+          <button onClick={(e) => importTrace(e.ctrlKey || e.metaKey)}
+            className="w-full py-1.5 text-[11px] bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-md"
+            title="点击：解析成Python脚本 | Ctrl+点击：导出原始日志">
             📥 导入并解析traceId
           </button>
         </div>

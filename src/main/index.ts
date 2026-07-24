@@ -1101,7 +1101,7 @@ function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.APIRECORDER_IMPORT_TRACE, async (event, filePath?: string, targetSystem?: string) => {
+  ipcMain.handle(IPC_CHANNELS.APIRECORDER_IMPORT_TRACE, async (event, filePath?: string, targetSystem?: string, raw?: boolean) => {
     const { dialog } = require('electron')
     const { readFileSync, writeFileSync, unlinkSync } = require('fs')
     const { execFile } = require('child_process')
@@ -1170,7 +1170,9 @@ function registerIpcHandlers(): void {
           pathParts.push(existing)
         }
         pythonEnv.PYTHONPATH = pathParts.join(require('path').delimiter)
-        const proc = spawn(pythonPath, [fetcherScript, tmpIn, '--output', tmpOut], {
+        const args = [fetcherScript, tmpIn, '--output', tmpOut]
+        if (raw) args.push('--raw')
+        const proc = spawn(pythonPath, args, {
           timeout: 120000,
           env: pythonEnv,
         })
@@ -1220,6 +1222,18 @@ function registerIpcHandlers(): void {
     }
 
     // 读取结果
+    if (raw) {
+      try {
+        if (existsSync(tmpOut)) {
+          const rawText = readFileSync(tmpOut, 'utf-8')
+          try { unlinkSync(tmpIn) } catch {}
+          try { unlinkSync(tmpOut) } catch {}
+          return { ok: true, raw: rawText }
+        }
+      } catch {}
+      return { ok: false, error: '原始日志查询无结果' }
+    }
+
     let enriched: any
     try {
       if (existsSync(tmpOut)) {

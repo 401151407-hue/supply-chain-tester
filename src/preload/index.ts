@@ -131,8 +131,8 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_CLEAR),
   apirecorderSaveTrace: (json: string, defaultName: string): Promise<{ ok: boolean; savedPath?: string; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_SAVE_TRACE, json, defaultName),
-  apirecorderImportTrace: (filePath?: string, targetSystem?: string): Promise<{ ok: boolean; data?: any; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_IMPORT_TRACE, filePath, targetSystem),
+  apirecorderImportTrace: (filePath?: string, targetSystem?: string, raw?: boolean): Promise<{ ok: boolean; data?: any; raw?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_IMPORT_TRACE, filePath, targetSystem, raw),
   apirecorderPickFile: (): Promise<{ ok: boolean; filePath?: string; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.APIRECORDER_PICK_FILE),
   apirecorderListSystems: (): Promise<{ ok: boolean; systems?: { label: string; value: string }[]; error?: string }> =>

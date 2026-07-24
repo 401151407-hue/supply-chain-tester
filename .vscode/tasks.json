@@ -810,6 +810,24 @@
 			"type": "shell",
 			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m 'chore: tasks.json' && npm version patch && git push origin master && git push gitee master && git push origin --tags && git push gitee --tags",
 			"isBackground": false
+		},
+		{
+			"label": "restart-raw",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "restart-raw2",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "git-commit2",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m \"feat: Ctrl+点击导入traceId导出原始日志JSON; 提取纯净JSON+多TraceId自动补充+实时查询系统列表\" && git push origin master && git push gitee master",
+			"isBackground": false
 		}
 	]
 }
