@@ -12,11 +12,7 @@ const PROVIDERS: { id: string; name: string; base: string; models: string[] }[] 
   { id: 'internal', name: '内部算力', base: 'http://10.100.22.203:30080/llmsec/wxsllm/v1', models: ['llm-pro', 'llm-plus', 'llm-flash'] },
   { id: 'deepseek', name: 'DeepSeek', base: 'https://api.deepseek.com/v1', models: ['deepseek-v4-pro', 'deepseek-v4-flash'] },
   { id: 'qwen', name: '通义千问', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'] },
-  { id: 'glm', name: '智谱 GLM', base: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4', 'glm-4-flash'] },
   { id: 'moonshot', name: '月之暗面', base: 'https://api.moonshot.cn/v1', models: ['moonshot-v1'] },
-  { id: 'baichuan', name: '百川', base: 'https://api.baichuan-ai.com/v1', models: ['baichuan4'] },
-  { id: 'ernie', name: '文心一言', base: 'https://qianfan.baidubce.com/v2', models: ['ernie-4.0'] },
-  { id: 'openai', name: 'OpenAI', base: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini'] },
 ]
 
 export function AISettingsPanel({ onClose }: Props) {
@@ -31,7 +27,6 @@ export function AISettingsPanel({ onClose }: Props) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
 
   useEffect(() => { loadAIConfig() }, [])
   useEffect(() => { if (aiConfig) setForm({ ...aiConfig }) }, [aiConfig])
@@ -39,9 +34,11 @@ export function AISettingsPanel({ onClose }: Props) {
   const api = () => (window as any).supplyChainTester
 
   function selectProvider(prov: typeof PROVIDERS[0]) {
+    const savedKey = localStorage.getItem(`ai-key-${prov.models[0]}`) || ''
     setForm(prev => ({
       ...prev,
       apiBase: prov.base,
+      apiKey: savedKey || (prov.id === 'internal' ? prev.apiKey : ''),
       analysisModel: prov.models[0],
       generationModel: prov.models[prov.models.length - 1],
     }))
@@ -51,6 +48,12 @@ export function AISettingsPanel({ onClose }: Props) {
     setSaving(true)
     try {
       await saveAIConfig(form)
+      // 按模型保存独立 Key
+      PROVIDERS.forEach(p => {
+        if (form.apiBase === p.base && form.apiKey) {
+          p.models.forEach(m => localStorage.setItem(`ai-key-${m}`, form.apiKey))
+        }
+      })
       setTestResult({ ok: true, message: '配置已保存' })
     } catch (err: any) {
       setTestResult({ ok: false, message: `保存失败: ${err.message}` })
@@ -122,24 +125,15 @@ export function AISettingsPanel({ onClose }: Props) {
               placeholder="sk-..." />
           </div>
 
-          {/* 高级设置 */}
-          <button onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors">
-            <Globe size={11} />
-            {showAdvanced ? '收起高级设置' : '高级设置（API 地址 / 模型名）'}
-          </button>
-          {showAdvanced && (
-            <div className="space-y-3 pl-1">
-              <input className="w-full bg-surface rounded-lg px-3 py-2 text-[11px] font-mono outline-none border border-border/5 focus:border-accent/50"
-                value={form.apiBase} onChange={e => updateField('apiBase', e.target.value)} placeholder="API Base URL" />
-              <div className="grid grid-cols-2 gap-2">
-                <input className="bg-surface rounded-lg px-3 py-2 text-[11px] font-mono outline-none border border-border/5 focus:border-accent/50"
-                  value={form.analysisModel} onChange={e => updateField('analysisModel', e.target.value)} placeholder="分析模型" />
-                <input className="bg-surface rounded-lg px-3 py-2 text-[11px] font-mono outline-none border border-border/5 focus:border-accent/50"
-                  value={form.generationModel} onChange={e => updateField('generationModel', e.target.value)} placeholder="生成模型" />
-              </div>
-            </div>
-          )}
+          {/* API 地址 */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs text-muted mb-1">
+              <Globe size={11} /> API 地址
+            </label>
+            <input className="w-full bg-surface rounded-lg px-3 py-2 text-[11px] font-mono outline-none border border-border/5 focus:border-accent/50"
+              value={form.apiBase} onChange={e => updateField('apiBase', e.target.value)} placeholder="https://api.deepseek.com/v1" />
+            <p className="text-[10px] text-muted/60 mt-1">选择提供商后自动填入，也可手动修改。模型在 AI 助手对话顶部切换</p>
+          </div>
 
           {/* 测试结果 */}
           {testResult && (

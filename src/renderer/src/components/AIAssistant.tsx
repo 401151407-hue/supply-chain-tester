@@ -29,28 +29,38 @@ interface AgentConfig {
 // 只有修改/写入/点击/输入类操作需要确认，只读操作直接执行
 // 工具中文描述映射
 const TOOL_LABELS: Record<string, string> = {
+  readFile: '读取文件',
   writeFile: '写入文件',
+  listDir: '列出目录',
   browserOpen: '打开网页',
-  browserClick: '点击页面元素',
+  browserRead: '读取页面',
+  browserClick: '点击元素',
   browserType: '输入文字',
+  browserScreenshot: '截图',
 }
 
 /** 生成工具操作的中文描述 */
 function describeTool(tool: ToolCall): string {
   const { name, args } = tool
   switch (name) {
+    case 'readFile':
+      return `读取文件「${args.path || '未知路径'}」`
     case 'writeFile':
       return `向文件「${args.path || '未知路径'}」写入内容`
+    case 'listDir':
+      return `列出目录「${args.path || '未知路径'}」`
     case 'browserOpen':
-      return `在浏览器中打开网页 ${args.url || '未知地址'}`
+      return `打开网页 ${args.url || '未知地址'}`
+    case 'browserRead':
+      return `读取当前页面内容`
     case 'browserClick':
       return args.text
-        ? `点击页面中文字为「${args.text}」的${args.nth !== undefined ? `第 ${args.nth + 1} 个` : ''}元素`
-        : `点击选择器「${args.selector || '未知'}」对应的元素`
+        ? `点击「${args.text}」`
+        : `点击「${args.selector || '未知'}」`
     case 'browserType':
-      return args.text
-        ? `在「${args.text}」输入框中输入「${args.value || ''}」`
-        : `在选择器「${args.selector || '未知'}」中输入「${args.value || ''}」`
+      return `输入「${args.value || ''}」`
+    case 'browserScreenshot':
+      return `截取页面截图`
     default:
       return `执行 ${name} 操作`
   }
@@ -61,46 +71,31 @@ const DANGEROUS_TOOLS = ['writeFile', 'browserOpen', 'browserClick', 'browserTyp
 
 const BASE_TOOLS_DOC = `
 ## 可用工具
-使用 <tool name="工具名">{"参数": "值"}</tool> 格式调用工具。
+你可以使用以下工具来操作电脑文件系统。调用格式: <tool name="工具名">{"参数": "值"}</tool>
 
 ### 文件操作
-1. **readFile** - 读取电脑上任意文件
-   项目内: <tool name="readFile">{"path": "scripts/utils/environment.py"}</tool>
-   任意路径: <tool name="readFile">{"path": "/Users/xxx/Documents/note.txt"}</tool>
-   Windows: <tool name="readFile">{"path": "C:\\Users\\xxx\\Desktop\\data.csv"}</tool>
+1. **readFile** — 读取电脑上任意文件的内容
+   <tool name="readFile">{"path": "C:\\Users\\xxx\\Desktop\\note.txt"}</tool>
 
-2. **writeFile** - 写入/修改电脑上任意文件（会自动创建目录）
-   示例: <tool name="writeFile">{"path": "scripts/test.py", "content": "print('hello')"}</tool>
+2. **writeFile** — 写入或创建文件（会自动创建目录）
+   <tool name="writeFile">{"path": "C:\\Users\\xxx\\Desktop\\test.txt", "content": "hello"}</tool>
 
-3. **listDir** - 列出电脑上任意目录
-   示例: <tool name="listDir">{"path": "/Users/xxx/Desktop"}</tool>
+3. **listDir** — 列出目录内容（文件和文件夹）
+   <tool name="listDir">{"path": "C:\\Users\\xxx\\Desktop"}</tool>
+   返回如: 📁 文件夹名/ 、📄 文件名
 
-### 浏览器操作（Playwright 驱动，headless Chromium）
-4. **browserOpen** - 打开网页
-   示例: <tool name="browserOpen">{"url": "https://www.baidu.com"}</tool>
+### 浏览器操作
+4. **browserOpen** — 打开网页: <tool name="browserOpen">{"url": "https://www.baidu.com"}</tool>
+5. **browserRead** — 读取当前页面文本: <tool name="browserRead">{}</tool>
+6. **browserClick** — 点击元素: <tool name="browserClick">{"text": "登录"}</tool>
+7. **browserType** — 输入文字: <tool name="browserType">{"text": "用户名", "value": "admin"}</tool>
+8. **browserScreenshot** — 截图: <tool name="browserScreenshot">{}</tool>
 
-5. **browserRead** - 读取当前页面文本内容
-   示例: <tool name="browserRead">{}</tool>
-
-6. **browserClick** - 点击页面元素（按文本或CSS选择器）
-   按文本: <tool name="browserClick">{"text": "登录"}</tool>
-   按选择器: <tool name="browserClick">{"selector": "#submit-btn"}</tool>
-   多个匹配时指定第几个(0-based): <tool name="browserClick">{"text": "查询", "nth": 0}</tool>
-
-7. **browserType** - 在输入框输入文字
-   按关联文本找输入框: <tool name="browserType">{"text": "用户名", "value": "admin"}</tool>
-   按选择器: <tool name="browserType">{"selector": "#password", "value": "123456"}</tool>
-
-8. **browserScreenshot** - 截取当前页面（返回图片）
-   示例: <tool name="browserScreenshot">{}</tool>
-
-## 规则
-- 文件路径支持相对路径和绝对路径；URL 需带 http:// 或 https://
-- **仅修改类操作（writeFile / browserOpen / browserClick / browserType）需用户确认，只读操作直接执行**
-- 读取大文件时只返回前 3000 字符，页面文本限制 8000 字符
-- 修改文件前先读取确认内容
-- 一次可调用多个工具，逐个执行
-- 不用工具时直接回复文字
+## 重要规则
+- 👆 文件路径必须使用 Windows 绝对路径，如 C:\\Users\\用户名\\Desktop
+- 🔒 修改/写入/点击/输入类操作会请求用户确认，只读操作（readFile/listDir/browserRead）直接执行
+- 📖 读取大文件只返回前 3000 字符
+- 🛠 需要操作文件时，直接调用工具，不要问用户路径
 - 用中文回复，简洁专业`
 
 const AGENTS: AgentConfig[] = [
@@ -110,7 +105,21 @@ const AGENTS: AgentConfig[] = [
     icon: <Sparkles size={13} className="text-purple-400" />,
     description: '回答各类问题，分析报告和脚本',
     welcome: '你好！我是通用 AI 助手。\n• 分析测试报告和脚本\n• 读写本地文件\n• 解答供应链测试问题\n• 调试 API 报错\n\n💡 试试：「帮我看看 scripts 目录」',
-    systemPrompt: `你是一个全能的供应链测试助手。${BASE_TOOLS_DOC}`,
+    systemPrompt: `你是供应链测试工具的 AI 助手，运行在用户电脑上，可以直接访问文件系统。
+
+## 你的能力
+- 📁 读取、写入、列出任意目录的文件（listDir / readFile / writeFile）
+- 🌐 用内置浏览器打开网页、截图、点击、输入（Playwright）
+- 📊 分析测试脚本、日志、报错信息
+- 💻 编写和修改 Python 测试脚本
+
+## 工作方式
+- **主动探索**：用户问"看看桌面"→ 直接调 listDir 列出 C:\\Users\\用户名\\Desktop
+- **先读后写**：修改文件前先用 readFile 读取确认
+- **直接执行**：只读操作立即执行；写入/点击类会请求用户确认
+- **用中文回复**：简洁、直接、专业
+
+${BASE_TOOLS_DOC}`,
   },
   {
     id: 'tester',
@@ -204,15 +213,20 @@ function createThread(agentId: string, model?: string): Thread {
   }
 }
 
-const MAX_TOOL_ROUNDS = 5
+const MAX_TOOL_ROUNDS = 8
+
+/** 压缩对话历史以节省 token */
+function compactHistory(history: { role: string; content: string }[]): { role: string; content: string }[] {
+  const sys = history.filter(m => m.role === 'system')
+  const rest = history.filter(m => m.role !== 'system')
+  return [...sys, ...rest.slice(-8)] // 系统提示 + 最近8条
+}
 
 const PRESET_MODELS = [
   'llm-pro', 'llm-plus', 'llm-flash',
   'deepseek-v4-pro', 'deepseek-v4-flash',
   'qwen-max', 'qwen-plus', 'qwen-turbo',
-  'glm-4', 'glm-4-flash',
-  'moonshot-v1', 'baichuan4', 'ernie-4.0',
-  'gpt-4o', 'gpt-4o-mini',
+  'moonshot-v1',
 ]
 
 // 模型 → API 地址映射 + 中文名
@@ -225,13 +239,7 @@ const MODEL_INFO: Record<string, { base: string; key: string; label: string }> =
   'qwen-max':       { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Max' },
   'qwen-plus':      { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Plus' },
   'qwen-turbo':     { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Turbo' },
-  'glm-4':          { base: 'https://open.bigmodel.cn/api/paas/v4', key: '', label: '智谱 · GLM-4' },
-  'glm-4-flash':    { base: 'https://open.bigmodel.cn/api/paas/v4', key: '', label: '智谱 · GLM-4 Flash' },
   'moonshot-v1':    { base: 'https://api.moonshot.cn/v1', key: '', label: '月之暗面 · Moonshot' },
-  'baichuan4':      { base: 'https://api.baichuan-ai.com/v1', key: '', label: '百川 · Baichuan4' },
-  'ernie-4.0':      { base: 'https://qianfan.baidubce.com/v2', key: '', label: '文心一言 · 4.0' },
-  'gpt-4o':         { base: 'https://api.openai.com/v1', key: '', label: 'OpenAI · GPT-4o' },
-  'gpt-4o-mini':    { base: 'https://api.openai.com/v1', key: '', label: 'OpenAI · GPT-4o Mini' },
 }
 
 function loadCustomModels(): string[] {
@@ -307,15 +315,15 @@ export function AIAssistant() {
     updateThreads(threads.map(t =>
       t.id === activeThreadId ? { ...t, model } : t
     ))
-    // 自动切换对应的 API 地址（Key 需用户在设置中填写）
     const mapping = MODEL_INFO[model]
     if (mapping) {
+      const providerKey = localStorage.getItem(`ai-key-${model}`)
       api?.getAIConfig?.().then((cfg: any) => {
         if (cfg) {
           api?.saveAIConfig?.({
             ...cfg,
             apiBase: mapping.base,
-            apiKey: mapping.key || cfg.apiKey,
+            apiKey: providerKey ?? (model.startsWith('llm-') ? cfg.apiKey : ''),
           }).catch(() => {})
         }
       }).catch(() => {})
@@ -450,42 +458,42 @@ export function AIAssistant() {
     }
   }
 
-  /** 执行工具循环并获取最终回复 */
+  /** 执行工具循环，最终回复流式输出 */
   async function runWithTools(
     history: { role: string; content: string }[],
     setStatus: (msg: string) => void,
     model: string,
+    onStream: (text: string) => void,
   ): Promise<string> {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const reply = await api.aiChat(history, model)
+      const reply = await api.aiChat(compactHistory(history), model)
+      if (!reply || reply.trim() === '') {
+        return 'AI 返回内容为空，请检查模型配置和 API Key 是否正确。'
+      }
       const { tools, rest } = parseTools(reply)
 
       if (tools.length === 0) {
-        // 无工具调用，直接返回
+        // 最终回复：先非流式获取，稳定后再流式优化
         return reply
       }
 
-      // 有工具调用：检查是否需要确认
       const dangerousTools = tools.filter(t => DANGEROUS_TOOLS.includes(t.name))
       if (dangerousTools.length > 0) {
         const approved = await requestConfirm(dangerousTools)
-        if (!approved) {
-          return '⛔ 用户取消了文件操作。如需继续，请重新描述你的需求。'
-        }
+        if (!approved) return '⛔ 用户取消了文件操作。'
       }
 
-      // 逐个执行
-      setStatus(`执行工具中 (第 ${round + 1} 轮)...`)
+      setStatus(`执行工具 (${round + 1}/${MAX_TOOL_ROUNDS})...`)
       const toolResults: string[] = []
       for (const tool of tools) {
         setStatus(`正在${TOOL_LABELS[tool.name] || tool.name}...`)
-        const result = await executeTool(tool)
-        toolResults.push(`[工具 ${tool.name} 结果]\n${result}`)
+        let result = await executeTool(tool)
+        if (result.length > 600) result = result.slice(0, 600) + '\n...(截断)'
+        toolResults.push(`[${tool.name}]: ${result}`)
       }
 
-      // 将工具调用和结果追加到对话历史
-      history.push({ role: 'assistant', content: reply })
-      history.push({ role: 'user', content: `工具执行结果:\n${toolResults.join('\n\n')}\n\n请根据以上结果继续回答。` })
+      // 只追加工具结果摘要，不追加完整 AI 回复（节省 token）
+      history.push({ role: 'user', content: `工具结果:\n${toolResults.join('\n')}\n\n继续。` })
     }
     return '已达到最大工具调用轮次，请简化问题重试。'
   }
@@ -517,29 +525,26 @@ export function AIAssistant() {
         return
       }
 
-      // 构建完整对话历史（包含系统提示）
-      const systemMsg = { role: 'system', content: currentAgent.systemPrompt }
+      // 构建完整对话历史（包含系统提示 + 工作区上下文）
+      const wsInfo = (window as any).supplyChainTester?.getScriptsPath?.()
+      const wsPath = typeof wsInfo === 'string' && wsInfo ? `\n当前工作区: ${wsInfo.replace(/\\/g, '\\\\')}` : ''
+      const systemMsg = { role: 'system', content: currentAgent.systemPrompt + wsPath }
       const recentHistory = newMessages.slice(-10).map(m => ({
         role: m.role as string,
         content: m.content,
       }))
       const history = [systemMsg, ...recentHistory, { role: 'user', content: text }]
 
-      // 先放一个 assistant 消息占位，实时显示工具状态
-      const updatePlaceholder = (content: string) => {
-        updateMessages([...newMessages, { role: 'assistant', content }])
-      }
-      updatePlaceholder('▊ 正在分析…')
-
-      // 包装 toolStatus setter，同步更新占位消息
+      // 包装 toolStatus setter
       const setStatus = (msg: string) => {
         setToolStatus(msg)
-        updatePlaceholder(`▊ ${msg}`)
       }
+      setToolStatus('正在分析…')
 
-      const finalReply = await runWithTools(history, setStatus, activeModel)
+      const finalReply = await runWithTools(history, setStatus, activeModel, (streaming) => {
+        updateMessages([...newMessages, { role: 'assistant', content: streaming + '▌' }])
+      })
 
-      // 确保最终内容完整（如果工具执行期间占位消息被覆盖）
       updateMessages([...newMessages, { role: 'assistant', content: finalReply }])
     } catch (err: any) {
       console.error('[AIAssistant] 出错:', err)
@@ -547,9 +552,11 @@ export function AIAssistant() {
     } finally {
       setLoading(false)
       setToolStatus('')
+      inputRef.current?.focus()
     }
   }
 
+  const inputRef = useRef<HTMLInputElement>(null)
   // 当前线程名
   const threadName = threads.find(t => t.id === activeThreadId)?.name || '新对话'
 
@@ -658,13 +665,13 @@ export function AIAssistant() {
         ))}
 
         {loading && (
-          <div className="flex gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-purple-500/15 flex items-center justify-center shrink-0">
-              <Loader2 size={12} className="animate-spin text-purple-400" />
+          <div className="flex items-center gap-2 px-1">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <div className="bg-hover/5 rounded-xl px-3 py-2">
-              <span className="text-sm text-muted">{toolStatus || '思考中...'}</span>
-            </div>
+            <span className="text-xs text-muted/60 italic">{toolStatus || '思考中...'}</span>
           </div>
         )}
         <div ref={bottomRef} />
@@ -674,6 +681,7 @@ export function AIAssistant() {
       <div className="px-4 py-3 border-t border-border/5 bg-surface-light/20 shrink-0">
         <div className="flex gap-2">
           <input
+            ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}

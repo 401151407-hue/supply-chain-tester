@@ -289,13 +289,13 @@ export class AIService {
   async testConnection(): Promise<{ ok: boolean; message: string }> {
     try {
       const response = await this.chat(
-        [
-          { role: 'system', content: '你是一个测试助手。' },
-          { role: 'user', content: '请回复 "OK"' },
-        ],
-        { maxTokens: 16, temperature: 0 },
+        [{ role: 'user', content: 'hi' }],
+        { model: this.config.analysisModel || undefined, maxTokens: 50, temperature: 0 },
       )
-      return { ok: true, message: `连接成功。模型回复: ${response.substring(0, 100)}` }
+      if (!response || response.trim() === '') {
+        return { ok: false, message: '连接成功但返回为空，请检查模型名是否正确' }
+      }
+      return { ok: true, message: `连接成功 ✓ (${response.slice(0, 30)})` }
     } catch (err: any) {
       return { ok: false, message: err.message || String(err) }
     }

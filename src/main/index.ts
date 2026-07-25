@@ -597,13 +597,12 @@ function registerIpcHandlers(): void {
   })
 
   // AI 流式多轮对话
-  ipcMain.handle(IPC_CHANNELS.AI_CHAT_STREAM, async (event, messages: { role: string; content: string }[]) => {
+  ipcMain.handle(IPC_CHANNELS.AI_CHAT_STREAM, async (event, messages: { role: string; content: string }[], model?: string) => {
     try {
       const fullContent = await aiService.chatStream(
         messages.map(m => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content })),
-        (token) => {
-          event.sender.send(IPC_CHANNELS.AI_CHAT_STREAM_TOKEN, token)
-        },
+        (token) => { event.sender.send(IPC_CHANNELS.AI_CHAT_STREAM_TOKEN, token) },
+        model ? { model } : undefined,
       )
       return { ok: true, content: fullContent }
     } catch (err: any) {

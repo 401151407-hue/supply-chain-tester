@@ -58,15 +58,12 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT, messages, model),
 
   /** AI 流式多轮对话 — 返回取消订阅函数 */
-  aiChatStream: (
-    messages: { role: string; content: string }[],
-    onToken: (token: string) => void,
-    onDone: (result: { ok: boolean; content?: string; error?: string }) => void,
+  aiChatStream: (messages: { role: string; content: string }[], onToken: (token: string) => void, model?: string, onDone: (result: { ok: boolean; content?: string; error?: string }) => void,
   ): (() => void) => {
     const tokenHandler = (_event: any, token: string) => onToken(token)
     ipcRenderer.on(IPC_CHANNELS.AI_CHAT_STREAM_TOKEN, tokenHandler)
 
-    ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT_STREAM, messages).then(onDone)
+    ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT_STREAM, messages, model).then(onDone)
 
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.AI_CHAT_STREAM_TOKEN, tokenHandler)
