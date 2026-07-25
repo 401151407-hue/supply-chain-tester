@@ -369,7 +369,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
         >
           <Sparkles size={14} className={aiConfig?.enabled ? 'text-purple-400' : 'text-muted'} />
           <span className={aiConfig?.enabled ? 'text-purple-300' : 'text-muted'}>
-            AI 算力{aiConfig?.enabled ? ' ✓' : ''}
+            模型配置{aiConfig?.enabled ? ' ✓' : ''}
           </span>
         </button>
         <button

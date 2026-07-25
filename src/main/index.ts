@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Electron 主进程入口
  * 创建窗口，注册 IPC 处理器，管理测试运行器
  */
@@ -584,10 +584,11 @@ function registerIpcHandlers(): void {
   })
 
   // AI 多轮对话
-  ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (_event, messages: { role: string; content: string }[]) => {
+  ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (_event, messages: { role: string; content: string }[], model?: string) => {
     try {
       const response = await aiService.chat(
         messages.map(m => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content })),
+        model ? { model } : undefined,
       )
       return response
     } catch (err: any) {

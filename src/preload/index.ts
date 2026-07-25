@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Preload 桥接层 - 将主进程能力安全地暴露给渲染进程
  */
 import { contextBridge, ipcRenderer } from 'electron'
@@ -54,8 +54,8 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.AI_TEST_CONNECTION),
 
   /** AI 多轮对话 */
-  aiChat: (messages: { role: string; content: string }[]): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT, messages),
+  aiChat: (messages: { role: string; content: string }[], model?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT, messages, model),
 
   /** AI 流式多轮对话 — 返回取消订阅函数 */
   aiChatStream: (

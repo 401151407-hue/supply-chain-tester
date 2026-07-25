@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Bot, User, Trash2, Loader2, Sparkles, FolderOpen, FileText, Wrench, AlertTriangle, CheckCircle2, XCircle, Code2, Bug, Search, ChevronDown, Plus, MessageSquare, Edit3, Pin } from 'lucide-react'
+import { Send, Bot, User, Trash2, Loader2, Sparkles, Wrench, AlertTriangle, ChevronDown, Plus, MessageSquare, X, Bug, Code2, Search, Cpu } from 'lucide-react'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -172,6 +172,7 @@ interface Thread {
   id: string
   name: string
   agentId: string
+  model: string
   messages: Message[]
   createdAt: string
 }
@@ -192,11 +193,12 @@ function saveActiveThreadId(id: string) {
   localStorage.setItem('ai_active_thread_id', id)
 }
 
-function createThread(agentId: string): Thread {
+function createThread(agentId: string, model?: string): Thread {
   return {
     id: Date.now().toString(),
     name: '新对话',
     agentId,
+    model: model || PRESET_MODELS[0],
     messages: [],
     createdAt: new Date().toISOString(),
   }
@@ -204,18 +206,52 @@ function createThread(agentId: string): Thread {
 
 const MAX_TOOL_ROUNDS = 5
 
+const PRESET_MODELS = [
+  'llm-pro', 'llm-plus', 'llm-flash',
+  'deepseek-v4-pro', 'deepseek-v4-flash',
+  'qwen-max', 'qwen-plus', 'qwen-turbo',
+  'glm-4', 'glm-4-flash',
+  'moonshot-v1', 'baichuan4', 'ernie-4.0',
+  'gpt-4o', 'gpt-4o-mini',
+]
+
+// 模型 → API 地址映射 + 中文名
+const MODEL_INFO: Record<string, { base: string; key: string; label: string }> = {
+  'llm-pro':        { base: 'http://10.100.22.203:30080/llmsec/wxsllm/v1', key: 'llm-sk-y2ZW6Gvm-bQjif7EsrmsVg', label: '内部 · Pro' },
+  'llm-plus':       { base: 'http://10.100.22.203:30080/llmsec/wxsllm/v1', key: 'llm-sk-y2ZW6Gvm-bQjif7EsrmsVg', label: '内部 · Plus' },
+  'llm-flash':      { base: 'http://10.100.22.203:30080/llmsec/wxsllm/v1', key: 'llm-sk-y2ZW6Gvm-bQjif7EsrmsVg', label: '内部 · Flash' },
+  'deepseek-v4-pro': { base: 'https://api.deepseek.com/v1', key: '', label: 'DeepSeek · V4 Pro' },
+  'deepseek-v4-flash':{ base: 'https://api.deepseek.com/v1', key: '', label: 'DeepSeek · V4 Flash' },
+  'qwen-max':       { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Max' },
+  'qwen-plus':      { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Plus' },
+  'qwen-turbo':     { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Turbo' },
+  'glm-4':          { base: 'https://open.bigmodel.cn/api/paas/v4', key: '', label: '智谱 · GLM-4' },
+  'glm-4-flash':    { base: 'https://open.bigmodel.cn/api/paas/v4', key: '', label: '智谱 · GLM-4 Flash' },
+  'moonshot-v1':    { base: 'https://api.moonshot.cn/v1', key: '', label: '月之暗面 · Moonshot' },
+  'baichuan4':      { base: 'https://api.baichuan-ai.com/v1', key: '', label: '百川 · Baichuan4' },
+  'ernie-4.0':      { base: 'https://qianfan.baidubce.com/v2', key: '', label: '文心一言 · 4.0' },
+  'gpt-4o':         { base: 'https://api.openai.com/v1', key: '', label: 'OpenAI · GPT-4o' },
+  'gpt-4o-mini':    { base: 'https://api.openai.com/v1', key: '', label: 'OpenAI · GPT-4o Mini' },
+}
+
+function loadCustomModels(): string[] {
+  try {
+    const s = localStorage.getItem('ai-custom-models')
+    return s ? JSON.parse(s) : []
+  } catch { return [] }
+}
+
 export function AIAssistant() {
   const [threads, setThreads] = useState<Thread[]>(loadThreads)
   const [activeThreadId, setActiveThreadId] = useState<string>(() => {
     const saved = loadActiveThreadId()
-    // 验证保存的 ID 是否在已加载的线程中存在
     const allThreads = loadThreads()
     if (saved && allThreads.some(t => t.id === saved)) return saved
     return allThreads.length > 0 ? allThreads[0].id : ''
   })
   const [showAgentMenu, setShowAgentMenu] = useState(false)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
-  const [renameInput, setRenameInput] = useState('')
+  const [showModelMenu, setShowModelMenu] = useState(false)
+  const [customModels, setCustomModels] = useState<string[]>(loadCustomModels)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [toolStatus, setToolStatus] = useState<string>('')
@@ -238,16 +274,52 @@ export function AIAssistant() {
     }
   }, [])
 
-  // 持久化
+  // 点击空白处关闭下拉
+  useEffect(() => {
+    if (!showModelMenu && !showAgentMenu) return
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-dropdown]')) {
+        setShowModelMenu(false)
+        setShowAgentMenu(false)
+      }
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [showModelMenu, showAgentMenu])
+
   function updateThreads(next: Thread[]) {
     setThreads(next)
     saveThreads(next)
   }
 
   function handleNewThread() {
-    const t = createThread(activeAgentId)
+    const t = createThread(activeAgentId, activeModel)
     updateThreads([...threads, t])
     setActiveThreadId(t.id)
+  }
+
+  // ——— 模型管理 ———
+  const activeModel = activeThread?.model || PRESET_MODELS[0]
+  const allModels = [...new Set([...PRESET_MODELS, ...customModels])]
+
+  function setActiveModel(model: string) {
+    updateThreads(threads.map(t =>
+      t.id === activeThreadId ? { ...t, model } : t
+    ))
+    // 自动切换对应的 API 地址（Key 需用户在设置中填写）
+    const mapping = MODEL_INFO[model]
+    if (mapping) {
+      api?.getAIConfig?.().then((cfg: any) => {
+        if (cfg) {
+          api?.saveAIConfig?.({
+            ...cfg,
+            apiBase: mapping.base,
+            apiKey: mapping.key || cfg.apiKey,
+          }).catch(() => {})
+        }
+      }).catch(() => {})
+    }
   }
 
   function handleDeleteThread(id: string) {
@@ -382,9 +454,10 @@ export function AIAssistant() {
   async function runWithTools(
     history: { role: string; content: string }[],
     setStatus: (msg: string) => void,
+    model: string,
   ): Promise<string> {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const reply = await api.aiChat(history)
+      const reply = await api.aiChat(history, model)
       const { tools, rest } = parseTools(reply)
 
       if (tools.length === 0) {
@@ -464,7 +537,7 @@ export function AIAssistant() {
         updatePlaceholder(`▊ ${msg}`)
       }
 
-      const finalReply = await runWithTools(history, setStatus)
+      const finalReply = await runWithTools(history, setStatus, activeModel)
 
       // 确保最终内容完整（如果工具执行期间占位消息被覆盖）
       updateMessages([...newMessages, { role: 'assistant', content: finalReply }])
@@ -477,162 +550,120 @@ export function AIAssistant() {
     }
   }
 
-  function handleClear() {
-    updateMessages([{ role: 'assistant', content: currentAgent.welcome }])
-  }
+  // 当前线程名
+  const threadName = threads.find(t => t.id === activeThreadId)?.name || '新对话'
 
   return (
-    <div className="flex h-full">
-      {/* 左侧：线程列表 */}
-      <aside className="w-48 border-r border-border/5 bg-surface-light/10 flex flex-col shrink-0">
-        <div className="px-3 py-2.5 border-b border-border/5 flex items-center justify-between">
-          <span className="text-[10px] text-muted uppercase tracking-wider">对话</span>
-          <button onClick={handleNewThread} className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors" title="新建对话">
-            <Plus size={13} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {threads.map(t => (
-            <div key={t.id}
-              onClick={() => setActiveThreadId(t.id)}
-              className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors border-b border-border/[0.03]
-                ${activeThreadId === t.id ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-hover/5 border-l-2 border-l-transparent'}`}
-            >
-              <MessageSquare size={12} className={activeThreadId === t.id ? 'text-accent-light' : 'text-muted'} />
-              <div className="flex-1 min-w-0">
-                {renamingId === t.id ? (
-                  <input
-                    value={renameInput}
-                    onChange={e => setRenameInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleRename(t.id); if (e.key === 'Escape') setRenamingId(null) }}
-                    onBlur={() => handleRename(t.id)}
-                    className="w-full text-[11px] px-1 py-0.5 rounded bg-surface border border-border/5 outline-none"
-                    autoFocus
-                    onClick={e => e.stopPropagation()}
-                  />
-                ) : (
-                  <p className="text-[11px] text-foreground truncate">{t.name}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={e => { e.stopPropagation(); setRenamingId(t.id); setRenameInput(t.name) }}
-                  className="p-0.5 rounded hover:bg-hover/10 text-muted hover:text-foreground"
-                  title="重命名"
-                >
-                  <Edit3 size={10} />
-                </button>
-                <button
-                  onClick={e => { e.stopPropagation(); if (threads.length > 1) handleDeleteThread(t.id) }}
-                  className="p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400"
-                  title="删除"
-                >
-                  <Trash2 size={10} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="px-3 py-2 border-t border-border/5">
-          <p className="text-[9px] text-muted text-center">{threads.length} 个对话</p>
-        </div>
-      </aside>
-
-      {/* 右侧：聊天区 */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 头部 */}
-        <header className="h-12 flex items-center gap-3 px-4 border-b border-border/5 bg-surface-light/50 shrink-0">
-        {/* Agent 选择器 */}
+    <div className="flex flex-col h-full">
+      {/* 顶部栏 — 线程切换 + 模型选择 + 操作 */}
+      <header className="h-10 flex items-center gap-1.5 px-3 border-b border-border/5 bg-surface-light/30 shrink-0">
+        <Sparkles size={14} className="text-purple-400 shrink-0" />
+        
+        {/* 线程下拉 */}
         <div className="relative">
           <button
-            onClick={() => setShowAgentMenu(!showAgentMenu)}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-hover/10 transition-colors"
+            onClick={() => { setShowAgentMenu(!showAgentMenu); setShowModelMenu(false) }}
+            className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-hover/10 transition-colors text-xs text-muted"
           >
-            <div className="w-5 h-5 rounded bg-purple-500/20 flex items-center justify-center">
-              {currentAgent.icon}
-            </div>
-            <span className="text-sm font-medium">{currentAgent.name}</span>
-            <ChevronDown size={12} className="text-muted" />
+            <MessageSquare size={11} />
+            <span className="max-w-[100px] truncate">{threadName}</span>
+            <ChevronDown size={10} />
           </button>
-
           {showAgentMenu && (
-            <div className="absolute top-full left-0 mt-1 w-52 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 py-1 animate-fade-in"
+            <div data-dropdown className="absolute top-full left-0 mt-1 w-52 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 py-1 animate-fade-in"
                  onClick={() => setShowAgentMenu(false)}>
-              {AGENTS.map(agent => (
-                <button
-                  key={agent.id}
-                  onClick={() => {
-                    // 切换当前线程的 Agent，保留对话历史
-                    updateThreads(threads.map(t =>
-                      t.id === activeThreadId ? { ...t, agentId: agent.id } : t
-                    ))
-                    setShowAgentMenu(false)
-                  }}
-                  className={`w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-hover/5 transition-colors
-                    ${activeAgentId === agent.id ? 'bg-accent/10' : ''}`}
-                >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5
-                    ${activeAgentId === agent.id ? 'bg-accent/20' : 'bg-hover/10'}`}>
-                    {agent.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">{agent.name}</div>
-                    <div className="text-[10px] text-muted leading-tight">{agent.description}</div>
-                  </div>
-                </button>
+              {threads.map(t => (
+                <div key={t.id} className="group flex items-center gap-2 px-3 py-1.5 hover:bg-hover/5 cursor-pointer"
+                     onClick={() => setActiveThreadId(t.id)}>
+                  <MessageSquare size={11} className={activeThreadId === t.id ? 'text-accent-light' : 'text-muted'} />
+                  <span className="text-xs flex-1 truncate">{t.name}</span>
+                  {threads.length > 1 && (
+                    <button onClick={e => { e.stopPropagation(); handleDeleteThread(t.id) }}
+                      className="p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 opacity-0 group-hover:opacity-100">
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
               ))}
+              <div className="border-t border-border/5 mt-1 pt-1 px-3">
+                <button onClick={() => { handleNewThread(); setShowAgentMenu(false) }}
+                  className="flex items-center gap-1.5 text-xs text-accent-light hover:text-accent py-1">
+                  <Plus size={11} /> 新建对话
+                </button>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="flex-1" />
-        <button onClick={handleClear} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-hover/5 hover:bg-hover/10 text-muted hover:text-foreground transition-colors">
-          <Trash2 size={12} />
-          清空对话
+        {/* 模型选择器 */}
+        <div className="relative">
+          <button
+            onClick={() => { setShowModelMenu(!showModelMenu); setShowAgentMenu(false) }}
+            className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-hover/10 transition-colors text-xs text-accent-light font-mono"
+            title="切换模型"
+          >
+            <Cpu size={11} />
+            <span className="max-w-[80px] truncate">{MODEL_INFO[activeModel]?.label || activeModel}</span>
+            <ChevronDown size={10} />
+          </button>
+          {showModelMenu && (
+            <div data-dropdown className="absolute top-full left-0 mt-1 w-56 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 py-1 animate-fade-in max-h-[320px] overflow-y-auto"
+                 onClick={e => e.stopPropagation()}>
+              {allModels.map(m => {
+                const info = MODEL_INFO[m]
+                return (
+                <button key={m}
+                  onClick={() => { setActiveModel(m); setShowModelMenu(false) }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-hover/5 transition-colors
+                    ${activeModel === m ? 'text-accent-light bg-accent/5' : 'text-muted'}`}>
+                  <span className="font-mono">{m}</span>
+                  {info?.label && <span className="text-[10px] text-muted/60 ml-2">{info.label}</span>}
+                </button>
+                )
+              })}
+
+            </div>
+          )}
+        </div>
+
+        <button onClick={handleNewThread} className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors" title="新建对话">
+          <Plus size={14} />
+        </button>
+        <button onClick={handleClear} className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors" title="清空对话">
+          <Trash2 size={14} />
         </button>
       </header>
 
       {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+          <div key={i} className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : ''}`}>
             {msg.role === 'assistant' && (
-              <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                <Bot size={15} className="text-purple-400" />
+              <div className="w-6 h-6 rounded-full bg-purple-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <Bot size={12} className="text-purple-400" />
               </div>
             )}
-            <div className={`max-w-[70%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words
+            <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words
               ${msg.role === 'user'
-                ? 'bg-accent/20 text-foreground rounded-br-md'
-                : 'bg-hover/10 text-foreground rounded-bl-md'}`}>
+                ? 'bg-accent/15 text-foreground'
+                : 'bg-hover/5 text-foreground'}`}>
               {msg.content}
             </div>
             {msg.role === 'user' && (
-              <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center shrink-0 mt-0.5">
-                <User size={15} className="text-accent-light" />
+              <div className="w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center shrink-0 mt-0.5">
+                <User size={12} className="text-accent-light" />
               </div>
             )}
           </div>
         ))}
 
         {loading && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0">
-              <Bot size={15} className="text-purple-400" />
+          <div className="flex gap-2.5">
+            <div className="w-6 h-6 rounded-full bg-purple-500/15 flex items-center justify-center shrink-0">
+              <Loader2 size={12} className="animate-spin text-purple-400" />
             </div>
-            <div className="bg-hover/10 rounded-2xl rounded-bl-md px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Loader2 size={14} className="animate-spin text-muted" />
-                <span className="text-sm text-muted">{toolStatus || '思考中...'}</span>
-              </div>
-              {toolStatus && (
-                <div className="mt-2 p-2 rounded-lg bg-accent/10 border border-accent/10">
-                  <div className="flex items-center gap-1.5 text-[11px] text-accent-light">
-                    <Wrench size={11} />
-                    正在调用工具...
-                  </div>
-                </div>
-              )}
+            <div className="bg-hover/5 rounded-xl px-3 py-2">
+              <span className="text-sm text-muted">{toolStatus || '思考中...'}</span>
             </div>
           </div>
         )}
@@ -640,88 +671,51 @@ export function AIAssistant() {
       </div>
 
       {/* 输入区 */}
-      <div className="px-6 py-4 border-t border-border/5 bg-surface-light/20 shrink-0">
-        <div className="flex gap-3">
+      <div className="px-4 py-3 border-t border-border/5 bg-surface-light/20 shrink-0">
+        <div className="flex gap-2">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="输入问题，Enter 发送... 可访问电脑任意文件，操作前会请你确认"
+            placeholder="输入问题，Enter 发送..."
             disabled={loading}
-            className="flex-1 rounded-xl px-4 py-3 text-sm outline-none bg-surface border border-border/5 focus:border-accent/50 disabled:opacity-50 placeholder:text-muted/40 transition-colors"
+            className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-border/5 focus:border-accent/50 disabled:opacity-50 placeholder:text-muted/40 transition-colors"
           />
           <button
             onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="px-5 py-3 rounded-xl bg-accent hover:bg-accent-light text-foreground disabled:opacity-40 transition-all flex items-center gap-2"
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent/90 text-foreground disabled:opacity-40 transition-all"
           >
-            <Send size={16} />
+            <Send size={15} />
           </button>
         </div>
       </div>
 
       {/* 确认弹窗 */}
       {pendingConfirm && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface-light border border-border/10 rounded-2xl w-[500px] shadow-2xl animate-fade-in">
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-border/5">
-              <div className="w-8 h-8 rounded-full bg-warning/20 flex items-center justify-center">
-                <AlertTriangle size={16} className="text-warning" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold">确认操作</h3>
-                <p className="text-[11px] text-muted">AI 请求执行以下操作，请确认后继续</p>
-              </div>
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-surface-light border border-border/10 rounded-2xl w-[460px] shadow-2xl animate-fade-in">
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-border/5">
+              <AlertTriangle size={16} className="text-warning" />
+              <h3 className="text-sm font-semibold">确认操作</h3>
             </div>
-
-            <div className="px-5 py-3 space-y-2 max-h-[300px] overflow-y-auto">
+            <div className="px-5 py-3 space-y-2 max-h-[250px] overflow-y-auto">
               {pendingConfirm.tools.map((tool, i) => (
-                <div key={i} className="bg-surface rounded-lg p-3 border border-border/5 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-warning uppercase bg-warning/10 px-1.5 py-0.5 rounded">
-                      {TOOL_LABELS[tool.name] || tool.name}
-                    </span>
-                  </div>
-                  <p className="text-xs text-foreground leading-relaxed">{describeTool(tool)}</p>
-                  {tool.args.content && (
-                    <pre className="text-[11px] text-muted font-mono bg-hover/5 rounded p-2 max-h-[120px] overflow-y-auto whitespace-pre-wrap break-all">
-                      {tool.args.content.length > 500
-                        ? tool.args.content.slice(0, 500) + '\n... (截断)'
-                        : tool.args.content}
-                    </pre>
-                  )}
+                <div key={i} className="bg-surface rounded-lg p-2.5 border border-border/5">
+                  <span className="text-[10px] font-bold text-warning bg-warning/10 px-1.5 py-0.5 rounded">{TOOL_LABELS[tool.name] || tool.name}</span>
+                  <p className="text-xs text-foreground mt-1">{describeTool(tool)}</p>
                 </div>
               ))}
             </div>
-
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/5">
-              <button
-                onClick={() => {
-                  pendingConfirm.resolve(false)
-                  setPendingConfirm(null)
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium
-                           bg-hover/5 hover:bg-hover/10 text-muted hover:text-foreground transition-colors"
-              >
-                <XCircle size={13} />
-                取消
-              </button>
-              <button
-                onClick={() => {
-                  pendingConfirm.resolve(true)
-                  setPendingConfirm(null)
-                }}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-medium
-                           bg-warning/20 hover:bg-warning/30 text-warning transition-colors"
-              >
-                <CheckCircle2 size={13} />
-                确认执行
-              </button>
+            <div className="flex gap-2 px-5 py-3 border-t border-border/5">
+              <button onClick={() => { pendingConfirm.resolve(false); setPendingConfirm(null) }}
+                className="flex-1 py-2 rounded-lg text-xs bg-hover/5 hover:bg-hover/10 transition-colors">取消</button>
+              <button onClick={() => { pendingConfirm.resolve(true); setPendingConfirm(null) }}
+                className="flex-1 py-2 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/90 transition-colors">确认执行</button>
             </div>
           </div>
         </div>
       )}
-      </div>
     </div>
   )
 }
