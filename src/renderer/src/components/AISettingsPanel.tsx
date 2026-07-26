@@ -13,6 +13,8 @@ const PROVIDERS: { id: string; name: string; base: string; models: string[] }[] 
   { id: 'deepseek', name: 'DeepSeek', base: 'https://api.deepseek.com/v1', models: ['deepseek-v4-pro', 'deepseek-v4-flash'] },
   { id: 'qwen', name: '通义千问', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'] },
   { id: 'moonshot', name: '月之暗面', base: 'https://api.moonshot.cn/v1', models: ['moonshot-v1'] },
+  { id: 'ollama', name: 'Ollama 本地', base: 'http://localhost:11434/v1', models: ['qwen2.5', 'llama3', 'deepseek-r1', 'codellama'] },
+  { id: 'lmstudio', name: 'LM Studio 本地', base: 'http://localhost:1234/v1', models: ['local-model'] },
 ]
 
 export function AISettingsPanel({ onClose }: Props) {
@@ -29,7 +31,6 @@ export function AISettingsPanel({ onClose }: Props) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadAIConfig() }, [])
-  useEffect(() => { if (aiConfig) setForm({ ...aiConfig }) }, [aiConfig])
 
   const api = () => (window as any).supplyChainTester
 
@@ -63,7 +64,11 @@ export function AISettingsPanel({ onClose }: Props) {
   async function handleTest() {
     setTesting(true)
     setTestResult(null)
-    try { await saveAIConfig(form) } catch {}
+    try {
+      await saveAIConfig(form)
+      // 等配置生效
+      await new Promise(r => setTimeout(r, 300))
+    } catch {}
     try {
       const result = await api().testAIConnection()
       setTestResult(result)

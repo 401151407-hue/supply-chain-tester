@@ -284,20 +284,29 @@ export class AIService {
   }
 
   /**
-   * 测试连接是否可用
+   * 测试连接（最多重试 2 次）
    */
   async testConnection(): Promise<{ ok: boolean; message: string }> {
-    try {
-      const response = await this.chat(
-        [{ role: 'user', content: 'hi' }],
-        { model: this.config.analysisModel || undefined, maxTokens: 50, temperature: 0 },
-      )
-      if (!response || response.trim() === '') {
-        return { ok: false, message: '连接成功但返回为空，请检查模型名是否正确' }
+    let lastError: string = ''
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await this.chat(
+          [{ role: 'user', content: 'hi' }],
+          { model: this.config.analysisModel || undefined, maxTokens: 100, temperature: 0 },
+        )
+        const content = (response || '').trim()
+        if (!content) {
+          lastError = 'API 返回为空，请检查模型名和 Key 是否正确'
+          continue
+        }
+        return { ok: true, message: `连接成功 ✓ (${content.slice(0, 20)})` }
+      } catch (err: any) {
+        lastError = err.message || String(err)
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 500 * attempt))
+        }
       }
-      return { ok: true, message: `连接成功 ✓ (${response.slice(0, 30)})` }
-    } catch (err: any) {
-      return { ok: false, message: err.message || String(err) }
     }
+    return { ok: false, message: lastError || '连接失败' }
   }
 }

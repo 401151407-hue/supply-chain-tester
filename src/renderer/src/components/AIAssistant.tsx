@@ -227,6 +227,7 @@ const PRESET_MODELS = [
   'deepseek-v4-pro', 'deepseek-v4-flash',
   'qwen-max', 'qwen-plus', 'qwen-turbo',
   'moonshot-v1',
+  'qwen2.5', 'llama3', 'deepseek-r1', 'codellama',
 ]
 
 // 模型 → API 地址映射 + 中文名
@@ -240,6 +241,10 @@ const MODEL_INFO: Record<string, { base: string; key: string; label: string }> =
   'qwen-plus':      { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Plus' },
   'qwen-turbo':     { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Turbo' },
   'moonshot-v1':    { base: 'https://api.moonshot.cn/v1', key: '', label: '月之暗面 · Moonshot' },
+  'qwen2.5':        { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Qwen2.5' },
+  'llama3':         { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Llama3' },
+  'deepseek-r1':    { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · DeepSeek R1' },
+  'codellama':      { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · CodeLlama' },
 }
 
 function loadCustomModels(): string[] {
@@ -561,46 +566,40 @@ export function AIAssistant() {
   const threadName = threads.find(t => t.id === activeThreadId)?.name || '新对话'
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 顶部栏 — 线程切换 + 模型选择 + 操作 */}
-      <header className="h-10 flex items-center gap-1.5 px-3 border-b border-border/5 bg-surface-light/30 shrink-0">
-        <Sparkles size={14} className="text-purple-400 shrink-0" />
-        
-        {/* 线程下拉 */}
-        <div className="relative">
-          <button
-            onClick={() => { setShowAgentMenu(!showAgentMenu); setShowModelMenu(false) }}
-            className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-hover/10 transition-colors text-xs text-muted"
-          >
-            <MessageSquare size={11} />
-            <span className="max-w-[100px] truncate">{threadName}</span>
-            <ChevronDown size={10} />
+    <div className="flex h-full">
+      {/* 左侧：对话历史 */}
+      <aside className="w-44 border-r border-border/5 bg-surface-light/10 flex flex-col shrink-0">
+        <div className="px-2.5 py-2 border-b border-border/5 flex items-center justify-between">
+          <span className="text-[10px] text-muted font-medium">对话历史</span>
+          <button onClick={handleNewThread} className="p-0.5 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors" title="新建对话">
+            <Plus size={13} />
           </button>
-          {showAgentMenu && (
-            <div data-dropdown className="absolute top-full left-0 mt-1 w-52 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 py-1 animate-fade-in"
-                 onClick={() => setShowAgentMenu(false)}>
-              {threads.map(t => (
-                <div key={t.id} className="group flex items-center gap-2 px-3 py-1.5 hover:bg-hover/5 cursor-pointer"
-                     onClick={() => setActiveThreadId(t.id)}>
-                  <MessageSquare size={11} className={activeThreadId === t.id ? 'text-accent-light' : 'text-muted'} />
-                  <span className="text-xs flex-1 truncate">{t.name}</span>
-                  {threads.length > 1 && (
-                    <button onClick={e => { e.stopPropagation(); handleDeleteThread(t.id) }}
-                      className="p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 opacity-0 group-hover:opacity-100">
-                      <X size={10} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <div className="border-t border-border/5 mt-1 pt-1 px-3">
-                <button onClick={() => { handleNewThread(); setShowAgentMenu(false) }}
-                  className="flex items-center gap-1.5 text-xs text-accent-light hover:text-accent py-1">
-                  <Plus size={11} /> 新建对话
-                </button>
-              </div>
-            </div>
-          )}
         </div>
+        <div className="flex-1 overflow-y-auto">
+          {threads.map(t => (
+            <div key={t.id}
+              onClick={() => setActiveThreadId(t.id)}
+              className={`group flex items-center gap-2 px-2.5 py-2 cursor-pointer transition-colors text-left w-full
+                ${activeThreadId === t.id ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-hover/5 border-l-2 border-l-transparent'}`}
+            >
+              <MessageSquare size={11} className={activeThreadId === t.id ? 'text-accent-light shrink-0' : 'text-muted shrink-0'} />
+              <span className="text-[11px] truncate flex-1">{t.name}</span>
+              {threads.length > 1 && (
+                <button onClick={e => { e.stopPropagation(); handleDeleteThread(t.id) }}
+                  className="p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0">
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {/* 右侧：聊天区 */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* 头部 — 模型选择 */}
+        <header className="h-10 flex items-center gap-2 px-3 border-b border-border/5 bg-surface-light/30 shrink-0">
+          <Sparkles size={14} className="text-purple-400 shrink-0" />
 
         {/* 模型选择器 */}
         <div className="relative">
@@ -724,6 +723,7 @@ export function AIAssistant() {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }
