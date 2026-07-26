@@ -286,4 +286,13 @@ export const IPC_CHANNELS = {
   RECORDER_SAVE_SESSION: 'recorder:save-session',
   RECORDER_LOAD_SESSIONS: 'recorder:load-sessions',
   RECORDER_DELETE_SESSION: 'recorder:delete-session',
+  // 本地大模型 (Ollama)
+  OLLAMA_STATUS: 'ollama:status',
+  OLLAMA_LIST_MODELS: 'ollama:list-models',
+  OLLAMA_PULL_MODEL: 'ollama:pull-model',
+  OLLAMA_PULL_PROGRESS: 'ollama:pull-progress',
+  OLLAMA_PULL_CANCEL: 'ollama:pull-cancel',
+  OLLAMA_DELETE_MODEL: 'ollama:delete-model',
+  OLLAMA_SHOW_MODEL: 'ollama:show-model',
+  OLLAMA_SET_BASE_URL: 'ollama:set-base-url',
 } as const

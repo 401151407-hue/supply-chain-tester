@@ -227,6 +227,35 @@ const api = {
   /** 在默认浏览器打开链接 */
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke('shell:open-external', url),
+
+  // ── 本地大模型 (Ollama) ──
+  ollamaStatus: (): Promise<{ installed: boolean; running: boolean; version?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_STATUS),
+
+  ollamaListModels: (): Promise<{ ok: boolean; models?: { name: string; size: number; modified_at: string; digest: string; details?: any }[]; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_LIST_MODELS),
+
+  ollamaShowModel: (name: string): Promise<{ ok: boolean; detail?: any; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_SHOW_MODEL, name),
+
+  ollamaPullModel: (modelName: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_PULL_MODEL, modelName),
+
+  ollamaCancelPull: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_PULL_CANCEL),
+
+  ollamaDeleteModel: (name: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_DELETE_MODEL, name),
+
+  ollamaSetBaseUrl: (url: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_SET_BASE_URL, url),
+
+  /** 监听 Ollama 拉取进度 */
+  onOllamaPullProgress: (callback: (progress: { modelName: string; status: string; completed?: number; total?: number; percent?: number }) => void) => {
+    const handler = (_event: any, progress: any) => callback(progress)
+    ipcRenderer.on(IPC_CHANNELS.OLLAMA_PULL_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.OLLAMA_PULL_PROGRESS, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('supplyChainTester', api)

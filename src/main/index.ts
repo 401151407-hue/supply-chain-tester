@@ -13,6 +13,7 @@ import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
 import { IPC_CHANNELS, type TestCase, type TestSuite, type ApiBatchRequest, type ApiBatchResult, type ApiBatchItem, type RecordSession } from '../shared/types'
 import { initAutoUpdater, checkForUpdates as doCheckUpdates, downloadUpdate as doDownloadUpdate, quitAndInstall, installLanUpdate, getUpdateState, stopLanServer } from './auto-updater'
 import { browserOpen, browserRead, browserClick, browserType, browserScreenshot, closeBrowser, startRecording, stopRecording, clearRecordingDedup, replayStep } from './browser-manager'
+import { ollamaService, type OllamaModel, type PullProgress } from './ollama-service'
 
 const isDev = !app.isPackaged
 
@@ -1368,6 +1369,64 @@ function registerIpcHandlers(): void {
     } catch (err: any) {
       return { ok: false, error: err.message }
     }
+  })
+
+  // ── 本地大模型 (Ollama) ──
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_STATUS, async () => {
+    return ollamaService.checkStatus()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_LIST_MODELS, async () => {
+    try {
+      const models = await ollamaService.listModels()
+      return { ok: true, models }
+    } catch (err: any) {
+      return { ok: false, error: err.message || String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_SHOW_MODEL, async (_event, name: string) => {
+    try {
+      const detail = await ollamaService.showModel(name)
+      return { ok: true, detail }
+    } catch (err: any) {
+      return { ok: false, error: err.message || String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_DELETE_MODEL, async (_event, name: string) => {
+    try {
+      await ollamaService.deleteModel(name)
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err.message || String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_SET_BASE_URL, async (_event, url: string) => {
+    ollamaService.setBaseUrl(url)
+    return { ok: true }
+  })
+
+  // Ollama 拉取模型（流式进度）—— 使用主进程 event 发送进度
+  let activePull: { abort: () => void } | null = null
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_PULL_MODEL, async (event, modelName: string) => {
+    try {
+      const controller = ollamaService.pullModel(modelName, (progress: PullProgress) => {
+        event.sender.send(IPC_CHANNELS.OLLAMA_PULL_PROGRESS, { modelName, ...progress })
+      })
+      activePull = controller
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err.message || String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_PULL_CANCEL, async () => {
+    activePull?.abort()
+    activePull = null
+    return { ok: true }
   })
 }
 

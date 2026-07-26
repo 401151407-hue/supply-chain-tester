@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useAppStore } from '../store'
 import type { AIConfig } from '@shared/types'
-import { X, CheckCircle2, XCircle, Loader2, Sparkles, Key, Globe } from 'lucide-react'
+import { X, CheckCircle2, XCircle, Loader2, Sparkles, Key, Globe, Cpu } from 'lucide-react'
+import { LocalModelPanel } from './LocalModelPanel'
 
 interface Props {
   onClose: () => void
@@ -13,7 +14,7 @@ const PROVIDERS: { id: string; name: string; base: string; models: string[] }[] 
   { id: 'deepseek', name: 'DeepSeek', base: 'https://api.deepseek.com/v1', models: ['deepseek-v4-pro', 'deepseek-v4-flash'] },
   { id: 'qwen', name: '通义千问', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'] },
   { id: 'moonshot', name: '月之暗面', base: 'https://api.moonshot.cn/v1', models: ['moonshot-v1'] },
-  { id: 'ollama', name: 'Ollama 本地', base: 'http://localhost:11434/v1', models: ['qwen2.5', 'llama3', 'deepseek-r1', 'codellama'] },
+  { id: 'ollama', name: 'Ollama 本地', base: 'http://localhost:11434/v1', models: ['qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b', 'codellama:7b'] },
   { id: 'lmstudio', name: 'LM Studio 本地', base: 'http://localhost:1234/v1', models: ['local-model'] },
 ]
 
@@ -29,6 +30,7 @@ export function AISettingsPanel({ onClose }: Props) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<'cloud' | 'local'>('cloud')
 
   useEffect(() => { loadAIConfig() }, [])
 
@@ -95,6 +97,27 @@ export function AISettingsPanel({ onClose }: Props) {
           </button>
         </div>
 
+        {/* 标签切换 */}
+        <div className="flex items-center gap-1 px-5 py-2 border-b border-border/5">
+          <button
+            onClick={() => setTab('cloud')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors ${
+              tab === 'cloud' ? 'bg-accent/10 text-accent-light font-medium' : 'text-muted hover:text-foreground'
+            }`}
+          >
+            <Globe size={13} /> 云端配置
+          </button>
+          <button
+            onClick={() => setTab('local')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors ${
+              tab === 'local' ? 'bg-purple-500/10 text-purple-400 font-medium' : 'text-muted hover:text-foreground'
+            }`}
+          >
+            <Cpu size={13} /> 本地模型
+          </button>
+        </div>
+
+        {tab === 'cloud' ? (
         <div className="p-4 space-y-4">
           {/* 启用开关 */}
           <div className="flex items-center justify-between">
@@ -161,6 +184,11 @@ export function AISettingsPanel({ onClose }: Props) {
             </button>
           </div>
         </div>
+        ) : (
+          <div className="p-4">
+            <LocalModelPanel />
+          </div>
+        )}
       </div>
     </div>
   )

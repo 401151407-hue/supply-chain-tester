@@ -74,13 +74,14 @@ const BASE_TOOLS_DOC = `
 你可以使用以下工具来操作电脑文件系统。调用格式: <tool name="工具名">{"参数": "值"}</tool>
 
 ### 文件操作
-1. **readFile** — 读取电脑上任意文件的内容
+1. **readFile** — 读取电脑上**任意**文件（C盘、D盘、桌面等）
    <tool name="readFile">{"path": "C:\\Users\\xxx\\Desktop\\note.txt"}</tool>
 
 2. **writeFile** — 写入或创建文件（会自动创建目录）
-   <tool name="writeFile">{"path": "C:\\Users\\xxx\\Desktop\\test.txt", "content": "hello"}</tool>
+   <tool name="writeFile">{"path": "D:\\data\\test.txt", "content": "hello"}</tool>
 
-3. **listDir** — 列出目录内容（文件和文件夹）
+3. **listDir** — 列出**任意**目录内容（磁盘根目录、桌面、文档等）
+   <tool name="listDir">{"path": "C:\\"}</tool>
    <tool name="listDir">{"path": "C:\\Users\\xxx\\Desktop"}</tool>
    返回如: 📁 文件夹名/ 、📄 文件名
 
@@ -108,15 +109,17 @@ const AGENTS: AgentConfig[] = [
     systemPrompt: `你是供应链测试工具的 AI 助手，运行在用户电脑上，可以直接访问文件系统。
 
 ## 你的能力
-- 📁 读取、写入、列出任意目录的文件（listDir / readFile / writeFile）
+- 📁 读取、写入、列出电脑上**任意**目录和文件（C盘、D盘、桌面、文档等）
 - 🌐 用内置浏览器打开网页、截图、点击、输入（Playwright）
 - 📊 分析测试脚本、日志、报错信息
 - 💻 编写和修改 Python 测试脚本
+- 🔍 主动探索用户电脑文件系统，无需用户告知具体路径
 
 ## 工作方式
-- **主动探索**：用户问"看看桌面"→ 直接调 listDir 列出 C:\\Users\\用户名\\Desktop
+- **主动探索**：用户说"看看桌面有什么"→ 直接调 listDir 列出 C:\\Users\\用户名\\Desktop
+- **跨盘访问**：可以访问 C、D、E 等任意盘符的文件
 - **先读后写**：修改文件前先用 readFile 读取确认
-- **直接执行**：只读操作立即执行；写入/点击类会请求用户确认
+- **直接执行**：只读操作立即执行，写入和点击类会请求用户确认
 - **用中文回复**：简洁、直接、专业
 
 ${BASE_TOOLS_DOC}`,
@@ -227,7 +230,7 @@ const PRESET_MODELS = [
   'deepseek-v4-pro', 'deepseek-v4-flash',
   'qwen-max', 'qwen-plus', 'qwen-turbo',
   'moonshot-v1',
-  'qwen2.5', 'llama3', 'deepseek-r1', 'codellama',
+  'qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b', 'codellama:7b',
 ]
 
 // 模型 → API 地址映射 + 中文名
@@ -241,10 +244,10 @@ const MODEL_INFO: Record<string, { base: string; key: string; label: string }> =
   'qwen-plus':      { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Plus' },
   'qwen-turbo':     { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Turbo' },
   'moonshot-v1':    { base: 'https://api.moonshot.cn/v1', key: '', label: '月之暗面 · Moonshot' },
-  'qwen2.5':        { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Qwen2.5' },
-  'llama3':         { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Llama3' },
-  'deepseek-r1':    { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · DeepSeek R1' },
-  'codellama':      { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · CodeLlama' },
+  'qwen2.5:7b':     { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Qwen2.5 7B' },
+  'llama3:8b':      { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Llama3 8B' },
+  'deepseek-r1:7b': { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · DeepSeek R1 7B' },
+  'codellama:7b':   { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · CodeLlama 7B' },
 }
 
 function loadCustomModels(): string[] {
@@ -315,6 +318,52 @@ export function AIAssistant() {
   // ——— 模型管理 ———
   const activeModel = activeThread?.model || PRESET_MODELS[0]
   const allModels = [...new Set([...PRESET_MODELS, ...customModels])]
+  const [localModelsInstalled, setLocalModelsInstalled] = useState<Set<string>>(new Set())
+  const [localServerRunning, setLocalServerRunning] = useState(false)
+
+  // 检测本地模型状态
+  useEffect(() => {
+    async function check() {
+      try {
+        const s = await api?.ollamaStatus?.()
+        setLocalServerRunning(!!s?.running)
+        if (s?.running) {
+          const r = await api?.ollamaListModels?.()
+          if (r?.ok && r.models) {
+            setLocalModelsInstalled(new Set(r.models.map((m: any) => m.name)))
+          }
+        }
+      } catch {}
+    }
+    check()
+  }, [])
+
+  /** 判断模型配置状态 */
+  function getModelStatus(model: string): 'ready' | 'no-key' | 'local-offline' | 'local-nomodel' {
+    const info = MODEL_INFO[model]
+    if (!info) return 'no-key'
+
+    // 内部模型：有默认 key
+    if (model.startsWith('llm-')) return 'ready'
+
+    // 云模型：检查是否有保存的 key
+    const isCloud = ['deepseek-', 'qwen-', 'moonshot'].some(p => model.startsWith(p))
+    if (isCloud) {
+      const savedKey = localStorage.getItem(`ai-key-${model}`)
+      return savedKey ? 'ready' : 'no-key'
+    }
+
+    // 本地模型：检查 Ollama 是否运行 + 模型是否安装
+    if (info.base === 'http://localhost:11434/v1' || info.base === 'http://localhost:1234/v1') {
+      if (!localServerRunning) return 'local-offline'
+      if (!localModelsInstalled.has(model)) return 'local-nomodel'
+      return 'ready'
+    }
+
+    return 'no-key'
+  }
+
+  const currentModelStatus = getModelStatus(activeModel)
 
   function setActiveModel(model: string) {
     updateThreads(threads.map(t =>
@@ -503,6 +552,61 @@ export function AIAssistant() {
     return '已达到最大工具调用轮次，请简化问题重试。'
   }
 
+  /** 构建项目上下文供 AI 了解供应链系统 */
+  async function buildProjectContext(): Promise<string> {
+    try {
+      const data = await api?.scanScripts?.()
+      if (!data) return ''
+      
+      const parts: string[] = []
+      
+      // 产品线及脚本
+      const productNames: Record<string, string> = {
+        xinerong: '信e融', dingerong: '订e融', huoerong: '货e融',
+        zhangerong: '账e融', piaoerong: '票e融',
+      }
+      
+      for (const [key, label] of Object.entries(productNames)) {
+        const productScripts = data[key] as any[] | undefined
+        if (!productScripts || productScripts.length === 0) continue
+        parts.push(`\n### ${label}（${key}）`)
+        for (const sub of productScripts) {
+          const subName = sub.subProduct || '默认'
+          const count = sub.scripts?.length || 0
+          if (count > 0) {
+            const names = sub.scripts.slice(0, 5).map((s: any) => s.name).join('、')
+            parts.push(`- ${subName}（${count}个脚本）: ${names}${count > 5 ? '等' : ''}`)
+          }
+        }
+      }
+      
+      // 通用脚本
+      const common = data.common as any[] | undefined
+      if (common && common.length > 0) {
+        parts.push('\n### 通用工具脚本')
+        for (const g of common) {
+          const names = g.scripts?.slice(0, 5).map((s: any) => s.name).join('、') || ''
+          if (names) parts.push(`- ${names}${g.scripts.length > 5 ? '等' : ''}`)
+        }
+      }
+      
+      // 工具模块
+      const utils = data.utils as any[] | undefined
+      if (utils && utils.length > 0) {
+        parts.push('\n### 工具模块')
+        for (const u of utils) {
+          const names = u.scripts?.slice(0, 3).map((s: any) => s.name).join('、') || ''
+          if (names) parts.push(`- ${names}`)
+        }
+      }
+      
+      if (parts.length === 0) return ''
+      return '这是一个供应链测试系统，包含以下产品和脚本：' + parts.join('')
+    } catch {
+      return ''
+    }
+  }
+
   async function handleSend() {
     const text = input.trim()
     if (!text || loading) return
@@ -530,10 +634,20 @@ export function AIAssistant() {
         return
       }
 
-      // 构建完整对话历史（包含系统提示 + 工作区上下文）
+      // 构建完整对话历史（系统提示 + 项目上下文 + 工作区路径）
       const wsInfo = (window as any).supplyChainTester?.getScriptsPath?.()
-      const wsPath = typeof wsInfo === 'string' && wsInfo ? `\n当前工作区: ${wsInfo.replace(/\\/g, '\\\\')}` : ''
-      const systemMsg = { role: 'system', content: currentAgent.systemPrompt + wsPath }
+      const wsPath = typeof wsInfo === 'string' && wsInfo ? `\n工作区路径: ${wsInfo.replace(/\\/g, '\\\\')}` : ''
+      
+      // 首次对话时注入项目上下文
+      let projectContext = ''
+      if (messages.length === 0) {
+        const ctx = await buildProjectContext()
+        if (ctx) projectContext = `\n## 当前项目供应链系统概况\n${ctx}`
+      }
+      
+      const modelLabel = MODEL_INFO[activeModel]?.label || activeModel
+      const modelIdentity = `\n## 你的身份\n你是「${modelLabel}」模型，运行在用户本地电脑上，由 Ollama 驱动。如果有人问"你用的是什么模型"，直接告诉对方你是 ${modelLabel}。`
+      const systemMsg = { role: 'system', content: currentAgent.systemPrompt + modelIdentity + projectContext + wsPath }
       const recentHistory = newMessages.slice(-10).map(m => ({
         role: m.role as string,
         content: m.content,
@@ -605,25 +719,42 @@ export function AIAssistant() {
         <div className="relative">
           <button
             onClick={() => { setShowModelMenu(!showModelMenu); setShowAgentMenu(false) }}
-            className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-hover/10 transition-colors text-xs text-accent-light font-mono"
-            title="切换模型"
+            className={`flex items-center gap-1 px-1.5 py-1 rounded hover:bg-hover/10 transition-colors text-xs font-mono ${
+              currentModelStatus !== 'ready' ? 'text-orange-400' : 'text-accent-light'
+            }`}
+            title={currentModelStatus === 'no-key' ? '未配置 API Key' : currentModelStatus === 'local-offline' ? '本地服务未启动' : currentModelStatus === 'local-nomodel' ? '模型未下载' : '切换模型'}
           >
             <Cpu size={11} />
             <span className="max-w-[80px] truncate">{MODEL_INFO[activeModel]?.label || activeModel}</span>
+            {currentModelStatus !== 'ready' && <span className="text-[10px] text-orange-400 ml-0.5">⚠</span>}
             <ChevronDown size={10} />
           </button>
           {showModelMenu && (
-            <div data-dropdown className="absolute top-full left-0 mt-1 w-56 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 py-1 animate-fade-in max-h-[320px] overflow-y-auto"
+            <div data-dropdown className="absolute top-full left-0 mt-1 w-64 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 py-1 animate-fade-in max-h-[360px] overflow-y-auto"
                  onClick={e => e.stopPropagation()}>
+              {/* 未配置模型顶部提示 */}
+              {currentModelStatus !== 'ready' && (
+                <div className="px-3 py-2 mx-2 mb-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-[11px] text-orange-400">
+                  {currentModelStatus === 'no-key' && '当前模型未配置 API Key，请在「模型配置」中设置'}
+                  {currentModelStatus === 'local-offline' && '本地 Ollama 服务未启动，请先启动 Ollama'}
+                  {currentModelStatus === 'local-nomodel' && '模型未下载，请在「模型配置 → 本地模型」中下载'}
+                </div>
+              )}
               {allModels.map(m => {
                 const info = MODEL_INFO[m]
+                const status = getModelStatus(m)
                 return (
                 <button key={m}
                   onClick={() => { setActiveModel(m); setShowModelMenu(false) }}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-hover/5 transition-colors
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-hover/5 transition-colors flex items-center gap-2
                     ${activeModel === m ? 'text-accent-light bg-accent/5' : 'text-muted'}`}>
-                  <span className="font-mono">{m}</span>
-                  {info?.label && <span className="text-[10px] text-muted/60 ml-2">{info.label}</span>}
+                  <span className="font-mono truncate flex-1">{m}</span>
+                  {info?.label && <span className="text-[10px] text-muted/60">{info.label}</span>}
+                  {status !== 'ready' && (
+                    <span className="text-[10px] text-orange-400 shrink-0" title={
+                      status === 'no-key' ? '未配置 Key' : status === 'local-offline' ? '服务未启动' : '未下载'
+                    }>⚠</span>
+                  )}
                 </button>
                 )
               })}
