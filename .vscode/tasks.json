@@ -864,6 +864,42 @@
 			"type": "shell",
 			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git add -A && git commit -m \"chore: 脚本优化 — StepNum统一改step, 授信脚本环境分支, 特殊提额步骤变量统一, 测试日报按部门过滤\" && git push origin master && git push gitee master",
 			"isBackground": false
+		},
+		{
+			"label": "git-pull",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && git pull origin master && git pull gitee master",
+			"isBackground": false
+		},
+		{
+			"label": "git-pull-latest",
+			"type": "shell",
+			"command": "git pull origin master && git pull gitee master",
+			"isBackground": false
+		},
+		{
+			"label": "rebuild-run",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && pkill -f electron 2>/dev/null; sleep 1 && rm -rf out node_modules/.vite && npm run dev",
+			"isBackground": true
+		},
+		{
+			"label": "replace-huanjing",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && sed -i '' 's/huanjing/current_env/g' \"test-suites/common/票e融授信准备数据.py\" && grep -n 'current_env' \"test-suites/common/票e融授信准备数据.py\"",
+			"isBackground": false
+		},
+		{
+			"label": "replace-env",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && sed -i '' 's/env\\./env_config./g; s/env = get_environment/env_config = get_environment/g; s/= env$/= env_config/g' \"test-suites/common/票e融授信准备数据.py\" && grep -n 'env_config' \"test-suites/common/票e融授信准备数据.py\"",
+			"isBackground": false
+		},
+		{
+			"label": "replace-step2",
+			"type": "shell",
+			"command": "cd /Users/liaochenglu/Desktop/supply-chain-tester && sed -i '' 's/dangqianbushu/step/g' \"test-suites/common/票e融授信准备数据.py\" && grep -n 'step' \"test-suites/common/票e融授信准备数据.py\"",
+			"isBackground": false
 		}
 	]
 }

@@ -94,6 +94,9 @@ export function UtilsPage() {
   // 清空注入变量提示横幅
   const [showClearedToast, setShowClearedToast] = useState(false)
 
+  // 搜索
+  const [searchQuery, setSearchQuery] = useState('')
+
   // ———————————— 脚本分组 ————————————
   const [groups, setGroups] = useState<Group[]>(() => {
     try {
@@ -256,16 +259,21 @@ export function UtilsPage() {
     return sorted[0]?.dataset.groupId || null
   }
 
-  // 按分组排序
+  // 按分组排序 + 搜索过滤
   const sortedScripts = useMemo(() => {
     const order = groups.map(g => g.id)
-    return [...scripts].sort((a, b) => {
+    const q = searchQuery.trim().toLowerCase()
+    let list = [...scripts]
+    if (q) {
+      list = list.filter(s => s.name.toLowerCase().includes(q))
+    }
+    return list.sort((a, b) => {
       const ga = order.indexOf(scriptGroupMap[a.path] || 'default')
       const gb = order.indexOf(scriptGroupMap[b.path] || 'default')
       if (ga !== gb) return ga - gb
       return 0
     })
-  }, [scripts, scriptGroupMap, groups])
+  }, [scripts, scriptGroupMap, groups, searchQuery])
 
   // 输出高亮
   const highlightedHtml = useMemo(() => {
@@ -694,6 +702,25 @@ export function UtilsPage() {
             <Eraser size={15} />
             清空
           </button>
+          <div className="flex items-center gap-2 bg-surface border border-border/5 rounded-xl px-3 py-2">
+            <Search size={14} className="text-muted/50 shrink-0" />
+            <div className="relative">
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="搜索脚本..."
+                className="w-36 rounded-lg px-1 py-2 text-sm outline-none bg-transparent placeholder:text-muted/30"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 text-muted/40 hover:text-muted transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
           {isRunning && (
             <button onClick={handleStop}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/20 transition-all active:scale-95">
