@@ -233,6 +233,35 @@ import sys
 - 主进程扫描脚本时读取第一行，检测 `# WIP` 前缀（`src/main/index.ts` → `isWipScript()`）
 - 渲染进程根据 `wip` 字段切换绿色/黄色（`src/renderer/src/pages/UtilsPage.tsx`）
 
+### 6.3 Python 脚本接口调用规范
+
+**步骤计数规则**：
+- `step` 变量（或 `dangqianbushu`）统一在接口调用成功后的 `if` 分支内 `+= 1` 并打印
+- 不要在接口调用之前打印步骤提示，避免接口失败时步骤号虚增
+
+```python
+# ✅ 正确：step 和 print 都在成功分支内
+url = env_config.wxsbank_supplychain_cmp+'/xxx/api'
+json = {...}
+a1 = requests.post(url=url, headers=headers, json=json)
+b1 = a1.json()
+if b1['respCode'] == str(10000):
+    step += 1
+    print(f'[步骤{step}] 接口调用成功')
+else:
+    print('...')
+    sys.exit()
+
+# ❌ 错误：不要在调用前加 step 和 print
+step += 1
+print(f'[步骤{step}] 调用接口...')
+url = ...
+```
+
+**接口返回值判断**：统一使用 `if b1['respCode'] == str(10000):`
+
+**变量命名**：URL 变量用 `url`，JSON 变量用 `json`，响应用 `a1`/`b1`
+
 ### 6.1 通用工具页变量输入框 + 问号提示 (UtilsPage.tsx)
 
 `src/renderer/src/pages/UtilsPage.tsx` 顶部有 4 个变量输入框，每个右侧有一个 `?` 图标（`HelpCircle`），hover 时显示变量使用说明。
