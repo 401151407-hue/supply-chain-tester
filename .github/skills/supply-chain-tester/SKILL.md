@@ -490,13 +490,19 @@ EOF
 
 # 5. 打包
 cd /tmp/python-portable && zip -rq python-portable.zip .
+
+# 6. 同步到项目 + 分发目录
+cp /tmp/python-portable/python-portable.zip resources/python-portable/site-packages.zip
+cp /tmp/python-portable/python-portable.zip "$HOME/Desktop/供应链自动化测试工具安装指南/python-portable.zip"
 ```
 
 > ⚠️ 关键：必须用 `--platform win_amd64 --only-binary :all:` 确保下载 `.pyd`（Windows DLL），而非 macOS 的 `.so` 文件。最终包中应有 50 个 `.pyd`、0 个 `.so`。
 
 ### 依赖更新
 
-当 `requirements.txt` 有变动时，重新执行第 3-5 步即可生成新的 `python-portable.zip`。
+当 `requirements.txt` 有变动时，重新执行第 3-6 步即可。构建完成后需同时更新两个位置：
+- `resources/python-portable/site-packages.zip`（项目内）
+- `~/Desktop/供应链自动化测试工具安装指南/python-portable.zip`（Windows 用户分发用）
 
 ## Git 仓库
 
