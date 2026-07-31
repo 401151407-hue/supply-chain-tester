@@ -22,12 +22,31 @@ export default {
         foreground: 'rgb(var(--color-foreground) / <alpha-value>)',
         border: 'rgb(var(--color-border) / <alpha-value>)',
         hover: 'rgb(var(--color-hover) / <alpha-value>)',
+        background: 'rgb(var(--color-surface) / <alpha-value>)',
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+      keyframes: {
+        'fade-in': {
+          '0%': { opacity: '0', transform: 'translateY(-4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'group-exit': {
+          '0%': { opacity: '1', transform: 'scaleY(1)' },
+          '100%': { opacity: '0', transform: 'scaleY(0.7)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 0.15s ease-out',
+        'group-exit': 'group-exit 0.3s ease-in forwards',
+      },
     },
   },
-  plugins: [],
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 import { UpdateIndicator } from './UpdateIndicator'
+import { Button } from './ui/button'
 import {
   FileEdit,
   BarChart3,
@@ -133,10 +134,10 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
       <div className="h-12 flex items-center gap-2 px-4 border-b border-border/5 drag-region mt-7">
         <Package size={20} className="text-accent" />
         <span className="font-semibold text-sm tracking-wide flex-1">测易融</span>
-        <button onClick={handleRefresh} disabled={isScanning}
-          className="no-drag p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-hover/10 transition-colors disabled:opacity-50" title="刷新产品线">
+        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isScanning}
+          className="no-drag h-8 w-8" title="刷新产品线">
           <RotateCw size={15} className={isScanning ? 'animate-spin' : ''} />
-        </button>
+        </Button>
       </div>
 
       {/* 可滚动内容区：导航 + 用例列表 */}
@@ -450,13 +451,14 @@ function NavItem({ icon, label, active, onClick, suffix, compact }: {
   suffix?: React.ReactNode; compact?: boolean
 }) {
   return (
-    <button onClick={onClick} className={`
-        flex items-center gap-2 w-full rounded-lg text-sm font-medium transition-colors
-        ${active ? 'bg-accent/20 text-accent-light' : 'text-muted hover:bg-hover/5 hover:text-foreground'}
-        ${compact ? 'px-2 py-1.5 text-xs' : 'px-3 py-2'}
-      `}>
-      {icon}<span className="flex-1 text-left">{label}</span>{suffix}
-    </button>
+    <Button
+      variant={active ? 'secondary' : 'ghost'}
+      size={compact ? 'sm' : 'default'}
+      onClick={onClick}
+      className={`w-full justify-start ${active ? 'shadow-sm' : ''} ${compact ? 'pl-6 text-xs' : 'gap-3'}`}
+    >
+      {icon}<span className="flex-1 text-left truncate">{label}</span>{suffix}
+    </Button>
   )
 }
 

@@ -20,6 +20,8 @@
   --color-border: 200 205 215;
   --color-hover: 0 0 0;
   color-scheme: light;
+  /* ── shadcn/ui variables ── */
+  --radius: 0.5rem;
 }
 
 /* ============================================================

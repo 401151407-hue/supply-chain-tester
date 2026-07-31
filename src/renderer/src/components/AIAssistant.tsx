@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Bot, User, Trash2, Loader2, Sparkles, Wrench, AlertTriangle, ChevronDown, Plus, MessageSquare, X, Bug, Code2, Search, Cpu } from 'lucide-react'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -763,12 +765,13 @@ export function AIAssistant() {
           )}
         </div>
 
-        <button onClick={handleNewThread} className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors" title="新建对话">
-          <Plus size={14} />
-        </button>
-        <button onClick={handleClear} className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors" title="清空对话">
-          <Trash2 size={14} />
-        </button>
+        <Button variant="ghost" size="icon" onClick={handleNewThread} title="新建对话" className="h-7 w-7 text-muted hover:text-foreground">
+          <Plus size={13} />
+        </Button>
+        <div className="flex-1" />
+        <Button variant="ghost" size="icon" onClick={handleClear} title="清空对话" className="h-7 w-7 text-muted hover:text-foreground">
+          <Trash2 size={13} />
+        </Button>
       </header>
 
       {/* 消息列表 */}
@@ -810,22 +813,22 @@ export function AIAssistant() {
       {/* 输入区 */}
       <div className="px-4 py-3 border-t border-border/5 bg-surface-light/20 shrink-0">
         <div className="flex gap-2">
-          <input
+          <Input
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="输入问题，Enter 发送..."
             disabled={loading}
-            className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-border/5 focus:border-accent/50 disabled:opacity-50 placeholder:text-muted/40 transition-colors"
+            className="flex-1"
           />
-          <button
+          <Button
+            size="sm"
             onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent/90 text-foreground disabled:opacity-40 transition-all"
           >
-            <Send size={15} />
-          </button>
+            <Send size={14} />
+          </Button>
         </div>
       </div>
 
@@ -846,10 +849,8 @@ export function AIAssistant() {
               ))}
             </div>
             <div className="flex gap-2 px-5 py-3 border-t border-border/5">
-              <button onClick={() => { pendingConfirm.resolve(false); setPendingConfirm(null) }}
-                className="flex-1 py-2 rounded-lg text-xs bg-hover/5 hover:bg-hover/10 transition-colors">取消</button>
-              <button onClick={() => { pendingConfirm.resolve(true); setPendingConfirm(null) }}
-                className="flex-1 py-2 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/90 transition-colors">确认执行</button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => { pendingConfirm.resolve(false); setPendingConfirm(null) }}>取消</Button>
+              <Button size="sm" className="flex-1" onClick={() => { pendingConfirm.resolve(true); setPendingConfirm(null) }}>确认执行</Button>
             </div>
           </div>
         </div>
