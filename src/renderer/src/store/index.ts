@@ -8,13 +8,15 @@ interface AppState {
   // 主题
   theme: 'light' | 'dark'
   toggleTheme: () => void
+  colorTheme: string
+  setColorTheme: (t: string) => void
 
   // 环境配置
   env: 'SIT' | 'UAT' | 'DEV'
   setEnv: (env: 'SIT' | 'UAT' | 'DEV') => void
 
   // 导航
-  activeTab: 'xinerong' | 'dingerong' | 'huoerong' | 'zhangerong' | 'piaoerong' | 'editor' | 'reports' | 'apidebug' | 'script' | 'aiassistant' | 'utils' | 'recorder' | 'apirecorder'
+  activeTab: 'xinerong' | 'dingerong' | 'huoerong' | 'zhangerong' | 'piaoerong' | 'editor' | 'reports' | 'apidebug' | 'script' | 'aiassistant' | 'utils' | 'recorder' | 'apirecorder' | 'casegenerator'
   setActiveTab: (tab: AppState['activeTab']) => void
   navKey: number  // 同标签刷新时递增，触发页面重挂载
   transitionKey: number  // 每次导航递增，触发切换动画
@@ -84,6 +86,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = get().theme === 'dark' ? 'light' : 'dark'
     localStorage.setItem('theme', next)
     set({ theme: next })
+  },
+  colorTheme: (typeof window !== 'undefined' && localStorage.getItem('colorTheme')) || 'vega',
+  setColorTheme: (t) => {
+    localStorage.setItem('colorTheme', t)
+    set({ colorTheme: t })
   },
 
   // 环境配置

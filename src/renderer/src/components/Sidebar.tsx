@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 import { UpdateIndicator } from './UpdateIndicator'
 import { Button } from './ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
+import { Tip } from '../lib/Tip'
 import {
   FileEdit,
   BarChart3,
@@ -134,10 +136,15 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
       <div className="h-12 flex items-center gap-2 px-4 border-b border-border/5 drag-region mt-7">
         <Package size={20} className="text-accent" />
         <span className="font-semibold text-sm tracking-wide flex-1">测易融</span>
-        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isScanning}
-          className="no-drag h-8 w-8" title="刷新产品线">
-          <RotateCw size={15} className={isScanning ? 'animate-spin' : ''} />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isScanning}
+              className="no-drag h-8 w-8">
+              <RotateCw size={15} className={isScanning ? 'animate-spin' : ''} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>刷新产品线</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* 可滚动内容区：导航 + 用例列表 */}
@@ -255,13 +262,14 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
       <div className="px-3 py-2 border-t border-border/5">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-muted">用例列表</span>
-          <button
-            onClick={createNewCase}
-            className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors"
-            title="新建用例"
-          >
-            <Plus size={14} />
-          </button>
+          <Tip label="新建用例">
+            <button
+              onClick={createNewCase}
+              className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors"
+            >
+              <Plus size={14} />
+            </button>
+          </Tip>
         </div>
 
         {testCases.length === 0 ? (
@@ -312,12 +320,12 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
       {/* 底部 */}
       <div className="px-3 py-3 border-t border-border/5 space-y-1">
         {/* 主题切换 */}
-        <button
-          onClick={toggleTheme}
-          className="relative flex items-center w-full h-8 rounded-lg bg-hover/5 p-0.5
-                     hover:bg-hover/10 transition-colors group"
-          title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-        >
+        <Tip label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}>
+          <button
+            onClick={toggleTheme}
+            className="relative flex items-center w-full h-8 rounded-lg bg-hover/5 p-0.5
+                       hover:bg-hover/10 transition-colors group"
+          >
           {/* 滑动高亮块 */}
           <span
             className={`absolute top-0.5 h-7 w-[calc(50%-2px)] rounded-md
@@ -339,6 +347,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             <span className="tracking-wide">白天</span>
           </span>
         </button>
+        </Tip>
         {/* 环境切换 */}
         <div className={`relative flex items-center w-full h-8 rounded-lg bg-hover/5 p-0.5
                          ${activeTab === 'script' ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -396,14 +405,15 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
           <div className="flex-1 min-w-0">
             <UpdateIndicator />
           </div>
-          <button
-            onClick={handleDetect}
-            disabled={detecting}
-            title="环境检测"
-            className="p-1 rounded text-muted hover:text-foreground hover:bg-hover/10 transition-colors disabled:opacity-50 mr-1"
-          >
-            <ShieldCheck size={15} className={detecting ? 'animate-pulse' : ''} />
-          </button>
+          <Tip label="环境检测">
+            <button
+              onClick={handleDetect}
+              disabled={detecting}
+              className="p-1 rounded text-muted hover:text-foreground hover:bg-hover/10 transition-colors disabled:opacity-50 mr-1"
+            >
+              <ShieldCheck size={15} className={detecting ? 'animate-pulse' : ''} />
+            </button>
+          </Tip>
         </div>
 
         {/* 检测结果弹窗 */}

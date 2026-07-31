@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Bot, User, Trash2, Loader2, Sparkles, Wrench, AlertTriangle, ChevronDown, Plus, MessageSquare, X, Bug, Code2, Search, Cpu } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { Tip } from '../lib/Tip'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -765,13 +766,15 @@ export function AIAssistant() {
           )}
         </div>
 
-        <Button variant="ghost" size="icon" onClick={handleNewThread} title="新建对话" className="h-7 w-7 text-muted hover:text-foreground">
+        <Button variant="ghost" size="icon" onClick={handleNewThread} className="h-7 w-7 text-muted hover:text-foreground">
           <Plus size={13} />
         </Button>
         <div className="flex-1" />
-        <Button variant="ghost" size="icon" onClick={handleClear} title="清空对话" className="h-7 w-7 text-muted hover:text-foreground">
-          <Trash2 size={13} />
-        </Button>
+        <Tip label="清空对话">
+          <Button variant="ghost" size="icon" onClick={handleClear} className="h-7 w-7 text-muted hover:text-foreground">
+            <Trash2 size={13} />
+          </Button>
+        </Tip>
       </header>
 
       {/* 消息列表 */}

@@ -2,7 +2,7 @@
  * Electron 主进程入口
  * 创建窗口，注册 IPC 处理器，管理测试运行器
  */
-import { app, BrowserWindow, ipcMain, shell, Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Menu, dialog, type MenuItemConstructorOptions } from 'electron'
 import { join, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { spawn } from 'child_process'
@@ -655,6 +655,29 @@ function registerIpcHandlers(): void {
       return { ok: true, items }
     } catch (err: any) {
       return { ok: false, error: err.message || String(err) }
+    }
+  })
+
+  // ── 文件选择对话框 ──
+  ipcMain.handle('dialog:pickFile', async (_event, options?: { filters?: { name: string; extensions: string[] }[] }) => {
+    if (!mainWindow) return { ok: false, error: '窗口未就绪' }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: options?.filters || [
+        { name: '文档', extensions: ['md', 'txt', 'doc', 'docx', 'pdf'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, canceled: true }
+    }
+    const filePath = result.filePaths[0]
+    try {
+      const content = readFileSync(filePath, 'utf-8')
+      // 限制 50KB
+      return { ok: true, path: filePath, content: content.slice(0, 50000) }
+    } catch (err: any) {
+      return { ok: false, error: `读取失败: ${err.message}` }
     }
   })
 

@@ -10,13 +10,15 @@ import { VisualRecorder } from './pages/VisualRecorder'
 import { ApiRecorder } from './pages/ApiRecorder'
 import { AISettingsPanel } from './components/AISettingsPanel'
 import { AIAssistant } from './components/AIAssistant'
+import { TooltipProvider } from './components/ui/tooltip'
+import { Toaster } from './components/ui/sonner'
 import { useAppStore } from './store'
 
 export default function App() {
-  const { activeTab, setTestCases, setReports, loadAIConfig, theme, scriptParams, selectedSubProduct, navKey } = useAppStore()
+  const { activeTab, setTestCases, setReports, loadAIConfig, theme, toggleTheme, colorTheme, scriptParams, selectedSubProduct, navKey } = useAppStore()
   const [showAISettings, setShowAISettings] = useState(false)
 
-  // 同步主题 class 到 html 元素
+  // 同步主题 class 和 data-theme 到 html 元素
   useEffect(() => {
     const root = document.documentElement
     if (theme === 'dark') {
@@ -24,7 +26,8 @@ export default function App() {
     } else {
       root.classList.remove('dark')
     }
-  }, [theme])
+    root.setAttribute('data-theme', colorTheme)
+  }, [theme, colorTheme])
 
   useEffect(() => {
     loadInitialData()
@@ -135,14 +138,17 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full">
-      <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
-      <main className="flex-1 overflow-hidden relative">
-        {renderContent()}
-      </main>
-      {showAISettings && (
-        <AISettingsPanel onClose={() => setShowAISettings(false)} />
-      )}
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="flex h-full">
+        <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
+        <main className="flex-1 overflow-hidden relative">
+          {renderContent()}
+        </main>
+        {showAISettings && (
+          <AISettingsPanel onClose={() => setShowAISettings(false)} />
+        )}
+      </div>
+      <Toaster position="bottom-right" />
+    </TooltipProvider>
   )
 }

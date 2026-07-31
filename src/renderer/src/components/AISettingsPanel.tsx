@@ -3,6 +3,8 @@ import { useAppStore } from '../store'
 import type { AIConfig } from '@shared/types'
 import { X, CheckCircle2, XCircle, Loader2, Sparkles, Key, Globe, Cpu } from 'lucide-react'
 import { LocalModelPanel } from './LocalModelPanel'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet'
+import { toast } from '../lib/toast'
 
 interface Props {
   onClose: () => void
@@ -58,8 +60,10 @@ export function AISettingsPanel({ onClose }: Props) {
         }
       })
       setTestResult({ ok: true, message: '配置已保存' })
+      toast.success('配置已保存')
     } catch (err: any) {
       setTestResult({ ok: false, message: `保存失败: ${err.message}` })
+      toast.error(`保存失败: ${err.message}`)
     } finally { setSaving(false) }
   }
 
@@ -74,8 +78,11 @@ export function AISettingsPanel({ onClose }: Props) {
     try {
       const result = await api().testAIConnection()
       setTestResult(result)
+      if (result.ok) toast.success('连接成功')
+      else toast.error(result.message)
     } catch (err: any) {
       setTestResult({ ok: false, message: err.message || String(err) })
+      toast.error(err.message || '连接失败')
     } finally { setTesting(false) }
   }
 
@@ -84,21 +91,17 @@ export function AISettingsPanel({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-surface-light border border-border/10 rounded-2xl w-[480px] max-h-[80vh] overflow-y-auto shadow-2xl animate-fade-in">
-        {/* 头部 */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border/5">
-          <div className="flex items-center gap-2">
+    <Sheet open onOpenChange={(open) => { if (!open) onClose() }}>
+      <SheetContent side="right" className="w-[420px] sm:max-w-[420px] p-0 overflow-y-auto">
+        <SheetHeader className="px-5 py-3">
+          <SheetTitle className="flex items-center gap-2 text-sm">
             <Sparkles size={16} className="text-purple-400" />
-            <h2 className="text-sm font-semibold">模型配置</h2>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-hover/10 text-muted hover:text-foreground transition-colors">
-            <X size={16} />
-          </button>
-        </div>
+            模型配置
+          </SheetTitle>
+        </SheetHeader>
 
         {/* 标签切换 */}
-        <div className="flex items-center gap-1 px-5 py-2 border-b border-border/5">
+        <div className="flex items-center gap-1 px-5 py-2 bg-surface/50">
           <button
             onClick={() => setTab('cloud')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors ${
@@ -189,7 +192,7 @@ export function AISettingsPanel({ onClose }: Props) {
             <LocalModelPanel />
           </div>
         )}
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }

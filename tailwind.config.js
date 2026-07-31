@@ -42,10 +42,20 @@ export default {
           '0%': { opacity: '1', transform: 'scaleY(1)' },
           '100%': { opacity: '0', transform: 'scaleY(0.7)' },
         },
+        'slide-in-right': {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        'slide-out-right': {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.15s ease-out',
         'group-exit': 'group-exit 0.3s ease-in forwards',
+        'slide-in-right': 'slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-out-right': 'slide-out-right 0.2s ease-in forwards',
       },
     },
   },

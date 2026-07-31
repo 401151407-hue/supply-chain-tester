@@ -228,6 +228,10 @@ const api = {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke('shell:open-external', url),
 
+  /** 选择文件并读取内容（用于导入文档） */
+  pickFile: (filters?: { name: string; extensions: string[] }[]): Promise<{ ok: boolean; path?: string; content?: string; error?: string; canceled?: boolean }> =>
+    ipcRenderer.invoke('dialog:pickFile', filters ? { filters } : undefined),
+
   // ── 本地大模型 (Ollama) ──
   ollamaStatus: (): Promise<{ installed: boolean; running: boolean; version?: string; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_STATUS),
