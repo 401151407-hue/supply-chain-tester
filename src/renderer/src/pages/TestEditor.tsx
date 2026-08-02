@@ -59,6 +59,11 @@ export function TestEditor({ product }: TestEditorProps = {}) {
   const [funcPoints, setFuncPoints] = useState<string[]>([])  // AI 分析出的功能点
   const [checkedPoints, setCheckedPoints] = useState<Set<number>>(new Set())  // 勾选确认的功能点
 
+  // 自定义提示词（持久化到 localStorage）
+  const [customSysPrompt, setCustomSysPrompt] = useState(() => localStorage.getItem('tc-sys-prompt') || SYSTEM_PROMPT)
+  const [customAnalysisPrompt, setCustomAnalysisPrompt] = useState(() => localStorage.getItem('tc-analysis-prompt') || '')
+  const [showPromptConfig, setShowPromptConfig] = useState(false)
+
   // 4 个可选文档（含路径）
   const [designDoc, setDesignDoc] = useState<{ name: string; path: string; content: string } | null>(null)
   const [reqDoc, setReqDoc] = useState<{ name: string; path: string; content: string } | null>(null)
@@ -136,7 +141,7 @@ export function TestEditor({ product }: TestEditorProps = {}) {
       parts.push('不要编号，用 - 开头。列出 10-20 个功能点。')
 
       const messages = [
-        { role: 'system', content: '你是供应链金融测试专家。只输出功能点列表，每行一个，用 - 开头。' },
+        { role: 'system', content: customAnalysisPrompt || '你是供应链金融测试专家。请根据文档提取所有需要测试的功能点。每个功能点一行，用 - 开头，格式：「- 功能点名称：简要说明」。覆盖正向流程、异常场景、边界条件。输出 10-25 个功能点。不要编号，只输出列表。' },
         { role: 'user', content: parts.join('\n') },
       ]
       const reply = await api()?.aiChat?.(messages)
@@ -172,7 +177,7 @@ export function TestEditor({ product }: TestEditorProps = {}) {
       parts.push(`基于以上 ${selectedPoints.length} 个功能点，生成测试用例 JSON 数组。每个用例: id, name, type(正向/异常/边界), priority(P0/P1/P2), precondition, steps(数组), expectedResult, testData(对象)。每个功能点至少 1 个用例。严格 JSON 格式。`)
 
       const messages = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: customSysPrompt },
         { role: 'user', content: parts.join('\n') },
       ]
       const reply = await api()?.aiChat?.(messages)
@@ -271,7 +276,38 @@ export function TestEditor({ product }: TestEditorProps = {}) {
                 />
               </div>
 
-              {/* 步骤 1：分析功能点 或 步骤 2：确认功能点 */}
+              {/* 提示词配置 */}
+              <div>
+                <button onClick={() => setShowPromptConfig(!showPromptConfig)}
+                  className="flex items-center gap-1 text-[10px] text-muted hover:text-foreground transition-colors">
+                  <ChevronDown size={10} className={`transition-transform ${showPromptConfig ? '' : '-rotate-90'}`} />
+                  提示词配置（自定义 Skills / Prompt）
+                </button>
+                {showPromptConfig && (
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <label className="text-[10px] text-muted mb-1 block">System Prompt（生成用例用）</label>
+                      <textarea value={customSysPrompt}
+                        onChange={e => { setCustomSysPrompt(e.target.value); localStorage.setItem('tc-sys-prompt', e.target.value) }}
+                        className="w-full h-24 rounded-lg px-3 py-2 text-[11px] font-mono bg-surface border border-border/5 focus:border-accent/50 resize-none outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted mb-1 block">功能点分析 Prompt（选填，不填用默认）</label>
+                      <textarea value={customAnalysisPrompt}
+                        onChange={e => { setCustomAnalysisPrompt(e.target.value); localStorage.setItem('tc-analysis-prompt', e.target.value) }}
+                        placeholder="默认: 你是供应链金融测试专家。只输出功能点列表..."
+                        className="w-full h-16 rounded-lg px-3 py-2 text-[11px] font-mono bg-surface border border-border/5 focus:border-accent/50 resize-none outline-none placeholder:text-muted/40"
+                      />
+                    </div>
+                    <button onClick={() => {
+                      setCustomSysPrompt(SYSTEM_PROMPT); setCustomAnalysisPrompt('')
+                      localStorage.removeItem('tc-sys-prompt'); localStorage.removeItem('tc-analysis-prompt')
+                      toast.success('已恢复默认提示词')
+                    }} className="text-[10px] text-muted hover:text-accent transition-colors">恢复默认提示词</button>
+                  </div>
+                )}
+              </div>
               {genStep === 'input' && (
                 <Button onClick={handleAnalyzePoints} disabled={generating} className="w-full" size="lg">
                   {generating ? <><Loader2 size={14} className="animate-spin" /> AI 正在分析功能点...</> : <><Sparkles size={14} /> 分析功能点</>}
