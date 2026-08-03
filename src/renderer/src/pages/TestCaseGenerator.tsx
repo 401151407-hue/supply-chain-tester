@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../co
 import { Badge } from '../components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { toast } from '../lib/toast'
-import { TEST_CASE_TEMPLATES, SYSTEM_PROMPT } from '../lib/test-case-prompts'
+import { TEST_CASE_TEMPLATES, SYSTEM_PROMPT, downloadTemplate } from '../lib/test-case-prompts'
 
 interface GenCase {
   id: string
@@ -217,6 +217,11 @@ export function TestCaseGenerator() {
           <div className="text-[10px] text-muted/60 text-center space-y-0.5">
             <p>💡 使用 <code className="bg-surface px-1 rounded">qwen2.5:7b</code> 本地模型即可获得稳定结果</p>
             <p>🔒 Prompt 模板已固化，不同用户生成效果一致</p>
+            <p className="pt-1">
+              <button onClick={downloadTemplate} className="text-accent-light hover:underline cursor-pointer">
+                📥 下载测试用例模板（13列标准格式）
+              </button>
+            </p>
           </div>
         </TabsContent>
 
