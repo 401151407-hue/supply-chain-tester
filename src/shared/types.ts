@@ -295,4 +295,6 @@ export const IPC_CHANNELS = {
   OLLAMA_DELETE_MODEL: 'ollama:delete-model',
   OLLAMA_SHOW_MODEL: 'ollama:show-model',
   OLLAMA_SET_BASE_URL: 'ollama:set-base-url',
+  // 测试用例导出
+  EXPORT_TEST_CASES: 'export:test-cases',
 } as const

@@ -70,6 +70,10 @@ const api = {
     }
   },
 
+  /** 导出测试用例为 Excel */
+  exportTestCases: (templateBase64: string, cases: any[]): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.EXPORT_TEST_CASES, { templateBase64, cases }),
+
   /** 读取文件内容 */
   readFile: (filePath: string): Promise<{ ok: boolean; content?: string; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.FILE_READ, filePath),

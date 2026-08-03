@@ -593,7 +593,11 @@ function registerIpcHandlers(): void {
       )
       return response
     } catch (err: any) {
-      return `错误: ${err.message || String(err)}`
+      const msg = err.message || String(err)
+      if (msg.includes('返回内容为空')) {
+        return `错误→ (${msg})，可能是模型不支持此请求或提示词过长，请尝试：1.精简文档内容 2.切换模型`
+      }
+      return `错误→ (${msg})`
     }
   })
 
@@ -606,6 +610,78 @@ function registerIpcHandlers(): void {
         model ? { model } : undefined,
       )
       return { ok: true, content: fullContent }
+    } catch (err: any) {
+      return { ok: false, error: err.message || String(err) }
+    }
+  })
+
+  // 导出测试用例为 Excel
+  ipcMain.handle(IPC_CHANNELS.EXPORT_TEST_CASES, async (_event, payload: { templateBase64: string; cases: any[] }) => {
+    const { writeFileSync, unlinkSync, mkdirSync, existsSync } = require('fs')
+    const { join } = require('path')
+    const { randomUUID } = require('crypto')
+    const os = require('os')
+
+    try {
+      const tmpDir = join(os.tmpdir(), 'sct-export')
+      if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true })
+
+      const id = randomUUID().slice(0, 8)
+      const templatePath = join(tmpDir, `template-${id}.xlsx`)
+      const dataPath = join(tmpDir, `data-${id}.json`)
+      const outputPath = join(os.homedir(), 'Desktop', `测试用例_${id}.xlsx`)
+
+      // 写入模板文件
+      const templateBuf = Buffer.from(payload.templateBase64, 'base64')
+      writeFileSync(templatePath, templateBuf)
+      // 写入数据文件
+      writeFileSync(dataPath, JSON.stringify(payload.cases), 'utf-8')
+
+      // Python 填充脚本
+      const pythonScript = `
+import openpyxl, json, sys
+wb = openpyxl.load_workbook(sys.argv[1])
+ws = wb.active
+with open(sys.argv[2], 'r', encoding='utf-8') as f:
+    cases = json.load(f)
+for i, c in enumerate(cases):
+    row = i + 3
+    ws.cell(row=row, column=1, value=c.get('module', ''))
+    title = c.get('name', '')
+    ws.cell(row=row, column=2, value=title)
+    ws.cell(row=row, column=3, value=c.get('maintainer', ''))
+    ws.cell(row=row, column=4, value=c.get('caseType', '功能测试'))
+    ws.cell(row=row, column=5, value=c.get('priority', 'P1'))
+    ws.cell(row=row, column=6, value=c.get('workItemId', ''))
+    ws.cell(row=row, column=7, value=c.get('precondition', ''))
+    steps = c.get('steps', [])
+    stepText = '\\n'.join(f'{j+1}.{s}' for j, s in enumerate(steps)) if steps else ''
+    ws.cell(row=row, column=8, value=stepText)
+    ws.cell(row=row, column=9, value=c.get('expectedResult', ''))
+    ws.cell(row=row, column=10, value=c.get('remark', ''))
+    attrs = c.get('type', '')
+    ws.cell(row=row, column=11, value='正例' if attrs == '正向' else ('反例' if attrs == '异常' else attrs))
+    ws.cell(row=row, column=12, value=c.get('version', ''))
+    ws.cell(row=row, column=13, value=c.get('releaseDate', ''))
+wb.save(sys.argv[3])
+print('OK')
+`
+      const pyPath = join(tmpDir, `fill-${id}.py`)
+      writeFileSync(pyPath, pythonScript, 'utf-8')
+
+      const pythonPath = getPythonPath()
+      const { execFileSync } = require('child_process')
+      execFileSync(pythonPath, [pyPath, templatePath, dataPath, outputPath], {
+        timeout: 30000,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      })
+
+      // 清理临时文件
+      try { unlinkSync(templatePath) } catch {}
+      try { unlinkSync(dataPath) } catch {}
+      try { unlinkSync(pyPath) } catch {}
+
+      return { ok: true, path: outputPath }
     } catch (err: any) {
       return { ok: false, error: err.message || String(err) }
     }

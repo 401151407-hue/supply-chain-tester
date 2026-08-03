@@ -8,8 +8,6 @@ import {
   FileEdit,
   BarChart3,
   Package,
-  Plus,
-  Trash2,
   FolderOpen,
   ShieldCheck,
   X,
@@ -41,7 +39,6 @@ interface SidebarProps {
 export function Sidebar({ onOpenAISettings }: SidebarProps) {
   const {
     activeTab, navigateTo,
-    testCases, currentCase, setCurrentCase, deleteCase,
     aiConfig,
     theme, toggleTheme,
     env, setEnv,
@@ -257,64 +254,6 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
         <NavItem icon={<FileEdit size={18} />} label="测试用例" active={activeTab === 'editor'} onClick={() => navigateTo('editor')} />
         <NavItem icon={<BarChart3 size={18} />} label="测试报告" active={activeTab === 'reports'} onClick={() => navigateTo('reports')} />
       </nav>
-
-      {/* 测试用例列表 */}
-      <div className="px-3 py-2 border-t border-border/5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-muted">用例列表</span>
-          <Tip label="新建用例">
-            <button
-              onClick={createNewCase}
-              className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground transition-colors"
-            >
-              <Plus size={14} />
-            </button>
-          </Tip>
-        </div>
-
-        {testCases.length === 0 ? (
-          <p className="text-xs text-muted text-center py-6">
-            暂无测试用例，点击 + 新建
-          </p>
-        ) : (
-          testCases.map(tc => (
-            <div
-              key={tc.id}
-              onClick={() => {
-                setCurrentCase(tc)
-                navigateTo('editor')
-              }}
-              className={`
-                group flex items-center gap-2 px-3 py-2 mb-0.5 rounded-md cursor-pointer
-                text-sm transition-colors
-                ${currentCase?.id === tc.id
-                  ? 'bg-accent/20 text-foreground'
-                  : 'text-muted hover:bg-hover/5 hover:text-foreground'
-                }
-              `}
-            >
-              <span className="truncate flex-1">{tc.name}</span>
-              <span className={`
-                text-[10px] px-1.5 py-0.5 rounded
-                ${tc.type === 'api' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-300'}
-              `}>
-                {tc.type === 'api' ? 'API' : '流程'}
-              </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (confirm('确定删除此测试用例？')) {
-                    deleteCase(tc.id)
-                  }
-                }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-500/20 text-muted hover:text-red-400 transition-all"
-              >
-                <Trash2 size={12} />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
       </div>
 
       {/* 底部 */}
@@ -470,24 +409,6 @@ function NavItem({ icon, label, active, onClick, suffix, compact }: {
       {icon}<span className="flex-1 text-left truncate">{label}</span>{suffix}
     </Button>
   )
-}
-
-function createNewCase() {
-  const { setCurrentCase, navigateTo } = useAppStore.getState()
-  const newCase = {
-    id: crypto.randomUUID(),
-    type: 'api' as const,
-    name: '新建测试用例',
-    description: '',
-    tags: [],
-    steps: [],
-    variables: {},
-    status: 'draft' as const,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-  setCurrentCase(newCase)
-  navigateTo('editor')
 }
 
 function openFolder() {

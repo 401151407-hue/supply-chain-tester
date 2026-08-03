@@ -36,7 +36,7 @@ export interface ChatCompletionResponse {
   model: string
   choices: {
     index: number
-    message: { role: string; content: string }
+    message: { role: string; content: string; reasoning_content?: string }
     finish_reason: string
   }[]
   usage?: {
@@ -137,6 +137,7 @@ export class AIService {
           try {
             const chunk = JSON.parse(jsonStr)
             const delta = chunk.choices?.[0]?.delta?.content
+              || chunk.choices?.[0]?.delta?.reasoning_content
             if (delta) {
               fullContent += delta
               onToken(delta)
@@ -194,10 +195,13 @@ export class AIService {
     }
 
     const data: ChatCompletionResponse = await response.json()
+    console.log('[AIService] 响应结构:', JSON.stringify(data).slice(0, 500))
 
     const content = data.choices?.[0]?.message?.content
+      || data.choices?.[0]?.message?.reasoning_content
     if (!content) {
-      throw new Error('AI 返回内容为空')
+      console.error('[AIService] 响应无内容，完整响应:', JSON.stringify(data).slice(0, 1000))
+      throw new Error('AI 返回内容为空，请检查模型配置或切换模型重试')
     }
 
     return content

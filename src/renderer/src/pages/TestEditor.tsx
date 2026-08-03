@@ -8,7 +8,7 @@ import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { toast } from '../lib/toast'
-import { TEST_CASE_TEMPLATES, SYSTEM_PROMPT } from '../lib/test-case-prompts'
+import { TEST_CASE_TEMPLATES, SYSTEM_PROMPT, TEST_CASE_TEMPLATE_BASE64 } from '../lib/test-case-prompts'
 import {
   Play,
   Square,
@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Copy,
   Plus,
+  Download,
 } from 'lucide-react'
 
 interface TestEditorProps {
@@ -122,12 +123,19 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
   }
 
   function extractJSON(text: string): string {
+    // 尝试提取 ```json ... ``` 代码块
     const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (match) return match[1].trim()
+    // 尝试提取纯 JSON 数组或对象
+    const arrayMatch = text.match(/\[[\s\S]*\]/)
+    if (arrayMatch) return arrayMatch[0]
+    const objMatch = text.match(/\{[\s\S]*\}/)
+    if (objMatch) return objMatch[0]
+    // 最后的回退
     const start = text.indexOf('[')
     const start2 = text.indexOf('{')
     const idx = start === -1 ? start2 : (start2 === -1 ? start : Math.min(start, start2))
-    if (idx === -1) throw new Error('响应中没有找到 JSON')
+    if (idx === -1) throw new Error('响应中没有找到 JSON，请重试')
     return text.slice(idx)
   }
 
@@ -152,47 +160,89 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
       toast.error('请先导入测试计划')
       return
     }
+    if (!aiConfig?.enabled) {
+      toast.error('请先在 AI 设置中启用并配置模型')
+      return
+    }
     setGenerating(true)
     setTaskMatches([])
     setCheckedTasks(new Set())
     try {
       const parts: string[] = []
-      parts.push('你是供应链金融测试专家。请按以下步骤分析：')
+      parts.push('从测试计划的I列提取所有任务名称，逐一在需求文档中找到对应的内容章节。')
       parts.push('')
-      parts.push('## 你的任务')
-      parts.push('1. 从测试计划中提取I列（任务，对应PingCode用户故事）的所有任务名称')
-      parts.push('2. 针对每个任务，在需求文档中找到对应的内容章节')
-      parts.push('3. 列出每个任务与需求文档的对应关系')
+      parts.push('输出格式（每行一个，用 | 分隔三列）：')
+      parts.push('- 任务名称 | 需求文档文件名 | 对应章节摘要')
+      parts.push('示例：')
+      parts.push('- 供应商准入 | 供应商管理需求.md | 第3章 准入流程，包括企业信息填写、资质上传、提交审核')
       parts.push('')
-      parts.push('## 输出格式（严格JSON数组）')
-      parts.push('[{"task": "任务名称", "docName": "需求文档文件名或标题", "section": "对应章节/段落摘要（50字以内）"}]')
+      reqDocs.forEach((doc, i) => parts.push(`## 需求文档${reqDocs.length > 1 ? ` ${i + 1}` : ''}（文件名: ${doc.name}）\n${doc.content.slice(0, 8000)}`))
+      parts.push(`## 测试计划\n${planDoc.content.slice(0, 8000)}`)
       parts.push('')
-      reqDocs.forEach((doc, i) => parts.push(`## 需求文档${reqDocs.length > 1 ? ` ${i + 1}` : ''}（文件名: ${doc.name}）\n${doc.content}`))
-      parts.push(`## 测试计划（从I列提取任务）\n${planDoc.content}`)
-      parts.push('')
-      parts.push('## 要求')
-      parts.push('- 严格输出JSON数组，不要markdown标记')
-      parts.push('- 如果在需求文档中找不到对应内容，section填写"未找到对应需求"')
-      parts.push('- 每个I列任务都要列出')
+      parts.push('每行格式：- 任务名 | 文档文件名 | 章节摘要')
+      parts.push('只输出列表，不要其他文字。如果某任务找不到对应需求，章节填"未找到"')
 
       const messages = [
-        { role: 'system', content: '你是供应链金融测试专家。请根据测试计划CSV的I列提取任务列表，并在需求文档中逐一匹配对应章节。输出JSON数组：[{"task":"任务名","docName":"文档名","section":"章节摘要"}]。严格JSON格式。' },
+        { role: 'system', content: '你是一个分析助手。根据测试计划I列提取任务，在需求文档中匹配对应章节。每行输出格式：- 任务名 | 文档文件名 | 章节摘要。只输出列表，不要任何其他内容。' },
         { role: 'user', content: parts.join('\n') },
       ]
-      const reply = await api()?.aiChat?.(messages)
+      const reply = await api()?.aiChat?.(messages, aiConfig?.analysisModel)
       if (!reply) { toast.error('AI 服务不可用'); return }
-      const jsonStr = extractJSON(reply)
-      const parsed = JSON.parse(jsonStr)
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        toast.error('未能解析任务匹配结果')
+      if (reply.startsWith('错误') || reply.startsWith('错误→')) {
+        toast.error(reply)
         return
       }
-      setTaskMatches(parsed)
-      setCheckedTasks(new Set(parsed.map((_, i) => i)))
+      console.log('[TaskMatch] AI 原始响应(前500字):', reply.slice(0, 500))
+
+      // 解析文本格式：- 任务名 | 文档名 | 章节
+      const lines = reply.split('\n')
+      const matches: { task: string; docName: string; section: string }[] = []
+      for (const line of lines) {
+        const trimmed = line.replace(/^[\s\-•*]+/, '').trim()
+        if (!trimmed) continue
+        const parts2 = trimmed.split('|')
+        if (parts2.length >= 3) {
+          matches.push({
+            task: parts2[0].trim(),
+            docName: parts2[1].trim(),
+            section: parts2.slice(2).join('|').trim(),
+          })
+        }
+      }
+
+      // 如果管道符解析失败，尝试冒号解析
+      if (matches.length === 0) {
+        for (const line of lines) {
+          const trimmed = line.replace(/^[\s\-•*\d]+[\.\、\)\s]*/, '').trim()
+          if (!trimmed || trimmed.length < 3) continue
+          const colonIdx = trimmed.indexOf('：') !== -1 ? trimmed.indexOf('：') : trimmed.indexOf(':')
+          if (colonIdx > 0) {
+            matches.push({
+              task: trimmed.slice(0, colonIdx).trim(),
+              docName: '',
+              section: trimmed.slice(colonIdx + 1).trim(),
+            })
+          } else {
+            matches.push({ task: trimmed, docName: '', section: '' })
+          }
+        }
+      }
+
+      if (matches.length === 0) {
+        toast.error('未能解析任务匹配结果，请重试')
+        return
+      }
+      setTaskMatches(matches)
+      setCheckedTasks(new Set(matches.map((_, i) => i)))
       setGenStep('tasks')
-      toast.success(`已匹配 ${parsed.length} 个任务，请确认`)
+      toast.success(`已匹配 ${matches.length} 个任务，请确认`)
     } catch (err: any) {
-      toast.error(`分析失败: ${err.message || '请重试'}`)
+      const msg = err.message || '请重试'
+      if (msg.includes('fetch failed') || msg.includes('Failed to fetch') || msg.includes('fetch')) {
+        toast.error('无法连接 AI 服务，请检查：\n1. 网络是否正常\n2. AI 设置中的 API 地址和 Key\n3. 尝试切换模型')
+      } else {
+        toast.error(`分析失败: ${msg}`)
+      }
     } finally { setGenerating(false) }
   }
 
@@ -215,7 +265,7 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
       if (designDoc) parts.push(`## 参考设计文档\n${designDoc.content}`)
       parts.push('')
       parts.push('## 需求文档全文（查找详细内容）')
-      reqDocs.forEach((doc, i) => parts.push(`## ${doc.name}\n${doc.content}`))
+      reqDocs.forEach((doc, i) => parts.push(`## ${doc.name}\n${doc.content.slice(0, 8000)}`))
       if (templateDoc) parts.push(`## 测试用例模板\n${templateDoc.content}`)
       if (genUserPrompt.trim()) parts.push(`## 用户补充说明\n${genUserPrompt.trim()}`)
       parts.push('')
@@ -228,8 +278,9 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
         { role: 'system', content: customAnalysisPrompt || '你是供应链金融测试专家。请根据用户提供的已确认任务列表和需求文档，为每个任务分析测试功能点。每个功能点一行，用 - 开头，格式：「- [任务名] 功能点名称：简要说明」。覆盖正向流程、异常场景、边界条件。只输出列表。' },
         { role: 'user', content: parts.join('\n') },
       ]
-      const reply = await api()?.aiChat?.(messages)
+      const reply = await api()?.aiChat?.(messages, aiConfig?.analysisModel)
       if (!reply) { toast.error('AI 服务不可用'); return }
+      if (reply.startsWith('错误') || reply.startsWith('错误→')) { toast.error(reply); return }
       const points = extractList(reply)
       if (points.length === 0) { toast.error('未能提取功能点，请重试'); return }
       setFuncPoints(points)
@@ -249,27 +300,60 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
     setGenCases([])
     try {
       const parts: string[] = []
-      parts.push('你是供应链金融测试专家。请根据以下功能点生成测试用例。')
+      parts.push('根据以下功能点生成测试用例，每行一个用例。')
       if (designDoc) parts.push(`## 参考设计文档\n${designDoc.content}`)
-      reqDocs.forEach((doc, i) => parts.push(`## 参考需求文档${reqDocs.length > 1 ? ` ${i + 1}` : ''}\n${doc.content}`))
+      reqDocs.forEach((doc, i) => parts.push(`## 参考需求文档${reqDocs.length > 1 ? ` ${i + 1}` : ''}\n${doc.content.slice(0, 8000)}`))
       parts.push('')
-      parts.push('## 需要覆盖的功能点')
+      parts.push('## 功能点')
       selectedPoints.forEach((p, i) => parts.push(`${i + 1}. ${p}`))
-      if (genUserPrompt.trim()) parts.push(`\n## 用户补充要求\n${genUserPrompt.trim()}`)
+      if (genUserPrompt.trim()) parts.push(`\n## 补充要求\n${genUserPrompt.trim()}`)
       parts.push('')
-      parts.push('## 输出要求')
-      parts.push(`基于以上 ${selectedPoints.length} 个功能点，生成测试用例 JSON 数组。每个用例: id, name, type(正向/异常/边界), priority(P0/P1/P2), precondition, steps(数组), expectedResult, testData(对象)。每个功能点至少 1 个用例。严格 JSON 格式。`)
+      parts.push('## 输出格式（每行一个用例，用 | 分隔6列）')
+      parts.push('- 用例名称 | 类型 | 优先级 | 前置条件 | 步骤(用；分隔) | 预期结果')
+      parts.push('类型：正向/异常/边界，优先级：P0/P1/P2')
+      parts.push('示例：')
+      parts.push('- 正常提交授信申请 | 正向 | P0 | 企业已登录 | 1.进入授信页；2.填写信息；3.提交 | 提交成功，状态待审批')
+      parts.push('每个功能点至少1个用例。只输出列表，不要其他文字。')
 
       const messages = [
-        { role: 'system', content: customSysPrompt },
+        { role: 'system', content: '根据功能点生成测试用例。每行格式：- 用例名称 | 类型 | 优先级 | 前置条件 | 步骤(；分隔) | 预期结果。只输出列表。' },
         { role: 'user', content: parts.join('\n') },
       ]
-      const reply = await api()?.aiChat?.(messages)
+      const reply = await api()?.aiChat?.(messages, aiConfig?.analysisModel)
       if (!reply) { toast.error('AI 服务不可用'); return }
-      const jsonStr = extractJSON(reply)
-      const parsed = JSON.parse(jsonStr)
-      const caseList: any[] = Array.isArray(parsed) ? parsed : (parsed.cases || [parsed])
-      const withIds = caseList.map((c: any, i: number) => ({ ...c, id: c.id || `TC-${String(i + 1).padStart(3, '0')}` }))
+      if (reply.startsWith('错误') || reply.startsWith('错误→')) { toast.error(reply); return }
+      console.log('[GenCases] AI 原始响应:', reply.slice(0, 500))
+
+      // 解析文本格式
+      const lines = reply.split('\n')
+      const caseList: any[] = []
+      for (const line of lines) {
+        const trimmed = line.replace(/^[\s\-•*]+/, '').trim()
+        if (!trimmed) continue
+        const parts2 = trimmed.split('|')
+        if (parts2.length >= 4) {
+          const name = parts2[0].trim()
+          const type = parts2[1].trim() || '正向'
+          const priority = parts2[2].trim() || 'P1'
+          const precondition = parts2[3].trim()
+          const stepsRaw = (parts2[4] || '').trim()
+          const steps = stepsRaw.split(/[；;]/).map(s => s.trim()).filter(s => s)
+          const expected = parts2.slice(5).join('|').trim() || stepsRaw
+          if (name) {
+            caseList.push({
+              name, type, priority, precondition,
+              steps: steps.length > 0 ? steps : [stepsRaw],
+              expectedResult: expected,
+              testData: {},
+            })
+          }
+        }
+      }
+      if (caseList.length === 0) {
+        toast.error('未能解析用例，请重试')
+        return
+      }
+      const withIds = caseList.map((c: any, i: number) => ({ ...c, id: `TC-${String(i + 1).padStart(3, '0')}` }))
       setGenCases(withIds)
       setGenStep('result')
       setGenTab('result')
@@ -277,6 +361,21 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
     } catch (err: any) {
       toast.error(`生成失败: ${err.message || '请重试'}`)
     } finally { setGenerating(false) }
+  }
+
+  async function handleExportExcel() {
+    if (genCases.length === 0) { toast.error('没有可导出的用例'); return }
+    try {
+      const api = (window as any).supplyChainTester
+      const result = await api?.exportTestCases?.(TEST_CASE_TEMPLATE_BASE64, genCases)
+      if (result?.ok && result.path) {
+        toast.success(`已导出到桌面: ${result.path.split('/').pop()}`)
+      } else {
+        toast.error(result?.error || '导出失败')
+      }
+    } catch (err: any) {
+      toast.error(`导出失败: ${err.message}`)
+    }
   }
 
   function handleImportGenerated() {
@@ -436,32 +535,55 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted">AI 匹配的任务-需求对应关系（可取消勾选不需要的）</span>
                     <button onClick={() => {
-                      setCheckedTasks(new Set(taskMatches.map((_, i) => checkedTasks.size === taskMatches.length ? -1 : i)))
-                      setCheckedTasks(prev => {
-                        if (prev.size === taskMatches.length) return new Set()
-                        return new Set(taskMatches.map((_, i) => i))
-                      })
+                      if (checkedTasks.size === taskMatches.length) {
+                        setCheckedTasks(new Set())
+                      } else {
+                        setCheckedTasks(new Set(taskMatches.map((_, i) => i)))
+                      }
                     }} className="text-[10px] text-accent hover:underline">
                       {checkedTasks.size === taskMatches.length ? '取消全选' : '全选'}
                     </button>
                   </div>
-                  <div className="space-y-1 max-h-56 overflow-y-auto">
-                    {taskMatches.map((t, i) => (
-                      <label key={i} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${checkedTasks.has(i) ? 'bg-accent/5' : 'bg-surface opacity-50'}`}>
-                        <input type="checkbox" checked={checkedTasks.has(i)}
-                          onChange={() => {
-                            const next = new Set(checkedTasks)
-                            if (next.has(i)) next.delete(i); else next.add(i)
-                            setCheckedTasks(next)
-                          }}
-                          className="rounded accent-accent" />
-                        <span className="text-xs flex-1">
-                          <span className="font-medium">{t.task}</span>
-                          <span className="text-muted ml-2">→ {t.docName}</span>
-                          <span className="text-muted/50 ml-1 text-[10px]">({t.section.slice(0, 30)}{t.section.length > 30 ? '...' : ''})</span>
-                        </span>
-                      </label>
-                    ))}
+                  <div className="overflow-x-auto max-h-64 overflow-y-auto border border-border/10 rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="bg-surface sticky top-0">
+                        <tr>
+                          <th className="w-8 p-2 text-left">
+                            <input type="checkbox"
+                              checked={checkedTasks.size === taskMatches.length && taskMatches.length > 0}
+                              onChange={() => {
+                                if (checkedTasks.size === taskMatches.length) {
+                                  setCheckedTasks(new Set())
+                                } else {
+                                  setCheckedTasks(new Set(taskMatches.map((_, i) => i)))
+                                }
+                              }}
+                              className="rounded accent-accent" />
+                          </th>
+                          <th className="p-2 text-left text-muted font-medium">计划任务</th>
+                          <th className="p-2 text-left text-muted font-medium">需求文档</th>
+                          <th className="p-2 text-left text-muted font-medium">对应内容</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {taskMatches.map((t, i) => (
+                          <tr key={i} className={`border-t border-border/5 ${checkedTasks.has(i) ? '' : 'opacity-40'}`}>
+                            <td className="p-2">
+                              <input type="checkbox" checked={checkedTasks.has(i)}
+                                onChange={() => {
+                                  const next = new Set(checkedTasks)
+                                  if (next.has(i)) next.delete(i); else next.add(i)
+                                  setCheckedTasks(next)
+                                }}
+                                className="rounded accent-accent" />
+                            </td>
+                            <td className="p-2 font-medium">{t.task}</td>
+                            <td className="p-2 text-muted">{t.docName}</td>
+                            <td className="p-2 text-muted/80 text-[10px] max-w-[200px] truncate" title={t.section}>{t.section}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                   <Button onClick={handleAnalyzePoints} disabled={generating} className="w-full" size="lg">
                     {generating ? <><Loader2 size={14} className="animate-spin" /> AI 正在分析功能点...</> : <>✅ 确认，分析功能点（{checkedTasks.size} 个任务）</>}
@@ -474,23 +596,59 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted">AI 分析出的功能点（可取消勾选不需要的）</span>
-                    <button onClick={() => setCheckedPoints(new Set(funcPoints.map((_, i) => checkedPoints.size === funcPoints.length ? i : funcPoints.length === 0 ? 0 : i)))} className="text-[10px] text-accent hover:underline">
+                    <button onClick={() => {
+                      if (checkedPoints.size === funcPoints.length) {
+                        setCheckedPoints(new Set())
+                      } else {
+                        setCheckedPoints(new Set(funcPoints.map((_, i) => i)))
+                      }
+                    }} className="text-[10px] text-accent hover:underline">
                       {checkedPoints.size === funcPoints.length ? '取消全选' : '全选'}
                     </button>
                   </div>
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                    {funcPoints.map((point, i) => (
-                      <label key={i} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${checkedPoints.has(i) ? 'bg-accent/5' : 'bg-surface opacity-50'}`}>
-                        <input type="checkbox" checked={checkedPoints.has(i)}
-                          onChange={() => {
-                            const next = new Set(checkedPoints)
-                            if (next.has(i)) next.delete(i); else next.add(i)
-                            setCheckedPoints(next)
-                          }}
-                          className="rounded accent-accent" />
-                        <span className="text-xs">{point}</span>
-                      </label>
-                    ))}
+                  <div className="overflow-x-auto max-h-64 overflow-y-auto border border-border/10 rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="bg-surface sticky top-0">
+                        <tr>
+                          <th className="w-8 p-2 text-left">
+                            <input type="checkbox"
+                              checked={checkedPoints.size === funcPoints.length && funcPoints.length > 0}
+                              onChange={() => {
+                                if (checkedPoints.size === funcPoints.length) {
+                                  setCheckedPoints(new Set())
+                                } else {
+                                  setCheckedPoints(new Set(funcPoints.map((_, i) => i)))
+                                }
+                              }}
+                              className="rounded accent-accent" />
+                          </th>
+                          <th className="p-2 text-left text-muted font-medium">任务</th>
+                          <th className="p-2 text-left text-muted font-medium">功能点描述</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {funcPoints.map((point, i) => {
+                          const bracketMatch = point.match(/^\[([^\]]+)\]\s*/)
+                          const task = bracketMatch ? bracketMatch[1] : ''
+                          const desc = bracketMatch ? point.slice(bracketMatch[0].length) : point
+                          return (
+                            <tr key={i} className={`border-t border-border/5 ${checkedPoints.has(i) ? '' : 'opacity-40'}`}>
+                              <td className="p-2">
+                                <input type="checkbox" checked={checkedPoints.has(i)}
+                                  onChange={() => {
+                                    const next = new Set(checkedPoints)
+                                    if (next.has(i)) next.delete(i); else next.add(i)
+                                    setCheckedPoints(next)
+                                  }}
+                                  className="rounded accent-accent" />
+                              </td>
+                              <td className="p-2 font-medium whitespace-nowrap">{task}</td>
+                              <td className="p-2 text-muted/80">{desc}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                   <Button onClick={handleConfirmGenerate} disabled={generating} className="w-full" size="lg">
                     {generating ? <><Loader2 size={14} className="animate-spin" /> 正在生成测试用例...</> : <>✅ 确认功能点，生成测试用例（{checkedPoints.size} 个）</>}
@@ -504,7 +662,10 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
               )}
             </TabsContent>
             <TabsContent value="result" className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={handleExportExcel} disabled={generating}>
+                  <Download size={12} /> 导出 Excel
+                </Button>
                 <Button size="sm" onClick={handleImportGenerated}><Plus size={12} /> 全部导入</Button>
               </div>
               {genCases.map((c: any, i: number) => (
