@@ -262,6 +262,27 @@ url = ...
 
 **变量命名**：URL 变量用 `url`，JSON 变量用 `json`，响应用 `a1`/`b1`
 
+### 6.4 Python 第三方依赖管理（`test-suites/common/依赖检查.py`）
+
+每次 Python 脚本中引入**新的第三方库**时，必须在 `test-suites/common/依赖检查.py` 中补充对应的检测条目，包含库名、pip 安装名、import 路径和用途说明。
+
+**添加格式**：
+```python
+check_module('库显示名', '导入路径', pip='pip包名', desc='用途说明')
+```
+
+**示例**：
+```python
+check_module('requests',              'requests',            desc='HTTP 请求，调用后端接口')
+check_module('mysql-connector-python','mysql.connector',     desc='连接 MySQL 数据库，执行 SQL 查询')
+check_module('chinesecalendar',       'chinese_calendar',    pip='chinesecalendar', desc='判断中国法定节假日，工作日计算')
+```
+
+**注意事项**：
+- `pip` 参数仅在 pip 包名与 `import` 名不一致时才需指定（如 `chinesecalendar` 的 import 名为 `chinese_calendar`）
+- 可选依赖（非核心功能）加 `optional=True`
+- 该脚本也是发给用户判断环境是否就绪的诊断工具，务必保持同步
+
 ### 6.1 通用工具页变量输入框 + 问号提示 (UtilsPage.tsx)
 
 `src/renderer/src/pages/UtilsPage.tsx` 顶部有 4 个变量输入框，每个右侧有一个 `?` 图标（`HelpCircle`），hover 时显示变量使用说明。
