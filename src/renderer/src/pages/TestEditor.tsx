@@ -42,6 +42,7 @@ const AI_MODELS = [
   { value: 'qwen-max', label: '通义千问 Max' },
   { value: 'qwen-plus', label: '通义千问 Plus' },
   { value: 'qwen-turbo', label: '通义千问 Turbo' },
+  { value: 'hy3', label: '腾讯混元 hy3' },
 ]
 
 export function TestEditor({ product }: TestEditorProps = {}) {
@@ -426,7 +427,7 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
               }}
               className="ml-2 text-[10px] bg-accent/10 text-accent-light px-1.5 py-0.5 rounded border-0 outline-none cursor-pointer hover:bg-accent/20"
             >
-              {AI_MODELS.map(m => (
+              {[...AI_MODELS, ...(aiConfig?.customModels || [])].map(m => (
                 <option key={m.value} value={m.value} className="text-foreground bg-surface">{m.label}</option>
               ))}
             </select>

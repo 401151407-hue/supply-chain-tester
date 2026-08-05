@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallba
 import { useAppStore } from '../store'
 import { Wrench, Loader2, Play, Square, Terminal, Trash2, Search, Database, Eraser, HelpCircle, X } from 'lucide-react'
 import { highlightOutput } from '../utils/highlight'
+import { pinyin } from 'pinyin-pro'
 import {
   DndContext,
   closestCenter,
@@ -29,6 +30,13 @@ const GROUP_STORAGE_KEY = 'utils-script-groups'
 const GROUP_MAP_STORAGE_KEY = 'utils-script-group-map'
 
 interface Group { id: string; name: string }
+
+/** 生成名称的拼音搜索键（全拼 + 首字母） */
+function getPinyinKeys(name: string): { py: string; pyFirst: string } {
+  const py = pinyin(name, { toneType: 'none', nonZh: 'consecutive', type: 'array' }).join('').toLowerCase()
+  const pyFirst = pinyin(name, { pattern: 'first', toneType: 'none', nonZh: 'consecutive', type: 'array' }).join('').toLowerCase()
+  return { py, pyFirst }
+}
 
 export function UtilsPage() {
   const { env } = useAppStore()
@@ -265,7 +273,11 @@ export function UtilsPage() {
     const q = searchQuery.trim().toLowerCase()
     let list = [...scripts]
     if (q) {
-      list = list.filter(s => s.name.toLowerCase().includes(q))
+      list = list.filter(s => {
+        if (s.name.toLowerCase().includes(q)) return true
+        const k = getPinyinKeys(s.name)
+        return k.py.includes(q) || k.pyFirst.includes(q)
+      })
     }
     return list.sort((a, b) => {
       const ga = order.indexOf(scriptGroupMap[a.path] || 'default')

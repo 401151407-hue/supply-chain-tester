@@ -233,6 +233,7 @@ const PRESET_MODELS = [
   'deepseek-v4-pro', 'deepseek-v4-flash',
   'qwen-max', 'qwen-plus', 'qwen-turbo',
   'moonshot-v1',
+  'hy3',
   'qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b', 'codellama:7b',
 ]
 
@@ -247,6 +248,7 @@ const MODEL_INFO: Record<string, { base: string; key: string; label: string }> =
   'qwen-plus':      { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Plus' },
   'qwen-turbo':     { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Turbo' },
   'moonshot-v1':    { base: 'https://api.moonshot.cn/v1', key: '', label: '月之暗面 · Moonshot' },
+  'hy3':            { base: 'https://tokenhub.tencentmaas.com/v1', key: 'sk-RwmJqgUJkBUAsPT7Vl7fHWZ292uUkOMxFN3AHScpfsbnrhx7', label: '腾讯 · 混元 hy3' },
   'qwen2.5:7b':     { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Qwen2.5 7B' },
   'llama3:8b':      { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Llama3 8B' },
   'deepseek-r1:7b': { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · DeepSeek R1 7B' },
@@ -271,6 +273,11 @@ export function AIAssistant() {
   const [showAgentMenu, setShowAgentMenu] = useState(false)
   const [showModelMenu, setShowModelMenu] = useState(false)
   const [customModels, setCustomModels] = useState<string[]>(loadCustomModels)
+  const [showAddModel, setShowAddModel] = useState(false)
+  const [addModelValue, setAddModelValue] = useState('')
+  const [addModelLabel, setAddModelLabel] = useState('')
+  const [modelSwitching, setModelSwitching] = useState(false)
+  const prevModelRef = useRef(activeModel)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [toolStatus, setToolStatus] = useState<string>('')
@@ -321,6 +328,36 @@ export function AIAssistant() {
   // ——— 模型管理 ———
   const activeModel = activeThread?.model || PRESET_MODELS[0]
   const allModels = [...new Set([...PRESET_MODELS, ...customModels])]
+
+  // 模型切换动画：activeModel 变化时触发脉冲效果
+  useEffect(() => {
+    if (prevModelRef.current !== activeModel) {
+      prevModelRef.current = activeModel
+      setModelSwitching(true)
+      const t = setTimeout(() => setModelSwitching(false), 800)
+      return () => clearTimeout(t)
+    }
+  }, [activeModel])
+
+  function handleAddCustomModel() {
+    const value = addModelValue.trim()
+    if (!value) return
+    const next = [...customModels, value]
+    setCustomModels(next)
+    try { localStorage.setItem('ai-custom-models', JSON.stringify(next)) } catch {}
+    setAddModelValue('')
+    setAddModelLabel('')
+    setShowAddModel(false)
+    setActiveModel(value)
+  }
+
+  function handleRemoveCustomModel(value: string) {
+    const next = customModels.filter(m => m !== value)
+    setCustomModels(next)
+    try { localStorage.setItem('ai-custom-models', JSON.stringify(next)) } catch {}
+    if (activeModel === value) setActiveModel(PRESET_MODELS[0])
+  }
+
   const [localModelsInstalled, setLocalModelsInstalled] = useState<Set<string>>(new Set())
   const [localServerRunning, setLocalServerRunning] = useState(false)
 
@@ -346,8 +383,8 @@ export function AIAssistant() {
     const info = MODEL_INFO[model]
     if (!info) return 'no-key'
 
-    // 内部模型：有默认 key
-    if (model.startsWith('llm-')) return 'ready'
+    // 有内置默认 Key（内部模型 / 腾讯混元等）：直接就绪
+    if (info.key) return 'ready'
 
     // 云模型：检查是否有保存的 key
     const isCloud = ['deepseek-', 'qwen-', 'moonshot'].some(p => model.startsWith(p))
@@ -380,7 +417,7 @@ export function AIAssistant() {
           api?.saveAIConfig?.({
             ...cfg,
             apiBase: mapping.base,
-            apiKey: providerKey ?? (model.startsWith('llm-') ? cfg.apiKey : ''),
+            apiKey: providerKey ?? mapping.key ?? (model.startsWith('llm-') ? cfg.apiKey : ''),
           }).catch(() => {})
         }
       }).catch(() => {})
@@ -753,6 +790,13 @@ export function AIAssistant() {
                     ${activeModel === m ? 'text-accent-light bg-accent/5' : 'text-muted'}`}>
                   <span className="font-mono truncate flex-1">{m}</span>
                   {info?.label && <span className="text-[10px] text-muted/60">{info.label}</span>}
+                  {!MODEL_INFO[m] && (
+                    <button
+                      onClick={e => { e.stopPropagation(); handleRemoveCustomModel(m) }}
+                      className="text-muted/50 hover:text-danger transition-colors shrink-0" title="删除自定义模型">
+                      <X size={11} />
+                    </button>
+                  )}
                   {status !== 'ready' && (
                     <span className="text-[10px] text-orange-400 shrink-0" title={
                       status === 'no-key' ? '未配置 Key' : status === 'local-offline' ? '服务未启动' : '未下载'
@@ -761,6 +805,42 @@ export function AIAssistant() {
                 </button>
                 )
               })}
+
+              {/* 自定义模型添加区 */}
+              <div className="border-t border-border/10 mt-1 pt-1">
+                {showAddModel ? (
+                  <div className="px-3 py-2 space-y-1.5">
+                    <input
+                      value={addModelValue}
+                      onChange={e => setAddModelValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddCustomModel() }}
+                      placeholder="模型ID，如 my-model-v1"
+                      className="w-full bg-surface rounded-md px-2 py-1 text-[11px] font-mono outline-none border border-border/10 focus:border-accent/50" autoFocus />
+                    <input
+                      value={addModelLabel}
+                      onChange={e => setAddModelLabel(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddCustomModel() }}
+                      placeholder="显示名称(可选)"
+                      className="w-full bg-surface rounded-md px-2 py-1 text-[11px] outline-none border border-border/10 focus:border-accent/50" />
+                    <div className="flex gap-1.5">
+                      <button onClick={handleAddCustomModel}
+                        className="flex-1 px-2 py-1 rounded-md text-[11px] bg-accent/10 text-accent-light hover:bg-accent/20 transition-colors">
+                        添加并切换
+                      </button>
+                      <button onClick={() => setShowAddModel(false)}
+                        className="px-2 py-1 rounded-md text-[11px] text-muted hover:bg-hover/5 transition-colors">
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowAddModel(true)}
+                    className="w-full text-left px-3 py-1.5 text-[11px] text-muted hover:text-accent-light hover:bg-hover/5 transition-colors flex items-center gap-1.5">
+                    <Plus size={11} /> 添加自定义模型
+                  </button>
+                )}
+              </div>
 
             </div>
           )}
@@ -778,7 +858,17 @@ export function AIAssistant() {
       </header>
 
       {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative">
+        {/* 模型切换动画 */}
+        {modelSwitching && (
+          <div className="absolute inset-x-0 top-0 z-10 flex justify-center pt-2 pointer-events-none">
+            <div className="px-3 py-1.5 rounded-full bg-accent/20 border border-accent/30 text-accent-light text-xs flex items-center gap-1.5 animate-pulse"
+                 style={{ animationDuration: '600ms' }}>
+              <Sparkles size={12} className="animate-spin" style={{ animationDuration: '1.5s' }} />
+              正在切换为 {MODEL_INFO[activeModel]?.label || activeModel}
+            </div>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : ''}`}>
             {msg.role === 'assistant' && (

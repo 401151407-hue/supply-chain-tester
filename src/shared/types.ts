@@ -132,6 +132,7 @@ export interface AIConfig {
   analysisModel: string
   generationModel: string
   enabled: boolean
+  customModels?: { value: string; label: string }[]
 }
 
 /** AI 生成步骤结果 */

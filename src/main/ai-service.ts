@@ -15,6 +15,7 @@ export interface AIConfig {
   analysisModel: string    // 用于分析报告（默认 llm-pro）
   generationModel: string  // 用于生成步骤（默认 llm-flash）
   enabled: boolean
+  customModels?: { value: string; label: string }[]
 }
 
 export interface ChatMessage {
@@ -53,6 +54,25 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   analysisModel: 'llm-pro',
   generationModel: 'llm-flash',
   enabled: true,
+  customModels: [],
+}
+
+/** 已知模型 → API 地址 + 默认 Key（与渲染进程 MODEL_INFO 保持一致） */
+const MODEL_INFO: Record<string, { base: string; key: string }> = {
+  'llm-pro':           { base: 'http://10.100.22.203:30080/llmsec/wxsllm/v1', key: 'llm-sk-y2ZW6Gvm-bQjif7EsrmsVg' },
+  'llm-plus':          { base: 'http://10.100.22.203:30080/llmsec/wxsllm/v1', key: 'llm-sk-y2ZW6Gvm-bQjif7EsrmsVg' },
+  'llm-flash':         { base: 'http://10.100.22.203:30080/llmsec/wxsllm/v1', key: 'llm-sk-y2ZW6Gvm-bQjif7EsrmsVg' },
+  'deepseek-v4-pro':   { base: 'https://api.deepseek.com/v1', key: '' },
+  'deepseek-v4-flash': { base: 'https://api.deepseek.com/v1', key: '' },
+  'qwen-max':          { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '' },
+  'qwen-plus':         { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '' },
+  'qwen-turbo':        { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '' },
+  'moonshot-v1':       { base: 'https://api.moonshot.cn/v1', key: '' },
+  'hy3':               { base: 'https://tokenhub.tencentmaas.com/v1', key: 'sk-RwmJqgUJkBUAsPT7Vl7fHWZ292uUkOMxFN3AHScpfsbnrhx7' },
+  'qwen2.5:7b':        { base: 'http://localhost:11434/v1', key: 'ollama' },
+  'llama3:8b':         { base: 'http://localhost:11434/v1', key: 'ollama' },
+  'deepseek-r1:7b':    { base: 'http://localhost:11434/v1', key: 'ollama' },
+  'codellama:7b':      { base: 'http://localhost:11434/v1', key: 'ollama' },
 }
 
 export class AIService {
@@ -72,6 +92,23 @@ export class AIService {
     return { ...this.config }
   }
 
+  /** 根据模型解析请求地址和 Key：优先模型内置映射，其次使用当前配置 */
+  private resolveEndpoint(model?: string): { url: string; apiKey: string } {
+    const m = model || this.config.analysisModel
+    const info = MODEL_INFO[m]
+    if (info) {
+      return {
+        url: `${info.base}/chat/completions`,
+        apiKey: info.key || this.config.apiKey,
+      }
+    }
+    // 自定义模型：使用当前配置的地址和 Key
+    return {
+      url: `${this.config.apiBase}/chat/completions`,
+      apiKey: this.config.apiKey,
+    }
+  }
+
   /**
    * 流式调用 LLM 聊天补全，通过回调逐 token 推送
    */
@@ -84,7 +121,7 @@ export class AIService {
       throw new Error('AI 服务未启用，请在设置中开启')
     }
 
-    const url = `${this.config.apiBase}/chat/completions`
+    const { url, apiKey } = this.resolveEndpoint(options?.model)
     const body: ChatCompletionRequest = {
       model: options?.model || this.config.analysisModel,
       messages,
@@ -97,7 +134,7 @@ export class AIService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     })
@@ -169,7 +206,7 @@ export class AIService {
       throw new Error('AI 服务未启用，请在设置中开启')
     }
 
-    const url = `${this.config.apiBase}/chat/completions`
+    const { url, apiKey } = this.resolveEndpoint(options?.model)
     const body: ChatCompletionRequest = {
       model: options?.model || this.config.analysisModel,
       messages,
@@ -182,7 +219,7 @@ export class AIService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     })
