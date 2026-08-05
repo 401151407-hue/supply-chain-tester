@@ -48,8 +48,6 @@ export function AISettingsPanel({ onClose }: Props) {
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<'cloud' | 'local'>('cloud')
-  const [newModelValue, setNewModelValue] = useState('')
-  const [newModelLabel, setNewModelLabel] = useState('')
   const [customProviders, setCustomProviders] = useState<CustomProvider[]>(loadCustomProviders)
   const [showNewProv, setShowNewProv] = useState(false)
   const [newProv, setNewProv] = useState({ name: '', base: '', key: '', models: '' })
@@ -110,30 +108,6 @@ export function AISettingsPanel({ onClose }: Props) {
       }))
     }
   }, [aiConfig])
-
-  function addCustomModel() {
-    const value = newModelValue.trim()
-    if (!value) { toast.error('请输入模型ID'); return }
-    const custom = form.customModels || []
-    if (custom.some(m => m.value === value)) { toast.error('该模型已存在'); return }
-    const next = [...custom, { value, label: newModelLabel.trim() || value }]
-    updateField('customModels', next)
-    // 同步到 AIAssistant 的 localStorage
-    try {
-      localStorage.setItem('ai-custom-models', JSON.stringify(next.map(m => m.value)))
-    } catch {}
-    setNewModelValue('')
-    setNewModelLabel('')
-    toast.success('已添加自定义模型')
-  }
-
-  function removeCustomModel(value: string) {
-    const next = (form.customModels || []).filter(m => m.value !== value)
-    updateField('customModels', next)
-    try {
-      localStorage.setItem('ai-custom-models', JSON.stringify(next.map(m => m.value)))
-    } catch {}
-  }
 
   function selectProvider(prov: typeof PROVIDERS[0]) {
     const savedKey = localStorage.getItem(`ai-key-${prov.models[0]}`) || ''
@@ -314,44 +288,6 @@ export function AISettingsPanel({ onClose }: Props) {
             <input className="w-full bg-surface rounded-lg px-3 py-2 text-[11px] font-mono outline-none border border-border/5 focus:border-accent/50"
               value={form.apiBase} onChange={e => updateField('apiBase', e.target.value)} placeholder="https://api.deepseek.com/v1" />
             <p className="text-[10px] text-muted/60 mt-1">选择提供商后自动填入，也可手动修改。模型在 AI 助手对话顶部切换</p>
-          </div>
-
-          {/* 自定义模型管理 */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs text-muted mb-1.5">
-              <Plus size={11} /> 自定义模型
-            </label>
-            <div className="flex gap-1.5 mb-1.5">
-              <input
-                className="flex-1 bg-surface rounded-lg px-2.5 py-1.5 text-[11px] font-mono outline-none border border-border/5 focus:border-accent/50 placeholder:text-muted/50"
-                value={newModelValue} onChange={e => setNewModelValue(e.target.value)}
-                placeholder="模型ID，如 my-model-v1" />
-              <input
-                className="flex-1 bg-surface rounded-lg px-2.5 py-1.5 text-[11px] outline-none border border-border/5 focus:border-accent/50 placeholder:text-muted/50"
-                value={newModelLabel} onChange={e => setNewModelLabel(e.target.value)}
-                placeholder="显示名称(可选)" />
-              <button onClick={addCustomModel}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-accent/10 text-accent-light hover:bg-accent/20 transition-colors shrink-0">
-                <Plus size={11} /> 添加
-              </button>
-            </div>
-            {(form.customModels || []).length > 0 ? (
-              <div className="space-y-1">
-                {(form.customModels || []).map(m => (
-                  <div key={m.value} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-surface border border-border/5 text-[11px]">
-                    <span className="font-mono text-accent-light">{m.value}</span>
-                    <span className="flex items-center gap-2">
-                      <span className="text-muted">{m.label}</span>
-                      <button onClick={() => removeCustomModel(m.value)} className="text-muted hover:text-danger transition-colors">
-                        <Trash2 size={12} />
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted/60">暂无自定义模型，添加后可出现在 AI 助手和用例生成的模型下拉框中</p>
-            )}
           </div>
           </div>
 

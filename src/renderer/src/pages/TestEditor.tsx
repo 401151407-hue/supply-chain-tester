@@ -379,34 +379,6 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
     }
   }
 
-  function handleImportGenerated() {
-    const { testCases, setTestCases, setCurrentCase, navigateTo } = useAppStore.getState()
-    const newCases: TestCase[] = genCases.map(c => ({
-      id: c.id,
-      type: 'api' as const,
-      name: c.name,
-      description: `${c.precondition}\n预期: ${c.expectedResult}`,
-      tags: [c.type, c.priority, 'AI生成'],
-      steps: c.steps.map((s: string, i: number) => ({
-        id: `${c.id}-S${i + 1}`,
-        name: s,
-        method: 'GET' as const,
-        url: '',
-        headers: {},
-        expectedStatus: 200,
-        timeout: 10000,
-      })),
-      variables: c.testData || {},
-      status: 'draft' as const,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }))
-    setTestCases([...testCases, ...newCases])
-    setCurrentCase(newCases[0])
-    navigateTo('editor')
-    toast.success(`已导入 ${newCases.length} 个用例`)
-  }
-
   if (!currentCase) {
     return (
       <div className="h-full flex flex-col overflow-hidden">
@@ -663,11 +635,10 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
               )}
             </TabsContent>
             <TabsContent value="result" className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end">
                 <Button size="sm" variant="outline" onClick={handleExportExcel} disabled={generating}>
                   <Download size={12} /> 导出 Excel
                 </Button>
-                <Button size="sm" onClick={handleImportGenerated}><Plus size={12} /> 全部导入</Button>
               </div>
               {genCases.map((c: any, i: number) => (
                 <Card key={c.id || i}>
