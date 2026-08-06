@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useAppStore } from '../store'
 import { UpdateIndicator } from './UpdateIndicator'
+import { PythonSelectorPanel } from './PythonSelector'
 import { Button } from './ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 import { Tip } from '../lib/Tip'
@@ -158,13 +160,13 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
   React.useEffect(() => { if (isPiaoerongActive) setPiaoerongExpanded(true) }, [isPiaoerongActive])
 
   return (
-    <aside className={`w-60 border-r border-border/5 flex flex-col select-none ${
-      bgImage
-        ? theme === 'dark'
-          ? 'bg-black/25 backdrop-blur-[2px]'
-          : 'bg-white/10 backdrop-blur-[2px]'
-        : 'bg-surface-light'
-    }`}>
+    <aside className="relative w-60 border-r border-border/5 flex flex-col select-none">
+      {/* 背景毛玻璃覆盖层（独立层，避免 aside 自身 backdrop-filter 导致内部 fixed 浮窗错位） */}
+      {bgImage && (
+        <div className={`absolute inset-0 z-0 ${theme === 'dark' ? 'bg-black/25' : 'bg-white/10'} backdrop-blur-[2px]`} />
+      )}
+      {/* 侧边栏内容层 */}
+      <div className="relative z-10 flex h-full min-h-0 flex-col">
       {/* Logo（外层 drag-region 覆盖顶部留白，整条可拖动窗口） */}
       <div className="drag-region">
         <div className="h-12 flex items-center gap-2 px-4 border-b border-border/5 mt-7">
@@ -450,19 +452,19 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
           </Tip>
         </div>
 
-        {/* 检测结果弹窗 */}
-        {showDetect && (
-          <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-150 ${closingDetect ? 'opacity-0' : 'opacity-100'}`}>
-            <div className="bg-surface border border-border rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden animate-zoom-in"
+        {/* 检测结果弹窗 —— 用 Portal 渲染到 body，避免被 aside 的 stacking context 限制层级，确保事件命中浮窗 */}
+        {showDetect && createPortal(
+          <div className={`fixed inset-0 z-[999] flex items-center justify-center bg-black/50 transition-opacity duration-150 ${closingDetect ? 'opacity-0' : 'opacity-100'}`}>
+            <div className="bg-surface border border-border rounded-xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col animate-zoom-in"
                  onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-border/10">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border/10 shrink-0">
                 <span className="font-semibold text-sm">环境检测</span>
                 <button onClick={closeDetect}
                   className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground">
                   <X size={18} />
                 </button>
               </div>
-              <div className="px-5 py-4 space-y-2 overflow-y-auto max-h-[60vh]">
+              <div className="px-5 py-4 space-y-2 overflow-y-auto min-h-0 flex-1 max-h-[55vh]">
                 {detecting ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 size={24} className="animate-spin text-accent" />
@@ -481,10 +483,17 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
                     </div>
                   ))
                 )}
+
+                {/* Python 解释器选择 */}
+                <div className="border-t border-border/10 pt-3 mt-1">
+                  <PythonSelectorPanel />
+                </div>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
+      </div>
       </div>
     </aside>
   )

@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain, shell, Menu, dialog, type MenuItemConstruc
 import { join, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, readdirSync, statSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'fs'
 import { TestRunner } from './test-runner'
 import { ReportStore } from './report-store'
 import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
@@ -68,15 +68,42 @@ function getPythonPortableDir(): string {
 }
 const PYTHON_EXE = process.platform === 'win32' ? 'python.exe' : 'python3'
 
-function getPythonPath(): string {
-  // 优先使用打包的便携版 Python
-  const bundled = join(getPythonPortableDir(), PYTHON_EXE)
-  if (existsSync(bundled)) return bundled
+// ── Python 解释器选择配置（用户可自主选择：便携版 / 系统 / 自定义）──
+interface PythonChoiceConfig {
+  mode: 'portable' | 'system' | 'custom'
+  /** system / custom 模式下用户选择的解释器路径 */
+  path?: string
+}
+let pythonChoice: PythonChoiceConfig = { mode: 'portable' }
 
+function getPythonConfigPath(): string {
+  return join(app.getPath('userData'), 'supply-chain-data', 'python-config.json')
+}
+function loadPythonChoice(): void {
+  try {
+    const raw = readFileSync(getPythonConfigPath(), 'utf-8')
+    const parsed = JSON.parse(raw)
+    if (parsed && ['portable', 'system', 'custom'].includes(parsed.mode)) {
+      pythonChoice = { mode: parsed.mode, path: parsed.path }
+    }
+  } catch {
+    // 无配置时默认便携版
+  }
+}
+function savePythonChoice(): void {
+  try {
+    mkdirSync(join(app.getPath('userData'), 'supply-chain-data'), { recursive: true })
+    writeFileSync(getPythonConfigPath(), JSON.stringify(pythonChoice, null, 2), 'utf-8')
+  } catch (err: any) {
+    console.warn('[Python] 保存解释器配置失败:', err?.message)
+  }
+}
+
+/** 常见 Windows / macOS / Linux Python 安装路径 */
+function getCommonPythonCandidates(): string[] {
+  const localAppData = process.env.LOCALAPPDATA || ''
   if (process.platform === 'win32') {
-    // 回退：尝试 Windows 常见 Python 安装路径
-    const localAppData = process.env.LOCALAPPDATA || ''
-    const candidates = [
+    return [
       `D:\\Python\\python.exe`,
       `D:\\Python312\\python.exe`,
       `D:\\Python311\\python.exe`,
@@ -87,26 +114,69 @@ function getPythonPath(): string {
       `${localAppData}\\Programs\\Python\\Python312\\python.exe`,
       `${localAppData}\\Programs\\Python\\Python311\\python.exe`,
       `${localAppData}\\Programs\\Python\\Python310\\python.exe`,
+      `${localAppData}\\Programs\\Python\\Python313\\python.exe`,
+      `${localAppData}\\Programs\\Python\\Python314\\python.exe`,
     ]
-    for (const p of candidates) {
+  }
+  return [
+    '/usr/local/bin/python3',
+    '/usr/bin/python3',
+    '/Library/Frameworks/Python.framework/Versions/3.9/bin/python3',
+    '/Library/Frameworks/Python.framework/Versions/3.10/bin/python3',
+    '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3',
+    '/Library/Frameworks/Python.framework/Versions/3.12/bin/python3',
+    '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3',
+    '/opt/homebrew/bin/python3',
+    '/opt/homebrew/bin/python3.11',
+    '/opt/homebrew/bin/python3.12',
+    '/opt/homebrew/bin/python3.13',
+    '/usr/local/bin/python',
+    '/usr/bin/python',
+  ]
+}
+
+/** 解析 PATH 中的命令为真实路径（which / where） */
+function resolveCommandPath(cmd: string): string | null {
+  try {
+    const { execFileSync } = require('child_process')
+    const out = execFileSync(process.platform === 'win32' ? 'where' : 'which', [cmd], {
+      encoding: 'utf-8',
+      windowsHide: true,
+    }).trim()
+    const first = out.split(/\r?\n/)[0].trim()
+    return first || null
+  } catch {
+    return null
+  }
+}
+
+/** 便携版 Python 是否存在（有可执行文件才算） */
+function portablePythonExists(): boolean {
+  return existsSync(join(getPythonPortableDir(), PYTHON_EXE))
+}
+
+/** 根据用户选择返回实际使用的 Python 路径 */
+function getPythonPath(): string {
+  // 用户选择：system / custom 且路径有效 → 直接使用
+  if ((pythonChoice.mode === 'system' || pythonChoice.mode === 'custom') && pythonChoice.path) {
+    if (existsSync(pythonChoice.path)) return pythonChoice.path
+  }
+
+  // 便携版（默认）：优先使用打包的便携版 Python
+  const bundled = join(getPythonPortableDir(), PYTHON_EXE)
+  if (existsSync(bundled)) return bundled
+
+  if (process.platform === 'win32') {
+    // 回退：尝试 Windows 常见 Python 安装路径
+    for (const p of getCommonPythonCandidates()) {
       if (existsSync(p)) return p
     }
     // Windows 回退到 PATH 中的 python / py
     return 'python'
   }
 
-  // macOS / Linux：尝试常见的 python3 路径
-  const unixCandidates = [
-    '/usr/local/bin/python3',
-    '/usr/bin/python3',
-    '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3',
-    '/Library/Frameworks/Python.framework/Versions/3.12/bin/python3',
-    '/Library/Frameworks/Python.framework/Versions/3.10/bin/python3',
-    '/opt/homebrew/bin/python3',
-    '/usr/local/bin/python',
-    '/usr/bin/python',
-  ]
-  for (const p of unixCandidates) {
+  // macOS / Linux：尝试常见 python3 路径
+  for (const p of getCommonPythonCandidates()) {
     if (existsSync(p)) return p
   }
 
@@ -118,39 +188,60 @@ function getPythonPath(): string {
 let pythonAvailable: boolean | null = null
 let pythonVersion: string | null = null
 
-/** 获取所有可能的 Python 路径 */
+/** 获取所有可能的 Python 路径（用户选择的优先） */
 function getPythonPaths(): string[] {
   const paths: string[] = []
-  
-  // 1. 打包的便携版 Python（最高优先）
-  if (!isDev) {
-    const bundled = join(getPythonPortableDir(), PYTHON_EXE)
-    console.log('[Python] Checking bundled:', bundled, 'exists:', existsSync(bundled))
-    if (existsSync(bundled)) paths.push(bundled)
+
+  // 0. 用户选择的解释器（system / custom）
+  if ((pythonChoice.mode === 'system' || pythonChoice.mode === 'custom') && pythonChoice.path) {
+    if (existsSync(pythonChoice.path)) paths.push(pythonChoice.path)
   }
+
+  // 1. 打包的便携版 Python（默认最高优先）
+  const bundled = join(getPythonPortableDir(), PYTHON_EXE)
+  if (existsSync(bundled)) paths.push(bundled)
 
   // 2. 常见命令
   paths.push('python', 'python3', 'py')
 
-  // 3. 常见 Windows 安装路径
-  const localAppData = process.env.LOCALAPPDATA || ''
-  const commonDirs = [
-    `D:\\Python\\python.exe`,
-    `D:\\Python312\\python.exe`,
-    `D:\\Python311\\python.exe`,
-    `D:\\Python310\\python.exe`,
-    `C:\\Python312\\python.exe`,
-    `C:\\Python311\\python.exe`,
-    `C:\\Python310\\python.exe`,
-    `${localAppData}\\Programs\\Python\\Python312\\python.exe`,
-    `${localAppData}\\Programs\\Python\\Python311\\python.exe`,
-    `${localAppData}\\Programs\\Python\\Python310\\python.exe`,
-  ]
-  for (const p of commonDirs) {
+  // 3. 常见安装路径
+  for (const p of getCommonPythonCandidates()) {
     if (existsSync(p)) paths.push(p)
   }
 
   return paths
+}
+
+/** 检测系统里所有可用的 Python（去重，返回路径 + 版本） */
+async function detectSystemPythons(): Promise<{ path: string; version: string }[]> {
+  const candidates: string[] = []
+  const seen = new Set<string>()
+
+  // PATH 命令 → 解析为真实路径
+  for (const cmd of ['python3', 'python', 'py']) {
+    const real = resolveCommandPath(cmd)
+    if (real && !seen.has(real)) {
+      seen.add(real)
+      candidates.push(real)
+    }
+  }
+
+  // 常见安装路径
+  for (const p of getCommonPythonCandidates()) {
+    if (existsSync(p) && !seen.has(p)) {
+      seen.add(p)
+      candidates.push(p)
+    }
+  }
+
+  const results: { path: string; version: string }[] = []
+  for (const p of candidates) {
+    const r = await tryPython(p)
+    if (r.available && r.version) {
+      results.push({ path: p, version: r.version })
+    }
+  }
+  return results
 }
 
 /** 检测 Python 是否可用（每次重新检测，不用缓存） */
@@ -604,6 +695,56 @@ function registerIpcHandlers(): void {
     return checkPython()
   })
 
+  // 获取 Python 解释器信息（当前选择、便携版、系统候选）
+  ipcMain.handle(IPC_CHANNELS.PYTHON_GET_INFO, async () => {
+    const portablePath = join(getPythonPortableDir(), PYTHON_EXE)
+    const portableExists = existsSync(portablePath)
+    let portableVersion: string | undefined
+    if (portableExists) {
+      const r = await tryPython(portablePath)
+      portableVersion = r.version
+    }
+    const systemCandidates = await detectSystemPythons()
+    const currentPath = getPythonPath()
+    const current = await tryPython(currentPath)
+    return {
+      choice: pythonChoice,
+      currentPath,
+      currentVersion: current.version,
+      portable: { exists: portableExists, path: portablePath, version: portableVersion },
+      systemCandidates,
+    }
+  })
+
+  // 设置 Python 解释器（portable / system / custom）
+  ipcMain.handle(IPC_CHANNELS.PYTHON_SET_MODE, async (_event, choice: { mode: 'portable' | 'system' | 'custom'; path?: string }) => {
+    const mode = choice?.mode
+    if (mode !== 'portable' && mode !== 'system' && mode !== 'custom') {
+      return { ok: false, error: '无效的 Python 选择模式' }
+    }
+    pythonChoice = { mode, path: choice?.path || undefined }
+    savePythonChoice()
+
+    const portablePath = join(getPythonPortableDir(), PYTHON_EXE)
+    const portableExists = existsSync(portablePath)
+    let portableVersion: string | undefined
+    if (portableExists) {
+      const r = await tryPython(portablePath)
+      portableVersion = r.version
+    }
+    const systemCandidates = await detectSystemPythons()
+    const currentPath = getPythonPath()
+    const current = await tryPython(currentPath)
+    return {
+      ok: true,
+      choice: pythonChoice,
+      currentPath,
+      currentVersion: current.version,
+      portable: { exists: portableExists, path: portablePath, version: portableVersion },
+      systemCandidates,
+    }
+  })
+
   // AI 多轮对话
   ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (_event, messages: { role: string; content: string }[], model?: string) => {
     try {
@@ -839,11 +980,20 @@ print('OK')
   ipcMain.handle('app:detect-environment', async () => {
     type CheckItem = { label: string; ok: boolean; detail: string }
     const results: CheckItem[] = []
-    const { execSync: exec } = require('child_process')
+    const { execFile } = require('child_process')
+
+    // 异步执行命令（不阻塞主进程，避免整个应用无响应）
+    const run = (cmd: string, args: string[], opts: any = {}): Promise<{ ok: boolean; out: string }> =>
+      new Promise(resolve => {
+        execFile(cmd, args, { timeout: 8000, windowsHide: true, ...opts }, (err: any, stdout: string, stderr: string) => {
+          const out = ((stdout || '') + (stderr || '')).trim()
+          resolve({ ok: !err, out })
+        })
+      })
 
     const resourcesPath = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
     const pythonDir = join(resourcesPath, 'python-portable')
-    const pythonExe = join(pythonDir, 'python.exe')
+    const pythonExe = join(pythonDir, process.platform === 'win32' ? 'python.exe' : 'python3')
     const sitePackages = join(pythonDir, 'site-packages')
     const pythonExists = existsSync(pythonExe)
 
@@ -852,27 +1002,15 @@ print('OK')
 
     // ==== 第 1 步：检测 python-portable ====
     if (pythonExists) {
-      try {
-        const ver = exec(`"${pythonExe}" --version`, { timeout: 5000 }).toString().trim()
-        results.push({
-          label: '便携版 Python',
-          ok: true,
-          detail: ver
-        })
+      const r = await run(pythonExe, ['--version'])
+      if (r.ok) {
+        results.push({ label: '便携版 Python', ok: true, detail: r.out })
         activePython = pythonExe
-      } catch {
-        results.push({
-          label: '便携版 Python',
-          ok: false,
-          detail: '已找到但无法执行'
-        })
+      } else {
+        results.push({ label: '便携版 Python', ok: false, detail: '已找到但无法执行' })
       }
     } else {
-      results.push({
-        label: '便携版 Python',
-        ok: false,
-        detail: '未找到，将检测系统 Python'
-      })
+      results.push({ label: '便携版 Python', ok: false, detail: '未找到，将检测系统 Python' })
 
       // ==== 第 1 步备选：检测系统 Python ====
       const systemCandidates = process.platform === 'win32'
@@ -881,18 +1019,18 @@ print('OK')
         : ['python3', 'python', '/usr/local/bin/python3', '/usr/bin/python3']
       let found = false
       for (const cand of systemCandidates) {
-        try {
-          const ver = exec(`"${cand}" --version`, { timeout: 5000 }).toString().trim()
+        const r = await run(cand, ['--version'])
+        if (r.ok) {
           results.push({
             label: '系统 Python',
             ok: true,
-            detail: `${ver} — 将使用电脑上安装的 Python 来运行脚本`
+            detail: `${r.out} — 将使用电脑上安装的 Python 来运行脚本`
           })
           activePython = cand
           found = true
           useSystemPython = true
           break
-        } catch {}
+        }
       }
       if (!found) {
         results.push({
@@ -912,22 +1050,24 @@ print('OK')
       detail: chromeOk ? '已就绪' : `未找到，请放置到 ${join(resourcesPath, 'chrome-win64')}`
     })
 
-    // ==== 第 3 步：检测依赖 ====
+    // ==== 第 3 步：检测依赖（并行执行，不阻塞主进程）====
     if (activePython) {
       const deps = ['requests', 'paramiko', 'Crypto', 'mysql', 'openpyxl', 'faker']
       const env = useSystemPython
         ? { ...process.env }
         : { ...process.env, PYTHONPATH: existsSync(sitePackages) ? sitePackages : '' }
+      const depResults = await Promise.all(
+        deps.map(dep => run(activePython, ['-c', `import ${dep}`], { env }))
+      )
       let missingCount = 0
-      for (const dep of deps) {
-        try {
-          exec(`"${activePython}" -c "import ${dep}"`, { timeout: 5000, env })
+      deps.forEach((dep, i) => {
+        if (depResults[i].ok) {
           results.push({ label: `依赖: ${dep}`, ok: true, detail: '已安装' })
-        } catch {
+        } else {
           missingCount++
           results.push({ label: `依赖: ${dep}`, ok: false, detail: '未安装' })
         }
-      }
+      })
       if (missingCount === 0) {
         results.push({ label: '脚本依赖', ok: true, detail: '全部已安装 ✅' })
       } else {
@@ -1843,6 +1983,10 @@ function parseScriptVars(scriptPath: string, currentEnv?: string): { key: string
 
 app.whenReady().then(() => {
   const scriptsDir = getScriptsDir()
+
+  // 加载用户选择的 Python 解释器
+  loadPythonChoice()
+  console.log('[Python] 当前解释器模式:', pythonChoice.mode, pythonChoice.path || '', '→', getPythonPath())
 
   // 确保脚本目录存在（Windows 上由 NSIS 安装程序创建，这里是 Mac 兜底）
   if (!existsSync(scriptsDir)) {

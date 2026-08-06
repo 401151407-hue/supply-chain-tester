@@ -175,6 +175,19 @@ const api = {
   checkPython: (): Promise<{ available: boolean; version?: string; hint?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.CHECK_PYTHON),
 
+  /** 获取 Python 解释器信息（当前选择、便携版、系统候选） */
+  getPythonInfo: (): Promise<{
+    choice: { mode: 'portable' | 'system' | 'custom'; path?: string }
+    currentPath: string
+    currentVersion?: string
+    portable: { exists: boolean; path: string; version?: string }
+    systemCandidates: { path: string; version: string }[]
+  }> => ipcRenderer.invoke(IPC_CHANNELS.PYTHON_GET_INFO),
+
+  /** 设置 Python 解释器（portable / system / custom） */
+  setPythonMode: (choice: { mode: 'portable' | 'system' | 'custom'; path?: string }): Promise<any> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PYTHON_SET_MODE, choice),
+
   /** 环境检测：chrome-win64、python-portable、依赖、系统 Python */
   detectEnvironment: (): Promise<{ results: { label: string; ok: boolean; detail: string }[]; allOk: boolean }> =>
     ipcRenderer.invoke('app:detect-environment'),

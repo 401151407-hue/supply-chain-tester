@@ -242,6 +242,8 @@ export const IPC_CHANNELS = {
   AI_CHAT_STREAM_TOKEN: 'test:ai-chat-stream-token',
   RUN_SCRIPT: 'script:run',
   CHECK_PYTHON: 'script:check-python',
+  PYTHON_GET_INFO: 'python:get-info',
+  PYTHON_SET_MODE: 'python:set-mode',
   PARSE_SCRIPT_VARS: 'script:parse-vars',
   API_DEBUG: 'api:debug',
   // 自动更新
