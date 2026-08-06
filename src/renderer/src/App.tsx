@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
+import { HomePage } from './pages/HomePage'
 import { TestEditor } from './pages/TestEditor'
 import { Reports } from './pages/Reports'
 import { ProductPage } from './pages/ProductPage'
@@ -15,7 +16,7 @@ import { Toaster } from './components/ui/sonner'
 import { useAppStore } from './store'
 
 export default function App() {
-  const { activeTab, setTestCases, setReports, loadAIConfig, theme, toggleTheme, colorTheme, customAccent, scriptParams, selectedSubProduct, navKey } = useAppStore()
+  const { activeTab, setTestCases, setReports, loadAIConfig, theme, toggleTheme, colorTheme, customAccent, bgImage, scriptParams, selectedSubProduct, navKey } = useAppStore()
   const [showAISettings, setShowAISettings] = useState(false)
 
   // 十六进制 → "r g b" 字符串，供 CSS 变量使用
@@ -65,7 +66,7 @@ export default function App() {
   }, [])
 
   // 惰性挂载：只挂载访问过的页面，之后保持挂载
-  const [mountedTabs, setMountedTabs] = useState<Set<string>>(() => new Set(['editor']))
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(() => new Set(['home']))
   useEffect(() => {
     setMountedTabs(prev => {
       if (prev.has(activeTab)) return prev
@@ -110,6 +111,13 @@ export default function App() {
   function renderContent() {
     return (
       <>
+        {/* ===== 首页（空白）===== */}
+        {mountedTabs.has('home') && (
+          <div key="wrap-home" style={layerStyle('home')}>
+            <HomePage key={tabKey('home')} />
+          </div>
+        )}
+
         {/* ===== 产品页：条件渲染，切换产品时重挂载获取新数据 ===== */}
         {isProduct && (
           <div style={layerStyle(activeTab)}>
@@ -170,14 +178,28 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-full">
-        <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
-        <main className="flex-1 overflow-hidden relative">
-          {renderContent()}
-        </main>
-        {showAISettings && (
-          <AISettingsPanel onClose={() => setShowAISettings(false)} />
+      <div className="relative flex h-full">
+        {/* 自定义背景层 */}
+        {bgImage && (
+          <div
+            className="pointer-events-none fixed inset-0 z-0"
+            style={{
+              backgroundImage: `url(${bgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }}
+          />
         )}
+        <div className="relative z-10 flex h-full w-full">
+          <Sidebar onOpenAISettings={() => setShowAISettings(true)} />
+          <main className="flex-1 overflow-hidden relative">
+            {renderContent()}
+          </main>
+          {showAISettings && (
+            <AISettingsPanel onClose={() => setShowAISettings(false)} />
+          )}
+        </div>
       </div>
       <Toaster position="bottom-right" />
     </TooltipProvider>

@@ -777,6 +777,32 @@ print('OK')
     }
   })
 
+  // 选择图片（返回 base64 Data URL，用于自定义背景）
+  ipcMain.handle('dialog:pickImage', async (_event) => {
+    if (!mainWindow) return { ok: false, error: '窗口未就绪' }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, canceled: true }
+    }
+    const filePath = result.filePaths[0]
+    try {
+      const buf = readFileSync(filePath)
+      if (buf.length > 20 * 1024 * 1024) return { ok: false, error: '图片过大，请选择 20MB 以内的图片' }
+      const ext = (filePath.split('.').pop() || 'png').toLowerCase()
+      const mime: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' }
+      const dataUrl = `data:${mime[ext] || 'image/png'};base64,${buf.toString('base64')}`
+      return { ok: true, path: filePath, dataUrl }
+    } catch (err: any) {
+      return { ok: false, error: `读取失败: ${err.message}` }
+    }
+  })
+
   // ── 浏览器操作（AI Agent 工具）──
   ipcMain.handle(IPC_CHANNELS.BROWSER_OPEN, async (_event, url: string) => {
     return browserOpen(url)

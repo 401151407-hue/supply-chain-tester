@@ -236,6 +236,10 @@ const api = {
   pickFile: (filters?: { name: string; extensions: string[] }[]): Promise<{ ok: boolean; path?: string; content?: string; error?: string; canceled?: boolean }> =>
     ipcRenderer.invoke('dialog:pickFile', filters ? { filters } : undefined),
 
+  /** 选择图片并返回 base64 Data URL（用于自定义背景） */
+  pickImage: (): Promise<{ ok: boolean; path?: string; dataUrl?: string; error?: string; canceled?: boolean }> =>
+    ipcRenderer.invoke('dialog:pickImage'),
+
   // ── 本地大模型 (Ollama) ──
   ollamaStatus: (): Promise<{ installed: boolean; running: boolean; version?: string; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_STATUS),

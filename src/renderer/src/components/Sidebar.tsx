@@ -58,6 +58,7 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
     selectedSubProduct,
     colorTheme, setColorTheme,
     customAccent, setCustomAccent,
+    bgImage,
   } = useAppStore()
 
   const [showColorMenu, setShowColorMenu] = useState(false)
@@ -157,7 +158,13 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
   React.useEffect(() => { if (isPiaoerongActive) setPiaoerongExpanded(true) }, [isPiaoerongActive])
 
   return (
-    <aside className="w-60 bg-surface-light border-r border-border/5 flex flex-col select-none">
+    <aside className={`w-60 border-r border-border/5 flex flex-col select-none ${
+      bgImage
+        ? theme === 'dark'
+          ? 'bg-black/25 backdrop-blur-[2px]'
+          : 'bg-white/10 backdrop-blur-[2px]'
+        : 'bg-surface-light'
+    }`}>
       {/* Logo */}
       <div className="h-12 flex items-center gap-2 px-4 border-b border-border/5 drag-region mt-7">
         <Package size={20} className="text-accent" />

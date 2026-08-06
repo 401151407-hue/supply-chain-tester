@@ -13,12 +13,16 @@ interface AppState {
   customAccent: string
   setCustomAccent: (hex: string) => void
 
+  // 自定义背景
+  bgImage: string
+  setBgImage: (dataUrl: string) => void
+
   // 环境配置
   env: 'SIT' | 'UAT' | 'DEV'
   setEnv: (env: 'SIT' | 'UAT' | 'DEV') => void
 
   // 导航
-  activeTab: 'xinerong' | 'dingerong' | 'huoerong' | 'zhangerong' | 'piaoerong' | 'editor' | 'reports' | 'apidebug' | 'script' | 'aiassistant' | 'utils' | 'recorder' | 'apirecorder' | 'casegenerator'
+  activeTab: 'home' | 'xinerong' | 'dingerong' | 'huoerong' | 'zhangerong' | 'piaoerong' | 'editor' | 'reports' | 'apidebug' | 'script' | 'aiassistant' | 'utils' | 'recorder' | 'apirecorder' | 'casegenerator'
   setActiveTab: (tab: AppState['activeTab']) => void
   navKey: number  // 同标签刷新时递增，触发页面重挂载
   transitionKey: number  // 每次导航递增，触发切换动画
@@ -99,6 +103,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem('customAccent', hex)
     set({ customAccent: hex })
   },
+  bgImage: (typeof window !== 'undefined' && localStorage.getItem('bgImage')) || '',
+  setBgImage: (dataUrl) => {
+    localStorage.setItem('bgImage', dataUrl)
+    set({ bgImage: dataUrl })
+  },
 
   // 环境配置
   env: ((typeof window !== 'undefined' && localStorage.getItem('env')) || 'UAT') as 'SIT' | 'UAT' | 'DEV',
@@ -108,7 +117,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // 导航
-  activeTab: 'editor',
+  activeTab: 'home',
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   navKey: 0,
