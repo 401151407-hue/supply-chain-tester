@@ -248,7 +248,7 @@ const MODEL_INFO: Record<string, { base: string; key: string; label: string }> =
   'qwen-plus':      { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Plus' },
   'qwen-turbo':     { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '', label: '通义千问 · Turbo' },
   'moonshot-v1':    { base: 'https://api.moonshot.cn/v1', key: '', label: '月之暗面 · Moonshot' },
-  'hy3':            { base: 'https://tokenhub.tencentmaas.com/v1', key: 'sk-RwmJqgUJkBUAsPT7Vl7fHWZ292uUkOMxFN3AHScpfsbnrhx7', label: '腾讯 · 混元 hy3' },
+  'hy3':            { base: 'https://tokenhub.tencentmaas.com/v1', key: '', label: '腾讯 · 混元 hy3' },
   'qwen2.5:7b':     { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Qwen2.5 7B' },
   'llama3:8b':      { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · Llama3 8B' },
   'deepseek-r1:7b': { base: 'http://localhost:11434/v1', key: 'ollama', label: '本地 · DeepSeek R1 7B' },

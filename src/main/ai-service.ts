@@ -68,7 +68,7 @@ const MODEL_INFO: Record<string, { base: string; key: string }> = {
   'qwen-plus':         { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '' },
   'qwen-turbo':        { base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', key: '' },
   'moonshot-v1':       { base: 'https://api.moonshot.cn/v1', key: '' },
-  'hy3':               { base: 'https://tokenhub.tencentmaas.com/v1', key: 'sk-RwmJqgUJkBUAsPT7Vl7fHWZ292uUkOMxFN3AHScpfsbnrhx7' },
+  'hy3':               { base: 'https://tokenhub.tencentmaas.com/v1', key: '' },
   'qwen2.5:7b':        { base: 'http://localhost:11434/v1', key: 'ollama' },
   'llama3:8b':         { base: 'http://localhost:11434/v1', key: 'ollama' },
   'deepseek-r1:7b':    { base: 'http://localhost:11434/v1', key: 'ollama' },
