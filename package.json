@@ -13,9 +13,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "postinstall": "node scripts/patch-blockmap.mjs",
     "predist": "node -e \"const{rmSync,readdirSync}=require('fs');const d='dist';readdirSync(d).forEach(f=>{if(f.startsWith('SupplyChainTester-')||f==='mac'||f==='mac-arm64')rmSync(d+'/'+f,{recursive:true})})\" 2>/dev/null || true",
-    "dist": "npm run build && npx --yes electron-builder --config electron-builder.config.cjs --publish never",
+    "dist": "npm run build && npx --yes electron-builder --config electron-builder.yml --publish never",
     "prerelease": "npm run predist",
-    "release": "npm run build && npx --yes electron-builder --config electron-builder.config.cjs --publish always",
+    "release": "npm run build && npx --yes electron-builder --config electron-builder.yml --publish always",
     "setup-python": "powershell -ExecutionPolicy Bypass -File scripts/setup-python.ps1"
   },
   "dependencies": {
