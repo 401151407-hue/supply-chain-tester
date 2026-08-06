@@ -167,7 +167,7 @@ export function AISettingsPanel({ onClose }: Props) {
       <SheetContent side="right" className="w-[420px] sm:max-w-[420px] p-0 overflow-y-auto">
         <SheetHeader className="px-5 py-3">
           <SheetTitle className="flex items-center gap-2 text-sm">
-            <Sparkles size={16} className="text-purple-400" />
+            <Sparkles size={16} className="text-accent-light" />
             模型配置
           </SheetTitle>
         </SheetHeader>
@@ -185,7 +185,7 @@ export function AISettingsPanel({ onClose }: Props) {
           <button
             onClick={() => setTab('local')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              tab === 'local' ? 'bg-purple-500/10 text-purple-400 font-medium' : 'text-muted hover:text-foreground'
+              tab === 'local' ? 'bg-accent/10 text-accent-light font-medium' : 'text-muted hover:text-foreground'
             }`}
           >
             <Cpu size={13} /> 本地模型

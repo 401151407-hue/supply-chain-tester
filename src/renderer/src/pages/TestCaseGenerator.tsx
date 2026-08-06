@@ -135,7 +135,7 @@ export function TestCaseGenerator() {
     <div className="h-full flex flex-col overflow-hidden">
       {/* 头部 */}
       <div className="flex items-center gap-3 px-5 py-3 border-b border-border/[0.03]">
-        <Sparkles size={18} className="text-purple-400" />
+        <Sparkles size={18} className="text-accent-light" />
         <div>
           <h2 className="text-sm font-semibold">测试用例生成器</h2>
           <p className="text-[11px] text-muted">标准化 Prompt 模板 — 不同人使用生成结果一致</p>
@@ -190,7 +190,7 @@ export function TestCaseGenerator() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs flex items-center gap-2">
-                  <Sparkles size={11} className="text-purple-400" />
+                  <Sparkles size={11} className="text-accent-light" />
                   将使用的 Prompt 模板（固化，不可修改）
                 </CardTitle>
                 <CardDescription className="text-[10px]">统一提示词保证所有人生成的用例一致</CardDescription>

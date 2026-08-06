@@ -99,7 +99,7 @@ export function TestCaseForm({ testCase, onChange, onAddApiStep, onAddFlowStep }
           ) : (
             <button onClick={onAddFlowStep}
               className="flex items-center gap-1 px-2 py-1 rounded text-xs
-                         bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 transition-colors">
+                         bg-accent/20 hover:bg-accent/30 text-accent-light transition-colors">
               <Plus size={12} /> 添加流程步骤
             </button>
           )}
@@ -286,8 +286,8 @@ function FlowStepEditor({ step, index, onChange, onRemove }: {
   onRemove: () => void
 }) {
   return (
-    <div className="bg-surface-light rounded-xl border border-purple-500/10 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 bg-purple-500/5">
+    <div className="bg-surface-light rounded-xl border border-accent/10 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 bg-accent/5">
         <GripVertical size={14} className="text-muted cursor-grab" />
         <span className="text-xs text-muted font-mono">#{index + 1}</span>
         <input
@@ -329,7 +329,7 @@ function FlowStepEditor({ step, index, onChange, onRemove }: {
 
         <div className="text-xs text-muted">
           包含 <span className="text-accent-light">{step.apiCalls.length}</span>  个 API 调用，
-          <span className="text-purple-300"> {step.assertions.length}</span> 条断言
+          <span className="text-accent-light"> {step.assertions.length}</span> 条断言
         </div>
       </div>
     </div>

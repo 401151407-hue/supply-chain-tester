@@ -58,7 +58,7 @@ const STEP_TYPE_LABELS: Record<string, string> = {
 
 const HTTP_METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-400', POST: 'text-amber-400', PUT: 'text-blue-400',
-  DELETE: 'text-red-400', PATCH: 'text-purple-400',
+  DELETE: 'text-red-400', PATCH: 'text-accent-light',
 }
 
 let stepIdCounter = 0

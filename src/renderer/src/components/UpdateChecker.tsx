@@ -63,7 +63,7 @@ export function UpdateChecker() {
   const badge = () => {
     switch (state.status) {
       case 'checking': return { icon: <Loader2 size={12} className="animate-spin text-accent-light" />, text: '检查中...', cls: 'text-accent-light' }
-      case 'available': return { icon: <Rocket size={12} className="text-purple-400" />, text: `v${state.info?.version}`, cls: 'text-purple-400' }
+      case 'available': return { icon: <Rocket size={12} className="text-accent-light" />, text: `v${state.info?.version}`, cls: 'text-accent-light' }
       case 'downloading': return { icon: <Download size={12} className="animate-bounce text-accent-light" />, text: `${state.progress ?? 0}%`, cls: 'text-accent-light' }
       case 'downloaded': return { icon: <CheckCircle2 size={12} className="text-success" />, text: '可安装', cls: 'text-success' }
       case 'not-available': return { icon: <CheckCircle2 size={12} className="text-muted" />, text: '已是最新', cls: 'text-muted' }
@@ -94,7 +94,7 @@ export function UpdateChecker() {
           <div className="bg-surface-light border border-border/10 rounded-2xl w-[420px] shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/5">
               <div className="flex items-center gap-2">
-                <Rocket size={16} className="text-purple-400" />
+                <Rocket size={16} className="text-accent-light" />
                 <h3 className="text-sm font-semibold">软件更新</h3>
               </div>
               <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-hover/10 text-muted hover:text-foreground">
@@ -124,7 +124,7 @@ export function UpdateChecker() {
               )}
               {state.status === 'available' && (
                 <>
-                  <div className="flex items-center gap-2 text-purple-400 bg-purple-500/5 rounded-lg px-3 py-2.5">
+                  <div className="flex items-center gap-2 text-accent-light bg-accent/5 rounded-lg px-3 py-2.5">
                     <Rocket size={14} />
                     <span className="text-xs font-medium">发现新版本 v{state.info?.version}</span>
                   </div>
@@ -136,7 +136,7 @@ export function UpdateChecker() {
                   {!downloading && (
                     <button onClick={handleDownload}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium
-                                 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 transition-colors">
+                                 bg-accent/20 hover:bg-accent/30 text-accent-light transition-colors">
                       <Download size={14} />
                       下载更新
                     </button>

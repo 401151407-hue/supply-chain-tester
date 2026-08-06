@@ -6,18 +6,18 @@
    主题变量 - 亮色模式 (默认)
    ============================================================ */
 :root {
-  --color-surface: 240 240 245;
-  --color-surface-light: 232 232 238;
-  --color-surface-lighter: 220 220 228;
-  --color-accent: 99 102 241;
-  --color-accent-light: 129 140 248;
-  --color-accent-dark: 79 70 229;
-  --color-success: 34 197 94;
+  --color-surface: 250 250 250;
+  --color-surface-light: 244 244 245;
+  --color-surface-lighter: 228 228 231;
+  --color-accent: 59 130 246;
+  --color-accent-light: 96 165 250;
+  --color-accent-dark: 37 99 235;
+  --color-success: 16 185 129;
   --color-warning: 245 158 11;
   --color-danger: 239 68 68;
-  --color-muted: 80 90 110;
-  --color-foreground: 20 25 40;
-  --color-border: 200 205 215;
+  --color-muted: 113 113 122;
+  --color-foreground: 24 24 27;
+  --color-border: 212 212 216;
   --color-hover: 0 0 0;
   color-scheme: light;
   /* ── shadcn/ui variables ── */
@@ -28,20 +28,119 @@
    主题变量 - 暗黑模式
    ============================================================ */
 .dark {
-  --color-surface: 26 26 46;
-  --color-surface-light: 35 35 68;
-  --color-surface-lighter: 45 45 85;
-  --color-accent: 108 99 255;
-  --color-accent-light: 139 131 255;
-  --color-accent-dark: 74 66 212;
-  --color-success: 34 197 94;
-  --color-warning: 245 158 11;
-  --color-danger: 239 68 68;
-  --color-muted: 156 163 175;
-  --color-foreground: 226 232 240;
-  --color-border: 255 255 255;
+  --color-surface: 24 24 27;
+  --color-surface-light: 39 39 42;
+  --color-surface-lighter: 63 63 70;
+  --color-accent: 96 165 250;
+  --color-accent-light: 147 197 253;
+  --color-accent-dark: 59 130 246;
+  --color-success: 52 211 153;
+  --color-warning: 251 191 36;
+  --color-danger: 248 113 113;
+  --color-muted: 161 161 170;
+  --color-foreground: 228 228 231;
+  --color-border: 82 82 91;
   --color-hover: 255 255 255;
   color-scheme: dark;
+}
+
+/* ============================================================
+   主题色预设 — data-theme 切换
+   ============================================================ */
+/* 电光蓝（默认） */
+html[data-theme='blue'] {
+  --color-accent: 59 130 246;
+  --color-accent-light: 96 165 250;
+  --color-accent-dark: 37 99 235;
+}
+html[data-theme='blue'].dark {
+  --color-accent: 96 165 250;
+  --color-accent-light: 147 197 253;
+  --color-accent-dark: 59 130 246;
+}
+
+/* 翡翠绿 */
+html[data-theme='emerald'] {
+  --color-accent: 16 185 129;
+  --color-accent-light: 52 211 153;
+  --color-accent-dark: 5 150 105;
+}
+html[data-theme='emerald'].dark {
+  --color-accent: 52 211 153;
+  --color-accent-light: 110 231 183;
+  --color-accent-dark: 16 185 129;
+}
+
+/* 玫瑰红 */
+html[data-theme='rose'] {
+  --color-accent: 225 29 72;
+  --color-accent-light: 244 63 94;
+  --color-accent-dark: 190 18 60;
+}
+html[data-theme='rose'].dark {
+  --color-accent: 251 113 133;
+  --color-accent-light: 253 164 175;
+  --color-accent-dark: 244 63 94;
+}
+
+/* 琥珀橙 */
+html[data-theme='amber'] {
+  --color-accent: 217 119 6;
+  --color-accent-light: 245 158 11;
+  --color-accent-dark: 180 83 9;
+}
+html[data-theme='amber'].dark {
+  --color-accent: 251 191 36;
+  --color-accent-light: 253 230 138;
+  --color-accent-dark: 245 158 11;
+}
+
+/* 青碧 */
+html[data-theme='teal'] {
+  --color-accent: 13 148 136;
+  --color-accent-light: 20 184 166;
+  --color-accent-dark: 15 118 110;
+}
+html[data-theme='teal'].dark {
+  --color-accent: 45 212 191;
+  --color-accent-light: 94 234 212;
+  --color-accent-dark: 20 184 166;
+}
+
+/* 暖橙 */
+html[data-theme='orange'] {
+  --color-accent: 234 88 12;
+  --color-accent-light: 249 115 22;
+  --color-accent-dark: 194 65 12;
+}
+html[data-theme='orange'].dark {
+  --color-accent: 251 146 60;
+  --color-accent-light: 253 186 116;
+  --color-accent-dark: 249 115 22;
+}
+
+/* 石墨灰（单色） */
+html[data-theme='slate'] {
+  --color-accent: 100 116 139;
+  --color-accent-light: 148 163 184;
+  --color-accent-dark: 71 85 105;
+}
+html[data-theme='slate'].dark {
+  --color-accent: 148 163 184;
+  --color-accent-light: 203 213 225;
+  --color-accent-dark: 100 116 139;
+}
+
+/* 黑金 */
+html[data-theme='gold'] {
+  --color-accent: 180 145 60;
+  --color-accent-light: 212 175 90;
+  --color-accent-dark: 146 115 40;
+}
+html[data-theme='gold'].dark {
+  --color-accent: 214 178 92;
+  --color-accent-light: 233 204 132;
+  --color-accent-dark: 180 145 60;
 }
 
 * {
@@ -66,7 +165,9 @@ html, body, #root {
 body {
   background-color: rgb(var(--color-surface));
   color: rgb(var(--color-foreground));
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Geist', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* 滚动条样式 */
@@ -78,11 +179,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #4a4a6a;
+  background: rgb(var(--color-accent) / 0.25);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #6a6a8a;
+  background: rgb(var(--color-accent) / 0.45);
 }
 
 /* CodeMirror 编辑器样式覆盖 */

@@ -30,11 +30,24 @@ import {
   Wrench,
   Video,
   Wifi,
+  Palette,
 } from 'lucide-react'
 
 interface SidebarProps {
   onOpenAISettings: () => void
 }
+
+// 主题色预设
+const COLOR_PRESETS: { id: string; name: string; color: string }[] = [
+  { id: 'blue', name: '电光蓝', color: '#3b82f6' },
+  { id: 'emerald', name: '翡翠绿', color: '#10b981' },
+  { id: 'rose', name: '玫红', color: '#e11d48' },
+  { id: 'amber', name: '琥珀', color: '#d97706' },
+  { id: 'teal', name: '青碧', color: '#0d9488' },
+  { id: 'orange', name: '暖橙', color: '#ea580c' },
+  { id: 'gold', name: '黑金', color: '#b4913c' },
+  { id: 'slate', name: '石墨', color: '#64748b' },
+]
 
 export function Sidebar({ onOpenAISettings }: SidebarProps) {
   const {
@@ -43,7 +56,12 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
     theme, toggleTheme,
     env, setEnv,
     selectedSubProduct,
+    colorTheme, setColorTheme,
+    customAccent, setCustomAccent,
   } = useAppStore()
+
+  const [showColorMenu, setShowColorMenu] = useState(false)
+  const [colorInput, setColorInput] = useState(customAccent || '#59a7f6')
 
   const [xinerongExpanded, setXinerongExpanded] = useState(false)
   const [dingerongExpanded, setDingerongExpanded] = useState(false)
@@ -77,6 +95,17 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [showDetect])
+
+  // 点击空白处关闭主题色菜单
+  useEffect(() => {
+    if (!showColorMenu) return
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (!t.closest('[data-dropdown]')) setShowColorMenu(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [showColorMenu])
 
   async function handleDetect() {
     setDetecting(true)
@@ -287,6 +316,63 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
           </span>
         </button>
         </Tip>
+        {/* 主题色切换 */}
+        <div className="relative">
+          <Tip label="主题色">
+            <button
+              onClick={() => setShowColorMenu(!showColorMenu)}
+              className="relative flex items-center gap-2 w-full h-8 rounded-lg bg-hover/5 px-3 hover:bg-hover/10 transition-colors"
+            >
+              <Palette size={14} className="text-accent-light" />
+              <span className="text-xs text-muted flex-1 text-left">主题色</span>
+              <span
+                className="w-4 h-4 rounded-full border border-border/20 shadow-sm"
+                style={{
+                  background:
+                    colorTheme === 'custom' && customAccent
+                      ? customAccent
+                      : (COLOR_PRESETS.find(p => p.id === colorTheme)?.color || '#3b82f6'),
+                }}
+              />
+            </button>
+          </Tip>
+          {showColorMenu && (
+            <div data-dropdown className="absolute bottom-full left-0 mb-1 w-72 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 p-3.5 animate-fade-in"
+                 onClick={e => e.stopPropagation()}>
+              <span className="text-[10px] uppercase tracking-widest text-muted mb-2 block">预设主题色</span>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {COLOR_PRESETS.map(p => (
+                  <button key={p.id} onClick={() => setColorTheme(p.id)} title={p.name}
+                    className={`w-7 h-7 rounded-full transition-all duration-150 active:scale-90
+                      ${colorTheme === p.id ? 'ring-2 ring-offset-2 ring-accent scale-110' : 'hover:scale-110'}`}
+                    style={{ background: p.color }} />
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-border/10">
+                <span className="text-[10px] uppercase tracking-widest text-muted mb-2 block">自定义颜色</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={/^#[0-9a-fA-F]{6}$/.test(colorInput) ? colorInput : '#3b82f6'}
+                    onChange={e => { setColorInput(e.target.value); setCustomAccent(e.target.value); setColorTheme('custom') }}
+                    className="w-8 h-8 rounded cursor-pointer border border-border/20 bg-transparent shrink-0" />
+                  <input
+                    value={colorInput}
+                    onChange={e => {
+                      setColorInput(e.target.value)
+                      if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(e.target.value)) {
+                        setCustomAccent(e.target.value)
+                        setColorTheme('custom')
+                      }
+                    }}
+                    onBlur={() => { if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(colorInput)) setCustomAccent(colorInput) }}
+                    className="flex-1 text-[11px] font-mono bg-surface rounded px-2 py-1.5 border border-border/10 outline-none focus:border-accent/50"
+                    placeholder="#3b82f6" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         {/* 环境切换 */}
         <div className={`relative flex items-center w-full h-8 rounded-lg bg-hover/5 p-0.5
                          ${activeTab === 'script' ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -314,20 +400,20 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
         <button
           onClick={onOpenAISettings}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs
-                     hover:bg-purple-500/10 transition-colors"
+                     hover:bg-accent/10 transition-colors"
         >
-          <Sparkles size={14} className={aiConfig?.enabled ? 'text-purple-400' : 'text-muted'} />
-          <span className={aiConfig?.enabled ? 'text-purple-300' : 'text-muted'}>
+          <Sparkles size={14} className={aiConfig?.enabled ? 'text-accent-light' : 'text-muted'} />
+          <span className={aiConfig?.enabled ? 'text-accent-light' : 'text-muted'}>
             模型配置{aiConfig?.enabled ? ' ✓' : ''}
           </span>
         </button>
         <button
           onClick={() => navigateTo('aiassistant')}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs
-                     hover:bg-purple-500/10 transition-colors"
+                     hover:bg-accent/10 transition-colors"
         >
-          <Bot size={14} className={aiConfig?.enabled ? 'text-purple-400' : 'text-muted'} />
-          <span className={aiConfig?.enabled ? 'text-purple-300' : 'text-muted'}>
+          <Bot size={14} className={aiConfig?.enabled ? 'text-accent-light' : 'text-muted'} />
+          <span className={aiConfig?.enabled ? 'text-accent-light' : 'text-muted'}>
             AI 助手
           </span>
         </button>
@@ -401,10 +487,14 @@ function NavItem({ icon, label, active, onClick, suffix, compact }: {
 }) {
   return (
     <Button
-      variant={active ? 'secondary' : 'ghost'}
+      variant="ghost"
       size={compact ? 'sm' : 'default'}
       onClick={onClick}
-      className={`w-full justify-start ${active ? 'shadow-sm' : ''} ${compact ? 'pl-6 text-xs' : 'gap-3'}`}
+      className={`w-full justify-start transition-all duration-150 active:scale-[0.98] ${
+        active
+          ? '!bg-accent/10 !text-accent-light hover:!bg-accent/15 hover:!text-accent-light'
+          : 'text-muted hover:!bg-hover/5 hover:!text-foreground'
+      } ${compact ? 'pl-6 text-xs' : 'gap-3'}`}
     >
       {icon}<span className="flex-1 text-left truncate">{label}</span>{suffix}
     </Button>

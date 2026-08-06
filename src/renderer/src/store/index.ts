@@ -10,6 +10,8 @@ interface AppState {
   toggleTheme: () => void
   colorTheme: string
   setColorTheme: (t: string) => void
+  customAccent: string
+  setCustomAccent: (hex: string) => void
 
   // 环境配置
   env: 'SIT' | 'UAT' | 'DEV'
@@ -87,10 +89,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem('theme', next)
     set({ theme: next })
   },
-  colorTheme: (typeof window !== 'undefined' && localStorage.getItem('colorTheme')) || 'vega',
+  colorTheme: (typeof window !== 'undefined' && localStorage.getItem('colorTheme')) || 'blue',
   setColorTheme: (t) => {
     localStorage.setItem('colorTheme', t)
     set({ colorTheme: t })
+  },
+  customAccent: (typeof window !== 'undefined' && localStorage.getItem('customAccent')) || '',
+  setCustomAccent: (hex) => {
+    localStorage.setItem('customAccent', hex)
+    set({ customAccent: hex })
   },
 
   // 环境配置

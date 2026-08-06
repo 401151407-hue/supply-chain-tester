@@ -106,7 +106,7 @@ const AGENTS: AgentConfig[] = [
   {
     id: 'general',
     name: '通用助手',
-    icon: <Sparkles size={13} className="text-purple-400" />,
+    icon: <Sparkles size={13} className="text-accent-light" />,
     description: '回答各类问题，分析报告和脚本',
     welcome: '你好！我是通用 AI 助手。\n• 分析测试报告和脚本\n• 读写本地文件\n• 解答供应链测试问题\n• 调试 API 报错\n\n💡 试试：「帮我看看 scripts 目录」',
     systemPrompt: `你是供应链测试工具的 AI 助手，运行在用户电脑上，可以直接访问文件系统。
@@ -277,7 +277,7 @@ export function AIAssistant() {
   const [addModelValue, setAddModelValue] = useState('')
   const [addModelLabel, setAddModelLabel] = useState('')
   const [modelSwitching, setModelSwitching] = useState(false)
-  const prevModelRef = useRef(activeModel)
+  const prevModelRef = useRef('')
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [toolStatus, setToolStatus] = useState<string>('')
@@ -751,9 +751,10 @@ export function AIAssistant() {
 
       {/* 右侧：聊天区 */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* 头部 — 模型选择 */}
-        <header className="h-10 flex items-center gap-2 px-3 border-b border-border/5 bg-surface-light/30 shrink-0">
-          <Sparkles size={14} className="text-purple-400 shrink-0" />
+        {/* 头部 — 模型选择（悬浮玻璃岛） */}
+        <header className="shrink-0 px-4 pt-3 pb-1.5">
+          <div className="h-10 flex items-center gap-2 px-3 rounded-full border border-border/10 bg-surface-light/60 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+          <Sparkles size={14} className="text-accent-light shrink-0" />
 
         {/* 模型选择器 */}
         <div className="relative">
@@ -855,7 +856,8 @@ export function AIAssistant() {
             <Trash2 size={13} />
           </Button>
         </Tip>
-      </header>
+          </div>
+        </header>
 
       {/* 消息列表 */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative">
@@ -869,21 +871,32 @@ export function AIAssistant() {
             </div>
           </div>
         )}
+        {messages.length === 0 && !loading && (
+          <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
+            <div className="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center mb-4 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)]">
+              <Sparkles size={22} className="text-accent-light" />
+            </div>
+            <h3 className="text-base font-semibold tracking-tight mb-1">开始一段对话</h3>
+            <p className="text-xs text-muted/70 max-w-[240px] leading-relaxed">
+              可以问我供应链测试相关的问题，也可以让我帮你分析脚本、生成测试用例。
+            </p>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : ''}`}>
             {msg.role === 'assistant' && (
-              <div className="w-6 h-6 rounded-full bg-purple-500/15 flex items-center justify-center shrink-0 mt-0.5">
-                <Bot size={12} className="text-purple-400" />
+              <div className="w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center shrink-0 mt-0.5 ring-1 ring-accent/20">
+                <Bot size={12} className="text-accent-light" />
               </div>
             )}
-            <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words
+            <div className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words
               ${msg.role === 'user'
-                ? 'bg-accent/15 text-foreground'
-                : 'bg-hover/5 text-foreground'}`}>
+                ? 'bg-accent/15 text-foreground rounded-br-md'
+                : 'bg-surface-light/70 border border-border/5 text-foreground rounded-bl-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]'}`}>
               {msg.content}
             </div>
             {msg.role === 'user' && (
-              <div className="w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center shrink-0 mt-0.5 ring-1 ring-accent/20">
                 <User size={12} className="text-accent-light" />
               </div>
             )}
@@ -893,9 +906,9 @@ export function AIAssistant() {
         {loading && (
           <div className="flex items-center gap-2 px-1">
             <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
             <span className="text-xs text-muted/60 italic">{toolStatus || '思考中...'}</span>
           </div>
@@ -903,9 +916,9 @@ export function AIAssistant() {
         <div ref={bottomRef} />
       </div>
 
-      {/* 输入区 */}
-      <div className="px-4 py-3 border-t border-border/5 bg-surface-light/20 shrink-0">
-        <div className="flex gap-2">
+      {/* 输入区（悬浮岛） */}
+      <div className="px-4 pb-3 shrink-0">
+        <div className="flex items-center gap-1.5 pl-1 pr-1 py-1 rounded-full border border-border/10 bg-surface-light/60 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
           <Input
             ref={inputRef}
             value={input}
@@ -913,12 +926,14 @@ export function AIAssistant() {
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="输入问题，Enter 发送..."
             disabled={loading}
-            className="flex-1"
+            className="flex-1 border-0 bg-transparent rounded-full shadow-none px-3
+                       !ring-0 !ring-offset-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:outline-none"
           />
           <Button
-            size="sm"
+            size="icon"
             onClick={handleSend}
             disabled={loading || !input.trim()}
+            className="rounded-full h-8 w-8 shrink-0 active:scale-90"
           >
             <Send size={14} />
           </Button>

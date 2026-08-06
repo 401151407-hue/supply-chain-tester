@@ -190,7 +190,7 @@ export function LocalModelPanel() {
           <a
             href="https://ollama.com/download/windows"
             target="_blank"
-            className="inline-flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-accent-light hover:text-accent-light transition-colors"
             onClick={(e) => { e.preventDefault(); api()?.openExternal?.('https://ollama.com/download/windows') }}
           >
             <ExternalLink size={12} /> 下载 Ollama
@@ -219,10 +219,10 @@ export function LocalModelPanel() {
   return (
     <div className="space-y-4">
       {/* 头部：状态 */}
-      <div className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-purple-500/10">
+      <div className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-accent/10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-            <Cpu size={18} className="text-purple-400" />
+          <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+            <Cpu size={18} className="text-accent-light" />
           </div>
           <div>
             <h3 className="text-sm font-semibold">本地大模型</h3>
@@ -240,14 +240,14 @@ export function LocalModelPanel() {
             <input
               value={baseUrl}
               onChange={e => setBaseUrl(e.target.value)}
-              className="px-2 py-1 text-xs rounded bg-black/30 border border-border/10 w-56 focus:outline-none focus:border-purple-500/30"
+              className="px-2 py-1 text-xs rounded bg-black/30 border border-border/10 w-56 focus:outline-none focus:border-accent/30"
               onKeyDown={e => e.key === 'Enter' && handleSaveUrl()}
             />
-            <button onClick={handleSaveUrl} className="px-2 py-1 text-xs text-purple-400 hover:bg-purple-500/10 rounded transition-colors">保存</button>
+            <button onClick={handleSaveUrl} className="px-2 py-1 text-xs text-accent-light hover:bg-accent/10 rounded transition-colors">保存</button>
             <button onClick={() => setShowUrlEdit(false)} className="px-1 py-1 text-xs text-muted hover:text-foreground">取消</button>
           </div>
         ) : (
-          <button onClick={() => setShowUrlEdit(true)} className="text-xs text-muted hover:text-purple-400 transition-colors">
+          <button onClick={() => setShowUrlEdit(true)} className="text-xs text-muted hover:text-accent-light transition-colors">
             {baseUrl} ✎
           </button>
         )}
@@ -261,7 +261,7 @@ export function LocalModelPanel() {
             onClick={() => setViewMode(mode)}
             className={`flex-1 py-1.5 text-xs rounded-md transition-colors ${
               viewMode === mode
-                ? 'bg-purple-500/20 text-purple-400 font-medium'
+                ? 'bg-accent/20 text-accent-light font-medium'
                 : 'text-muted hover:text-foreground'
             }`}
           >
@@ -314,8 +314,8 @@ export function LocalModelPanel() {
                           installed
                             ? 'bg-green-500/5 border-green-500/10'
                             : pulling
-                              ? 'bg-purple-500/5 border-purple-500/20'
-                              : 'bg-black/10 border-border/5 hover:border-purple-500/20'
+                              ? 'bg-accent/5 border-accent/20'
+                              : 'bg-black/10 border-border/5 hover:border-accent/20'
                         }`}
                       >
                         {/* 左侧：模型信息 */}
@@ -342,16 +342,16 @@ export function LocalModelPanel() {
                           {pulling && progress && (
                             <div className="mt-2">
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] text-purple-400 truncate max-w-[200px]">
+                                <span className="text-[10px] text-accent-light truncate max-w-[200px]">
                                   {progress.status}
                                 </span>
                                 {progress.percent !== undefined && (
-                                  <span className="text-[10px] text-purple-400">{progress.percent}%</span>
+                                  <span className="text-[10px] text-accent-light">{progress.percent}%</span>
                                 )}
                               </div>
                               <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
                                 <div
-                                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300"
+                                  className="h-full rounded-full bg-gradient-to-r from-accent to-accent-light transition-all duration-300"
                                   style={{ width: `${progress.percent ?? 0}%` }}
                                 />
                               </div>
@@ -386,7 +386,7 @@ export function LocalModelPanel() {
                             <button
                               onClick={() => handlePull(model.name)}
                               disabled={!!pullingModel}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-30"
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-accent/10 text-accent-light hover:bg-accent/20 transition-colors disabled:opacity-30"
                             >
                               <Download size={12} />
                               下载

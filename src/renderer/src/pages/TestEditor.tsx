@@ -384,7 +384,7 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
       <div className="h-full flex flex-col overflow-hidden">
         <div className="px-5 py-3 border-b border-border/[0.03]">
           <h2 className="text-sm font-semibold flex items-center gap-2">
-            <Sparkles size={16} className="text-purple-400" />
+            <Sparkles size={16} className="text-accent-light" />
             AI 生成测试用例
           </h2>
           <p className="text-[11px] text-muted mt-0.5">
@@ -822,7 +822,7 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
           className="flex items-center gap-1 px-2 py-1 rounded text-xs
                      bg-hover/5 hover:bg-hover/10 transition-colors"
         >
-          <span className={currentCase.type === 'api' ? 'text-blue-400' : 'text-purple-400'}>
+          <span className={currentCase.type === 'api' ? 'text-blue-400' : 'text-accent-light'}>
             {currentCase.type === 'api' ? 'API 测试' : '业务流程'}
           </span>
           <ChevronDown size={12} />
@@ -833,9 +833,9 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
           onClick={() => setShowAiInput(!showAiInput)}
           disabled={isAiGenerating}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                     bg-gradient-to-r from-purple-500/20 to-accent/20
-                     hover:from-purple-500/30 hover:to-accent/30
-                     text-purple-300 transition-all
+                     bg-gradient-to-r from-accent/20 to-accent/20
+                     hover:from-accent/30 hover:to-accent/30
+                     text-accent-light transition-all
                      disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isAiGenerating ? (
@@ -874,7 +874,7 @@ A-模块, B-*标题(格式:[工作项编号]_验证[功能点]_预期[期望结�
 
       {/* AI 提示输入 */}
       {showAiInput && (
-        <div className="px-4 py-3 bg-purple-500/5 border-b border-purple-500/10 animate-fade-in">
+        <div className="px-4 py-3 bg-accent/5 border-b border-accent/10 animate-fade-in">
           <div className="flex gap-2">
             <input
               className="flex-1 bg-surface-light rounded-lg px-3 py-2 text-sm outline-none

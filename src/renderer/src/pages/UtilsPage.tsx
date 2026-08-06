@@ -703,7 +703,7 @@ export function UtilsPage() {
           <button onClick={() => runUtilityScript('test-suites/common/查询客户信息.py', '查询客户信息')}
             onMouseDown={e => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); (window as any).supplyChainTester?.openPath?.('test-suites/common/查询客户信息.py') } }}
             disabled={isRunning}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 border border-purple-500/20 transition-all disabled:opacity-50 active:scale-95"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-accent/15 hover:bg-accent/25 text-accent-light border border-accent/20 transition-all disabled:opacity-50 active:scale-95"
             title="点击运行 · Ctrl+点击打开文件">
             <Search size={15} />
             查询客户信息

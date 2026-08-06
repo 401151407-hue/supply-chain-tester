@@ -13,6 +13,26 @@ import { AIService, DEFAULT_AI_CONFIG, type AIConfig } from './ai-service'
 import { IPC_CHANNELS, type TestCase, type TestSuite, type ApiBatchRequest, type ApiBatchResult, type ApiBatchItem, type RecordSession } from '../shared/types'
 import { initAutoUpdater, checkForUpdates as doCheckUpdates, downloadUpdate as doDownloadUpdate, quitAndInstall, installLanUpdate, getUpdateState, stopLanServer } from './auto-updater'
 import { browserOpen, browserRead, browserClick, browserType, browserScreenshot, closeBrowser, startRecording, stopRecording, clearRecordingDedup, replayStep } from './browser-manager'
+
+// ── EPIPE 安全日志 ─────────────────────────────────────────────
+// dev 模式下 stdout 是管道，进程被终止/重启瞬间写入会抛 EPIPE 未捕获异常。
+// 对 console 包装，写入失败时静默忽略，避免崩溃。
+function safeWrite(method: 'log' | 'warn' | 'error') {
+  const orig = console[method].bind(console)
+  return (...args: any[]) => {
+    try {
+      orig(...args)
+    } catch (e: any) {
+      if (e?.code !== 'EPIPE') throw e
+    }
+  }
+}
+console.log = safeWrite('log')
+console.warn = safeWrite('warn')
+console.error = safeWrite('error')
+// 异步 EPIPE 事件兜底（stdout/stderr 关闭时可能以事件形式触发）
+process.stdout.on('error', (e: any) => { if (e?.code === 'EPIPE') return; throw e })
+process.stderr.on('error', (e: any) => { if (e?.code === 'EPIPE') return; throw e })
 import { ollamaService, type OllamaModel, type PullProgress } from './ollama-service'
 
 const isDev = !app.isPackaged

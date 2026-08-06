@@ -62,7 +62,7 @@ export function ResultPanel({ report, liveResults, isRunning, onAnalyze, isAnaly
                 onClick={onAnalyze}
                 disabled={isAnalyzing}
                 className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px]
-                           bg-purple-500/15 hover:bg-purple-500/25 text-purple-300
+                           bg-accent/15 hover:bg-accent/25 text-accent-light
                            disabled:opacity-50 transition-colors"
               >
                 {isAnalyzing ? (
@@ -115,8 +115,8 @@ export function ResultPanel({ report, liveResults, isRunning, onAnalyze, isAnaly
 
       {/* AI 建议 */}
       {(aiSuggestions && aiSuggestions.length > 0) && (
-        <div className="px-4 py-3 border-t border-border/5 bg-purple-500/5">
-          <h4 className="flex items-center gap-1 text-xs font-medium text-purple-300 mb-2">
+        <div className="px-4 py-3 border-t border-border/5 bg-accent/5">
+          <h4 className="flex items-center gap-1 text-xs font-medium text-accent-light mb-2">
             <Sparkles size={12} /> AI 分析建议
           </h4>
           {aiSuggestions.map((s, i) => (

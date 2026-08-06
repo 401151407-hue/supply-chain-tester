@@ -148,7 +148,7 @@ function ReportRow({ report, onClick }: { report: TestReport; onClick: () => voi
           <span className="text-sm font-medium truncate">{report.testCaseName}</span>
           <span className={`
             text-[10px] px-1.5 py-0.5 rounded
-            ${report.testType === 'api' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-300'}
+            ${report.testType === 'api' ? 'bg-blue-500/20 text-blue-300' : 'bg-accent/20 text-accent-light'}
           `}>
             {report.testType === 'api' ? 'API' : '流程'}
           </span>

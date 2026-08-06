@@ -15,10 +15,28 @@ import { Toaster } from './components/ui/sonner'
 import { useAppStore } from './store'
 
 export default function App() {
-  const { activeTab, setTestCases, setReports, loadAIConfig, theme, toggleTheme, colorTheme, scriptParams, selectedSubProduct, navKey } = useAppStore()
+  const { activeTab, setTestCases, setReports, loadAIConfig, theme, toggleTheme, colorTheme, customAccent, scriptParams, selectedSubProduct, navKey } = useAppStore()
   const [showAISettings, setShowAISettings] = useState(false)
 
-  // 同步主题 class 和 data-theme 到 html 元素
+  // 十六进制 → "r g b" 字符串，供 CSS 变量使用
+  function hexToRgbStr(hex: string): string {
+    const h = hex.replace('#', '')
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h
+    const num = parseInt(full, 16)
+    if (isNaN(num)) return ''
+    const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255
+    return `${r} ${g} ${b}`
+  }
+  // 混合颜色：mix = 0 保留原色；正数向白色混合，负数向黑色混合
+  function mixRgbStr(rgb: string, mix: number): string {
+    const [r, g, b] = rgb.split(' ').map(Number)
+    const t = Math.abs(mix)
+    const target = mix > 0 ? 255 : 0
+    const m = (v: number) => Math.round(v + (target - v) * t)
+    return `${m(r)} ${m(g)} ${m(b)}`
+  }
+
+  // 同步主题 class、data-theme 和自定义强调色到 html 元素
   useEffect(() => {
     const root = document.documentElement
     if (theme === 'dark') {
@@ -27,7 +45,20 @@ export default function App() {
       root.classList.remove('dark')
     }
     root.setAttribute('data-theme', colorTheme)
-  }, [theme, colorTheme])
+    // 自定义颜色：覆盖 CSS 变量；非自定义时清除内联覆盖（回退到预设）
+    if (colorTheme === 'custom' && customAccent) {
+      const base = hexToRgbStr(customAccent)
+      if (base) {
+        root.style.setProperty('--color-accent', base)
+        root.style.setProperty('--color-accent-light', mixRgbStr(base, 0.32))
+        root.style.setProperty('--color-accent-dark', mixRgbStr(base, -0.25))
+      }
+    } else {
+      root.style.removeProperty('--color-accent')
+      root.style.removeProperty('--color-accent-light')
+      root.style.removeProperty('--color-accent-dark')
+    }
+  }, [theme, colorTheme, customAccent])
 
   useEffect(() => {
     loadInitialData()
@@ -73,7 +104,7 @@ export default function App() {
     transform: activeTab === name ? 'translateX(0)' : 'translateX(24px)',
     zIndex: activeTab === name ? 10 : 0,
     pointerEvents: activeTab === name ? 'auto' : 'none',
-    transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
+    transition: 'opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
   })
 
   function renderContent() {
