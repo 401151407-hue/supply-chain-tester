@@ -35,8 +35,8 @@ linux:
     - AppImage
 publish:
   provider: github
-  owner: your-github-username
-  repo: your-repo-name
+  owner: 401151407-hue
+  repo: supply-chain-tester
   releaseType: release
 releaseInfo:
   releaseNotesFile: RELEASE_NOTES.md
