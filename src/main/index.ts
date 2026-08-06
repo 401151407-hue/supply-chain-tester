@@ -622,7 +622,13 @@ function registerIpcHandlers(): void {
               if (value === '__CANCEL__') {
                 runningProc?.kill()
               } else {
-                proc.stdin!.write(value + '\n')
+                const ok = proc.stdin!.write(value + '\n')
+                if (!ok) {
+                  // 数据未立即 flush，等待 drain 后再写入一个换行确保 readline 读到
+                  proc.stdin!.once('drain', () => {
+                    proc.stdin!.write('\n')
+                  })
+                }
               }
               ipcMain.removeListener('dialog:send-input', handler)
             }
