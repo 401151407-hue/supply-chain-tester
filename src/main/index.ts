@@ -616,10 +616,10 @@ function registerIpcHandlers(): void {
             const prompt = parts[1] || ''
             const options: string[] | undefined = isSelect ? parts.slice(2) : undefined
             event.sender.send('dialog:request-input', { title, prompt, options })
-            // 等待渲染进程回传用户输入
+            // 清除旧监听器防止残留干扰（快速连续运行脚本时旧进程已被 kill 但监听器还在）
+            ipcMain.removeAllListeners('dialog:send-input')
             const handler = (_e: any, value: string) => {
               if (value === '__CANCEL__') {
-                // 用户点击取消 → 直接终止脚本
                 runningProc?.kill()
               } else {
                 proc.stdin!.write(value + '\n')
