@@ -11,6 +11,7 @@ import { VisualRecorder } from './pages/VisualRecorder'
 import { ApiRecorder } from './pages/ApiRecorder'
 import { AISettingsPanel } from './components/AISettingsPanel'
 import { AIAssistant } from './components/AIAssistant'
+import { InputDialog } from './components/InputDialog'
 import { TooltipProvider } from './components/ui/tooltip'
 import { Toaster } from './components/ui/sonner'
 import { useAppStore } from './store'
@@ -199,6 +200,7 @@ export default function App() {
           {showAISettings && (
             <AISettingsPanel onClose={() => setShowAISettings(false)} />
           )}
+          <InputDialog />
         </div>
       </div>
       <Toaster position="bottom-right" />

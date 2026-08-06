@@ -281,6 +281,18 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.OLLAMA_PULL_PROGRESS, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.OLLAMA_PULL_PROGRESS, handler)
   },
+
+  /** 监听主进程的弹窗输入请求（Python 脚本 app_input() 触发） */
+  onRequestDialogInput: (callback: (req: { prompt: string }) => void) => {
+    const handler = (_event: any, req: { prompt: string }) => callback(req)
+    ipcRenderer.on('dialog:request-input', handler)
+    return () => ipcRenderer.removeListener('dialog:request-input', handler)
+  },
+
+  /** 回传用户输入给主进程 */
+  sendDialogInput: (value: string) => {
+    ipcRenderer.send('dialog:send-input', value)
+  },
 }
 
 contextBridge.exposeInMainWorld('supplyChainTester', api)

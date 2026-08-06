@@ -566,9 +566,11 @@ function registerIpcHandlers(): void {
       const tempPyFile = join(scriptsDir, `_sct_${Date.now()}.py`)
       writeFileSync(tempPyFile, scriptContent, 'utf-8')
 
+      // stdin: 'pipe' 支持 Python app_input() 弹窗交互
       const proc = spawn(pythonPath, ['-u', tempPyFile], {
         cwd: scriptsDir,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
+        stdio: ['pipe', 'pipe', 'pipe'],
       })
       runningProc = proc
       let output = ''
@@ -595,6 +597,39 @@ function registerIpcHandlers(): void {
         for (const line of lines) {
           const trimmed = line.trim()
           if (!trimmed) continue
+
+          // Python app_notify() 纯提醒弹窗（无输入框，只有确定按钮）
+          if (trimmed.startsWith('__DIALOG_NOTIFY__:')) {
+            const content = trimmed.slice('__DIALOG_NOTIFY__:'.length)
+            const parts = content.split('|')
+            event.sender.send('dialog:request-input', { title: parts[0], prompt: parts[1], notify: true })
+            continue
+          }
+
+          // Python app_input() 弹窗标记：通知渲染进程弹窗，等待用户输入后写回 stdin
+          if (trimmed.startsWith('__DIALOG__:') || trimmed.startsWith('__DIALOG_SELECT__:')) {
+            const isSelect = trimmed.startsWith('__DIALOG_SELECT__:')
+            const content = trimmed.slice(isSelect ? '__DIALOG_SELECT__:'.length : '__DIALOG__:'.length)
+            // 格式：title|prompt  或  title|prompt|opt1|opt2|...
+            const parts = content.split('|')
+            const title = parts[0] || '脚本交互'
+            const prompt = parts[1] || ''
+            const options: string[] | undefined = isSelect ? parts.slice(2) : undefined
+            event.sender.send('dialog:request-input', { title, prompt, options })
+            // 等待渲染进程回传用户输入
+            const handler = (_e: any, value: string) => {
+              if (value === '__CANCEL__') {
+                // 用户点击取消 → 直接终止脚本
+                runningProc?.kill()
+              } else {
+                proc.stdin!.write(value + '\n')
+              }
+              ipcMain.removeListener('dialog:send-input', handler)
+            }
+            ipcMain.on('dialog:send-input', handler)
+            continue
+          }
+
           // 检测到 traceback 开头，后续行全部当作错误输出
           if (/^\s*Traceback\s*\(/.test(trimmed)) {
             inTraceback = true
@@ -652,14 +687,15 @@ function registerIpcHandlers(): void {
       }
       proc.on('close', (code) => {
         flushStderr()
-        if (code !== 0) {
+        // 正常退出(code=0)或用户取消(code=null)不报异常
+        if (code !== null && code !== 0) {
           event.sender.send('script:output', `[stderr] 脚本异常退出(code=${code})\n`)
           cleanup()
         } else {
           cleanup()
         }
-        event.sender.send('script:done', { ok: code === 0 })
-        resolve({ ok: code === 0, output })
+        event.sender.send('script:done', { ok: code === 0 || code === null })
+        resolve({ ok: code === 0 || code === null, output })
       })
       proc.on('error', (err) => {
         cleanup()
