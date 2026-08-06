@@ -165,19 +165,21 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
           : 'bg-white/10 backdrop-blur-[2px]'
         : 'bg-surface-light'
     }`}>
-      {/* Logo */}
-      <div className="h-12 flex items-center gap-2 px-4 border-b border-border/5 drag-region mt-7">
-        <Package size={20} className="text-accent" />
-        <span className="font-semibold text-sm tracking-wide flex-1">测易融</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isScanning}
-              className="no-drag h-8 w-8">
-              <RotateCw size={15} className={isScanning ? 'animate-spin' : ''} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>刷新产品线</TooltipContent>
-        </Tooltip>
+      {/* Logo（外层 drag-region 覆盖顶部留白，整条可拖动窗口） */}
+      <div className="drag-region">
+        <div className="h-12 flex items-center gap-2 px-4 border-b border-border/5 mt-7">
+          <Package size={20} className="text-accent" />
+          <span className="font-semibold text-sm tracking-wide flex-1">测易融</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isScanning}
+                className="no-drag h-8 w-8">
+                <RotateCw size={15} className={isScanning ? 'animate-spin' : ''} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>刷新产品线</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       {/* 可滚动内容区：导航 + 用例列表 */}
@@ -344,13 +346,13 @@ export function Sidebar({ onOpenAISettings }: SidebarProps) {
             </button>
           </Tip>
           {showColorMenu && (
-            <div data-dropdown className="absolute bottom-full left-0 mb-1 w-72 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 p-3.5 animate-fade-in"
+            <div data-dropdown className="absolute bottom-full left-0 mb-1 w-56 bg-surface-light border border-border/10 rounded-xl shadow-xl z-50 p-3.5 animate-fade-in"
                  onClick={e => e.stopPropagation()}>
               <span className="text-[10px] uppercase tracking-widest text-muted mb-2 block">预设主题色</span>
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-1">
                 {COLOR_PRESETS.map(p => (
                   <button key={p.id} onClick={() => setColorTheme(p.id)} title={p.name}
-                    className={`w-7 h-7 rounded-full transition-all duration-150 active:scale-90
+                    className={`w-5 h-5 rounded-full transition-all duration-150 active:scale-90 shrink-0
                       ${colorTheme === p.id ? 'ring-2 ring-offset-2 ring-accent scale-110' : 'hover:scale-110'}`}
                     style={{ background: p.color }} />
                 ))}

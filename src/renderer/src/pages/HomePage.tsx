@@ -56,6 +56,9 @@ export function HomePage() {
 
   return (
     <div className="relative h-full w-full">
+      {/* 顶部窗口拖拽区（macOS hiddenInset 标题栏，透明可拖动整个 APP） */}
+      <div className="drag-region absolute inset-x-0 top-0 z-40 h-12" />
+
       {/* 空内容区 —— 透明，露出自定义背景 */}
       {!bgImage && (
         <div className="flex h-full w-full items-center justify-center">
