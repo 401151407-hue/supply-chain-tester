@@ -81,6 +81,10 @@ export function PythonSelectorPanel() {
 
   // 便携版模式但便携版不存在 → 处于自动回退状态（实际使用系统 Python）
   const isPortableFallback = currentMode === 'portable' && !!info && !info.portable.exists
+  // 便携版不存在 → 置灰不可选
+  const portableUnavailable = !!info && !info.portable.exists
+  // 便携版选中态（实际使用中，且便携版可用）
+  const portableSelected = currentMode === 'portable' && !portableUnavailable
 
   return (
     <div>
@@ -122,18 +126,20 @@ export function PythonSelectorPanel() {
       <div className="text-[10px] uppercase tracking-widest text-muted mb-1">选择解释器</div>
       <div className="space-y-1">
         {/* 便携版 */}
+        {/* 便携版（未安装时置灰禁用） */}
         <button
           onClick={() => select('portable')}
-          disabled={busy}
+          disabled={busy || portableUnavailable}
+          title={portableUnavailable ? '未检测到内置便携版 Python，不可用' : undefined}
           className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors
-            ${currentMode === 'portable' ? 'bg-accent/10 text-accent-light' : 'hover:bg-hover/5'}
-            disabled:opacity-50`}
+            ${portableSelected ? 'bg-accent/10 text-accent-light' : 'hover:bg-hover/5'}
+            disabled:opacity-40 disabled:cursor-not-allowed`}
         >
           <Package size={13} className="shrink-0" />
           <span className="flex-1 text-xs truncate">内置便携版</span>
-          {currentMode === 'portable' && <Check size={13} className="shrink-0" />}
-          {info && !info.portable.exists && (
-            <span className="shrink-0 text-[10px] text-muted/70">未安装</span>
+          {portableSelected && <Check size={13} className="shrink-0" />}
+          {portableUnavailable && (
+            <span className="shrink-0 text-[10px] text-amber-500/80">未安装 · 不可用</span>
           )}
         </button>
 
