@@ -4,7 +4,9 @@ directories:
   output: dist
 files:
   - out/**/*
-extraResources: []
+extraResources:
+  - from: resources/python-portable
+    to: python-portable
 asarUnpack:
   - '**/node_modules/playwright/**'
 win:
