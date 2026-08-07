@@ -500,14 +500,15 @@ export function UtilsPage() {
     }
 
     try {
-      // 全局变量（stderr注入）优先于输入框值
+      // 查询脚本只看输入框，其他脚本以 stderr 注入值为准
+      const isQueryScript = scriptPath.includes('查询项目信息') || scriptPath.includes('查询客户信息')
       const vars: Record<string, string> = {
         ...globalVars,
         env,
-        projectId: globalVars.projectId || projectId || '',
-        certNo: globalVars.certNo || certNo || '',
-        amount: globalVars.amount || amount || '',
-        multiFunc: globalVars.multiFunc || multiFunc || '',
+        projectId: isQueryScript ? (projectId || '') : (globalVars.projectId || projectId || ''),
+        certNo: isQueryScript ? (certNo || '') : (globalVars.certNo || certNo || ''),
+        amount: isQueryScript ? (amount || '') : (globalVars.amount || amount || ''),
+        multiFunc: isQueryScript ? (multiFunc || '') : (globalVars.multiFunc || multiFunc || ''),
       }
       if (extraVars) {
         Object.assign(vars, extraVars)
