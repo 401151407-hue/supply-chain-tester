@@ -229,6 +229,44 @@ import sys
 ...
 ```
 
+### 7. Python 接口调用风格规范
+
+编写接口调用时严格遵循以下范式：
+
+**变量命名**
+```python
+url = env_config.xxx + '/path'      # url 独立一行
+json = {"key": value}                # 请求体统一叫 json
+a1 = requests.post(url=url, json=json, headers=headers)
+b1 = a1.json()                       # 返回体统一叫 b1
+```
+
+**成功/失败判断**
+```python
+if b1['respCode'] == str(10000):     # 直接下标访问，str() 比较
+    step += 1
+    print(f'[步骤{step}] xxx成功')    # [步骤N] 格式输出
+else:
+    print('\n'+'*'*100)              # 星号分隔线
+    print_current_line_number()      # 打印行号定位
+    print(url)
+    print(b1)
+    sys.exit()                       # 终止脚本
+```
+
+**非关键接口（如 Apollo 挡板）**
+```python
+requests.post(url=url, json=json)    # 不校验返回
+step += 1
+print(f'[步骤{step}] xxx已完成')
+```
+
+**核心规则**
+- `step = 0` 计数器置顶，每步 `step += 1`
+- 无驼峰命名：`json` 不是 `jsonBody`，`a1/b1` 不是 `resp/data`
+- `env_config.属性名` 点号访问（SimpleNamespace 不支持 `[]`）
+- `print_current_line_number()` 需先 `from utils.line_counter import print_current_line_number`
+
 **实现**：
 - 主进程扫描脚本时读取第一行，检测 `# WIP` 前缀（`src/main/index.ts` → `isWipScript()`）
 - 渲染进程根据 `wip` 字段切换绿色/黄色（`src/renderer/src/pages/UtilsPage.tsx`）
