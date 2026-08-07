@@ -234,7 +234,7 @@ export function ProductPage({ product, subProduct }: ProductPageProps) {
         }
       } catch { /* fallback */ }
     }
-    openScript(product, subProduct || '', scriptName, scriptPath, { ...scpExtractedVars, ...scriptVals, env })
+    openScript(product, subProduct || '', scriptName, scriptPath, { ...scriptVals, ...scpExtractedVars, env })
   }
 
   return (
