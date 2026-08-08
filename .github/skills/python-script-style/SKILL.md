@@ -77,7 +77,35 @@ print(f'[步骤{step}] xxx已完成')
 - **JSON 字段加中文注释**：每个字段行末对齐注释，说明含义和枚举值
 - **脚本第一行 `# WIP`**：未完成脚本加此标记，APP 显示黄色图标
 
-## 4. 禁止模式
+## 4. 弹窗交互（app_input / app_notify）
+
+脚本执行到需要用户输入或选择的位置时，用弹窗阻塞等待，用户完成输入后脚本才继续。
+
+```python
+from utils.app_input import app_input, app_notify
+
+# 文本输入框
+projectId = app_input('请输入要充值的项目ID：')
+
+# 单选列表（options 传入可选项）
+submitter_type = app_input(
+    '请选择发起方式：',
+    options=['02=客户经理', '01=客户自主', '03=随便'],
+    title='选择发起方式',
+)
+
+# 纯提示框（点击确定后继续）
+app_notify('请先在界面上完成XX操作，完成后点击确定继续', title='操作提示')
+```
+
+规则：
+- **app_input**：弹出输入框或单选列表，`sys.stdin.readline()` 阻塞等待
+- **app_notify**：纯提醒，点确定继续
+- options 参数存在时显示单选框，否则为文本输入
+- title 参数自定义弹窗标题，默认「脚本交互」
+- 弹窗标记通过 `sys.stderr` 输出，APP 主进程拦截后通知渲染进程弹窗
+
+## 5. 禁止模式
 
 - ❌ 驼峰变量（respData, requestBody, jsonPayload）
 - ❌ 中间插 import
